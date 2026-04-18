@@ -6,11 +6,11 @@
 	 * - Vertical nav menu with 5 main routes (List, Dependency, Timeline, Kanban, Agents)
 	 * - Active state highlighting based on current route
 	 * - Icon + label layout with tooltips when collapsed
-	 * - Responsive: Full-width on desktop (lg:drawer-open), collapsible on mobile
+	 * - Responsive: push sidebar at all screen sizes, width controlled by sidebarState
 	 * - Bottom utilities: Help button, Theme selector
 	 * - Smooth transitions between collapsed/open states
 	 *
-	 * Usage: Place inside drawer-side div in root layout
+	 * Usage: Place as first child of flex h-screen container in root layout
 	 *
 	 * Collapsible Sidebar:
 	 * - Uses isSidebarCollapsed store for desktop collapse state
@@ -21,10 +21,23 @@
 
 	import { page } from '$app/stores';
 	import { unifiedNavConfig, NAV_GROUPS, type NavGroup } from '$lib/config/navConfig';
-	import { isSidebarCollapsed, sidebarHelpOpen, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount } from '$lib/stores/drawerStore';
+	import { isSidebarCollapsed, sidebarState, sidebarHelpOpen, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount, navFlashRoute } from '$lib/stores/drawerStore';
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { getCollapsedNavGroups, toggleCollapsedNavGroup, isNavGroupCollapsed, getDebugMode } from '$lib/stores/preferences.svelte';
+
+	// Respect prefers-reduced-motion for panel transitions
+	const reducedMotion = typeof window !== 'undefined'
+		? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		: false;
+
+	// Focus management: move focus into panel when it opens
+	let panelRef: HTMLElement | null = null;
+	$effect(() => {
+		if ($sidebarHelpOpen && panelRef) {
+			setTimeout(() => panelRef?.focus(), 0);
+		}
+	});
 
 	// Current project from URL (for preserving ?project= across navigation)
 	const currentProject = $derived($page.url.searchParams.get('project'));
@@ -197,14 +210,14 @@
 
 </script>
 
-<!-- Industrial/Terminal Sidebar -->
-<div class="drawer-side {$isSidebarCollapsed ? 'overflow-visible' : 'overflow-x-hidden'}">
-	<!-- Drawer overlay -->
-	<label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-
+<!-- Industrial/Terminal Sidebar — push sidebar, no overlay -->
+<div
+	class="flex-shrink-0 flex flex-col transition-all duration-300 relative z-40"
+	style="width: {$sidebarState === 'hidden' ? '0px' : $sidebarState === 'collapsed' ? '3.5rem' : '10rem'}; overflow: {$sidebarState === 'hidden' ? 'hidden' : 'visible'};"
+>
 	<!-- Sidebar content -->
 	<div
-		class="flex h-screen flex-col transition-all duration-200 relative z-40 {$isSidebarCollapsed ? 'w-14 overflow-visible' : 'w-40 overflow-hidden'}"
+		class="flex h-screen flex-col transition-all duration-200 relative {$isSidebarCollapsed ? 'w-14 overflow-visible' : 'w-40 overflow-hidden'}"
 		style="
 			background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
 		"
@@ -282,12 +295,14 @@
 						{@const active = isActive(navItem.href)}
 						{@const badgeCount = getBadgeCount(navItem.id)}
 						{@const colors = badgeColors[navItem.id]}
+						{@const flashing = $navFlashRoute === navItem.href && !active}
 						{#if !collapsed || active || $isSidebarCollapsed}
 							<a
 								href={getNavHref(navItem.href)}
 								class="w-full flex items-center gap-3 px-3 {style.itemPy} rounded transition-all duration-200 group relative
 									{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right' : ''}
-									{active ? '' : 'industrial-hover'}"
+									{active ? '' : 'industrial-hover'}
+									{flashing ? 'nav-shortcut-flash' : ''}"
 								style="
 									background: {active ? `linear-gradient(90deg, ${style.activeBg} 0%, transparent 100%)` : 'transparent'};
 									border-left: 2px solid {active ? style.activeAccent : 'transparent'};
@@ -397,20 +412,20 @@
 	<div
 		class="fixed inset-0 z-40"
 		style="background: oklch(0.10 0.01 250 / 0.15);"
-		transition:fade={{ duration: 180, easing: cubicOut }}
+		transition:fade={{ duration: reducedMotion ? 0 : 180, easing: cubicOut }}
 		onclick={() => sidebarHelpOpen.set(false)}
-		onkeydown={(e) => e.key === 'Escape' && sidebarHelpOpen.set(false)}
-		role="button"
-		tabindex="-1"
-		aria-label="Close shortcuts panel"
+		aria-hidden="true"
 	></div>
 
 	<!-- Panel -->
 	<aside
 		class="fixed bottom-6 right-6 z-50 rounded-lg overflow-hidden"
 		style="width: min(30rem, calc(100vw - 3rem)); max-height: calc(100vh - 5rem); display: flex; flex-direction: column; background: oklch(0.16 0.015 250); border: 1px solid oklch(0.28 0.02 250); box-shadow: 0 8px 40px oklch(0.05 0.01 250 / 0.7);"
-		in:fly={{ y: 12, duration: 220, easing: cubicOut }}
-		out:fly={{ y: 12, duration: 160, easing: cubicOut }}
+		aria-label="Keyboard shortcuts reference"
+		tabindex="-1"
+		bind:this={panelRef}
+		in:fly={{ y: reducedMotion ? 0 : 12, duration: reducedMotion ? 0 : 220, easing: cubicOut }}
+		out:fly={{ y: reducedMotion ? 0 : 12, duration: reducedMotion ? 0 : 160, easing: cubicOut }}
 	>
 		<!-- Header -->
 		<div class="flex items-center justify-between px-4 py-3 flex-shrink-0" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
@@ -427,29 +442,30 @@
 		<div class="overflow-y-auto flex-1" style="padding: 0.75rem 1rem;">
 
 			<!-- Navigate -->
-			<p class="shortcuts-section-label">Navigate</p>
+			<div class="shortcuts-nav-header">
+				<p class="shortcuts-section-label" style="margin: 0;">Navigate</p>
+				<span class="shortcuts-nav-prefix"><kbd class="shortcut-key">Ctrl</kbd><kbd class="shortcut-key">Shift</kbd><span class="shortcuts-nav-plus">+</span></span>
+			</div>
 			<div class="shortcuts-nav-grid">
 				{#each [
-					['Tasks',        ['Ctrl', 'Shift', 'T']],
-					['Sessions',     ['Ctrl', 'Shift', 'W']],
-					['Source',       ['Ctrl', 'Shift', 'G']],
-					['Files',        ['Ctrl', 'Shift', 'E']],
-					['History',      ['Ctrl', 'Shift', 'H']],
-					['Servers',      ['Ctrl', 'Shift', 'S']],
-					['Data',         ['Ctrl', 'Shift', 'D']],
-					['Bases',        ['Ctrl', 'Shift', 'B']],
-					['Search',       ['Ctrl', 'Shift', 'F']],
-					['Integrations', ['Ctrl', 'Shift', 'X']],
-					['Chores',       ['Ctrl', 'Shift', 'A']],
-					['Memory',       ['Ctrl', 'Shift', 'M']],
-					['Clients',      ['Ctrl', 'Shift', 'C']],
-					['Config',       ['Ctrl', 'Shift', ',']],
-				] as [label, keys]}
+					['Tasks',        'T'],
+					['Sessions',     'W'],
+					['Source',       'G'],
+					['Files',        'E'],
+					['History',      'H'],
+					['Servers',      'S'],
+					['Data',         'D'],
+					['Bases',        'B'],
+					['Search',       'F'],
+					['Integrations', 'X'],
+					['Chores',       'A'],
+					['Memory',       'M'],
+					['Clients',      'C'],
+					['Config',       ','],
+				] as [label, key]}
 					<div class="shortcuts-nav-row">
 						<span class="shortcuts-label">{label}</span>
-						<span class="shortcuts-keys">
-							{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}
-						</span>
+						<kbd class="shortcut-key shortcut-key-letter">{key}</kbd>
 					</div>
 				{/each}
 			</div>
@@ -475,7 +491,7 @@
 				['Epic swarm',         ['Alt', 'E']],
 				['Start next',         ['Alt', 'S']],
 				['Add project',        ['Alt', 'Shift', 'P']],
-				['Cycle project →',    ['Alt', '→']],
+				['Cycle project',       ['Alt', '→']],
 				['Cycle route',        ['Alt', '↑ / ↓']],
 			] as [label, keys]}
 				<div class="shortcuts-row">
@@ -485,7 +501,7 @@
 			{/each}
 
 			<!-- Sessions (work page) -->
-			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Sessions <span style="opacity:0.5; font-style:normal;">work page</span></p>
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Sessions <span class="section-context">work page</span></p>
 			{#each [
 				['Jump to session',    ['Alt', '1–9']],
 				['Attach terminal',    ['Alt', 'A']],
@@ -502,7 +518,7 @@
 			{/each}
 
 			<!-- Source page -->
-			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Source page</p>
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Source page <span class="section-context">mode tabs</span></p>
 			{#each [
 				['Git mode',           ['Alt', 'G']],
 				['Supabase mode',      ['Alt', 'U']],
@@ -515,7 +531,7 @@
 			{/each}
 
 			<!-- Files page -->
-			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Files page</p>
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Files page <span class="section-context">file editor</span></p>
 			{#each [
 				['Save',               ['Ctrl', 'S']],
 				['Close tab',          ['Alt', 'W']],
@@ -541,6 +557,49 @@
 {/if}
 
 <style>
+	/* Nav item flash when Ctrl+Shift+* shortcut fires */
+	@keyframes nav-flash {
+		0%   { background: oklch(0.70 0.18 240 / 0); }
+		25%  { background: oklch(0.70 0.18 240 / 0.22); }
+		100% { background: oklch(0.70 0.18 240 / 0); }
+	}
+	:global(.nav-shortcut-flash) {
+		animation: nav-flash 0.55s ease-out forwards !important;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(.nav-shortcut-flash) { animation: none !important; }
+	}
+
+	/* Navigate section header with prefix */
+	.shortcuts-nav-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.375rem;
+	}
+	.shortcuts-nav-prefix {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+	}
+	.shortcuts-nav-plus {
+		font-size: 0.55rem;
+		color: oklch(0.38 0.02 250);
+		margin-left: 0.1rem;
+	}
+	/* Letter-only chip in Navigate grid — slightly wider for visual breathing room */
+	.shortcut-key-letter {
+		min-width: 1.25rem;
+		text-align: center;
+	}
+	/* Context label inside section headers */
+	.section-context {
+		opacity: 0.45;
+		font-size: 0.55rem;
+		text-transform: none;
+		letter-spacing: 0.02em;
+	}
+
 	.shortcuts-section-label {
 		font-size: 0.6rem;
 		text-transform: uppercase;

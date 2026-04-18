@@ -184,9 +184,9 @@
 
 	// Sort options for dropdown
 	const SORT_OPTIONS: SessionSortConfig[] = [
-		{ value: 'state', label: 'State', icon: '🎯', defaultDir: 'asc' },
-		{ value: 'project', label: 'Project', icon: '📁', defaultDir: 'asc' },
-		{ value: 'created', label: 'Created', icon: '⏱️', defaultDir: 'desc' }
+		{ value: 'state', label: 'State', icon: '', defaultDir: 'asc' },
+		{ value: 'project', label: 'Project', icon: '', defaultDir: 'asc' },
+		{ value: 'created', label: 'Created', icon: '', defaultDir: 'desc' }
 	];
 
 	// Project order (from /api/projects, sorted by last activity)
@@ -432,7 +432,7 @@
 		if (recentLoadingMore || !recentHasMore) return;
 		recentLoadingMore = true;
 		try {
-			const currentDates = new Set(recentSessions.map(s => toLocalDateStr(s.timestamp)));
+			const currentDates = new Set(recentSessions.map(s => toLocalDateStr(s.timestamp)).filter((d): d is string => d !== null));
 			let offset = recentSessions.length;
 			let targetDay: string | null = null;
 			const collected: RecentSession[] = [];
@@ -451,6 +451,7 @@
 
 				for (const s of batch) {
 					const d = toLocalDateStr(s.timestamp);
+					if (!d) continue;
 					if (!targetDay && !currentDates.has(d)) {
 						targetDay = d;
 					}
@@ -549,7 +550,7 @@
 			// Refresh sessions
 			await fetchSessions();
 		} catch (err) {
-			console.error('Failed to kill session:', err);
+			addToast({ message: err instanceof Error ? err.message : 'Failed to kill session', type: 'error' });
 		} finally {
 			actionLoading = null;
 		}
@@ -822,6 +823,9 @@
 	<!-- Content -->
 	<div class="tmux-content-wrapper">
 		<div class="tmux-content">
+		<div class="tmux-header">
+			<h1 class="page-title">Sessions</h1>
+		</div>
 		<!-- Session type tabs + Sort control (above table) -->
 		<div class="table-controls">
 			<div class="table-controls-left">
@@ -1482,21 +1486,32 @@
 		color: oklch(0.45 0.02 250);
 	}
 
-	/* Attach toast */
+	/* Attach toast — bottom-center, matches IDE toast pattern */
 	.attach-toast {
 		position: fixed;
 		bottom: 1.5rem;
-		right: 1.5rem;
+		left: 50%;
+		transform: translateX(-50%);
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 0.875rem 1rem;
+		padding: 0.75rem 1rem;
 		background: oklch(0.20 0.02 250);
 		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 8px;
-		box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+		border-radius: 12px;
+		box-shadow: 0 4px 20px oklch(0 0 0 / 0.35);
 		z-index: 100;
-		animation: slide-up 0.2s ease-out;
+		animation: toast-enter 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		white-space: nowrap;
+	}
+
+	@keyframes toast-enter {
+		from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+		to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.attach-toast { animation: none; }
 	}
 
 	.attach-toast.success {
@@ -1507,17 +1522,6 @@
 	.attach-toast.error {
 		background: oklch(0.22 0.04 30);
 		border-color: oklch(0.45 0.12 30);
-	}
-
-	@keyframes slide-up {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 
 	.toast-icon {
@@ -1584,165 +1588,6 @@
 		height: 14px;
 	}
 
-	/* Expandable rows */
-	.session-row.expandable {
-		cursor: pointer;
-	}
-
-	.session-row.expandable:hover {
-		background: oklch(0.65 0.15 145 / 0.15);
-	}
-
-	.session-row.expanded {
-		background: oklch(0.65 0.15 200 / 0.12);
-		border-bottom: none;
-	}
-
-	.session-row.expanded:hover {
-		background: oklch(0.65 0.15 200 / 0.15);
-	}
-
-	/* Expanded row with SessionCard */
-	.expanded-row {
-		background: oklch(0.12 0.01 250);
-		border-bottom: 1px solid oklch(0.22 0.02 250);
-	}
-
-	.expanded-row:hover {
-		background: oklch(0.12 0.01 250);
-	}
-
-	.expanded-content {
-		padding: 0 !important;
-		border-top: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.expanded-session-card {
-		overflow-y: auto;
-		width: 100%;
-		/* Height controlled by inline style for resize functionality */
-	}
-
-	@keyframes expand-slide-down {
-		from {
-			opacity: 0;
-			max-height: 0;
-			transform: translateY(-10px);
-		}
-		to {
-			opacity: 1;
-			max-height: 600px;
-			transform: translateY(0);
-		}
-	}
-
-	@keyframes expand-slide-up {
-		from {
-			opacity: 1;
-			max-height: 600px;
-			transform: translateY(0);
-		}
-		to {
-			opacity: 0;
-			max-height: 0;
-			transform: translateY(-10px);
-		}
-	}
-
-	/* Wrapper for expanded session with horizontal resize */
-	.expanded-session-wrapper {
-		position: relative;
-		padding: 1rem;
-		display: flex;
-		gap: 1rem;
-		animation: expand-slide-down 0.2s ease-out;
-	}
-
-	.expanded-session-wrapper.collapsing {
-		animation: expand-slide-up 0.2s ease-out forwards;
-	}
-
-	/* SessionCard takes all space when no task panel */
-	.session-card-section {
-		position: relative;
-		flex: 1;
-		min-width: 0;
-	}
-
-	/* When task panel is showing, SessionCard gets 60% and panel gets 40% */
-	.expanded-session-wrapper.with-task-panel .session-card-section {
-		flex: 0 0 60%;
-	}
-
-	/* Override SessionCard styles when embedded in table */
-	.expanded-session-card :global(.session-card) {
-		border-radius: 8px;
-		border: 1px solid oklch(0.28 0.02 250);
-		max-width: none;
-		width: 100%;
-	}
-
-	/* Width indicator - positioned within session-card-section, hidden by default */
-	.session-card-section .width-indicator {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		font-size: 0.7rem;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.55 0.02 250);
-		background: oklch(0.18 0.01 250);
-		padding: 0.125rem 0.375rem;
-		border-radius: 4px;
-		border: 1px solid oklch(0.25 0.02 250);
-		pointer-events: none;
-		z-index: 5;
-		opacity: 0;
-		transition: opacity 0.15s ease;
-	}
-
-	.session-card-section .width-indicator.visible {
-		opacity: 1;
-	}
-
-	/* Vertical resize divider for expanded session height */
-	.resize-divider {
-		position: relative;
-		height: 8px;
-		cursor: ns-resize;
-		background: oklch(0.18 0.01 250);
-		border-top: 1px solid oklch(0.25 0.02 250);
-		transition: background 0.15s;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.resize-divider:hover {
-		background: oklch(0.22 0.02 250);
-	}
-
-	.resize-divider.resizing {
-		background: oklch(0.25 0.04 200);
-	}
-
-	.resize-handle-vertical {
-		width: 40px;
-		height: 4px;
-		background: oklch(0.35 0.02 250);
-		border-radius: 2px;
-		transition: background 0.15s, width 0.15s;
-	}
-
-	.resize-divider:hover .resize-handle-vertical {
-		background: oklch(0.50 0.02 250);
-		width: 60px;
-	}
-
-	.resize-divider.resizing .resize-handle-vertical {
-		background: oklch(0.65 0.12 200);
-		width: 80px;
-	}
-
 	/* Responsive */
 	@media (max-width: 768px) {
 		.tmux-page {
@@ -1753,6 +1598,9 @@
 			left: 1rem;
 			right: 1rem;
 			bottom: 1rem;
+			transform: none;
+			border-radius: 10px;
+			white-space: normal;
 		}
 	}
 

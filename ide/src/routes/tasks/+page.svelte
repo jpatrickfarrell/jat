@@ -2177,7 +2177,7 @@
 							</svg>
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.75 0.15 85);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
 							<span>Active Tasks</span>
-							<span class="subsection-count"
+							<span class="subsection-count" title="{projectSessions.length} active {projectSessions.length === 1 ? 'session' : 'sessions'}"
 								>{projectSessions.length}</span
 							>
 						</button>
@@ -2298,6 +2298,11 @@
 							{/each}
 						{/if}
 					</div>
+				{:else}
+					<div class="swarm-idle-placeholder">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:0.875rem;height:0.875rem;opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+						<span>Swarm idle — no active sessions</span>
+					</div>
 				{/if}
 
 				<!-- Waiting for Input Section -->
@@ -2368,121 +2373,6 @@
 							</div>
 						{/if}
 					</div>
-				{/if}
-
-				<!-- Voice Inbox: hidden only when confirmed empty (null = not checked yet = show) -->
-				{#if voiceInboxHasItems !== false}
-				<div class="subsection voice-inbox-subsection">
-					<div class="subsection-header-row">
-						<button
-							class="subsection-header"
-							onclick={() => { voiceInboxCollapsed = !voiceInboxCollapsed; saveCollapseState(); }}
-							aria-expanded={!voiceInboxCollapsed}
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="2"
-								stroke="currentColor"
-								class="subsection-collapse-icon"
-								class:collapsed={voiceInboxCollapsed}
-							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-							</svg>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.15 290);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
-							<span>Voice Inbox</span>
-							{#if voiceInboxCount > 0}
-							<span class="subsection-count">{voiceInboxCount}</span>
-							{/if}
-						</button>
-						<!-- Toolbar actions inline in header row -->
-						{#if !voiceInboxCollapsed && voiceInboxHasItems}
-						<div class="voice-header-actions" onclick={(e) => e.stopPropagation()}>
-							{#if !voiceMergeMode}
-								<button class="vi-btn" onclick={() => voiceInboxRef?.enterMergeMode()} title="Select notes to merge">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
-									Merge
-								</button>
-								{#if !voicePendingDismissAll}
-									<button class="vi-btn" onclick={voiceStartDismiss} title="Dismiss all voice inbox items">
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-										Dismiss All
-									</button>
-								{:else}
-									<!-- svelte-ignore a11y_no_static_element_interactions -->
-									<div
-										class="vi-slide-container"
-										role="slider"
-										tabindex="0"
-										aria-label="Slide to dismiss all"
-										aria-valuenow={Math.round(voiceDismissProgress)}
-										aria-valuemin={0}
-										aria-valuemax={100}
-										onmousedown={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
-										onmousemove={(e) => voiceSlideMove(e, e.currentTarget)}
-										onmouseup={voiceSlideEnd}
-										onmouseleave={voiceSlideEnd}
-										ontouchstart={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
-										ontouchmove={(e) => { e.preventDefault(); voiceSlideMove(e, e.currentTarget); }}
-										ontouchend={voiceSlideEnd}
-										onkeydown={(e) => {
-											if (e.key === 'Enter' || e.key === ' ') {
-												e.preventDefault();
-												voiceIsSliding = true;
-												voiceDismissProgress = 100;
-												voiceSlideEnd();
-											} else if (e.key === 'Escape') {
-												voiceCancelDismiss();
-											}
-										}}
-									>
-										<div class="vi-slide-track">
-											<div class="vi-slide-fill" style="width: {voiceDismissProgress}%"></div>
-											<div class="vi-slide-thumb" style="left: {voiceDismissProgress}%"></div>
-											<span class="vi-slide-text">{voiceDismissProgress >= 80 ? 'Release to dismiss' : 'Slide to dismiss all'}</span>
-										</div>
-									</div>
-									<button class="vi-btn vi-btn-cancel" onclick={voiceCancelDismiss} title="Cancel">✕</button>
-								{/if}
-							{:else}
-								<label class="vi-toggle" onclick={(e) => e.stopPropagation()}>
-									<input type="checkbox" bind:checked={voiceDismissAfterMerge} />
-									<span>Dismiss sources</span>
-								</label>
-								<button
-									class="vi-btn vi-btn-primary"
-									onclick={() => voiceInboxRef?.executeMerge()}
-									disabled={voiceMergeSelectedCount < 2 || voiceIsMerging}
-									title={voiceMergeSelectedCount < 2 ? 'Select at least 2 notes' : `Merge ${voiceMergeSelectedCount} notes`}
-								>
-									{#if voiceIsMerging}
-										<svg style="width:0.75rem;height:0.75rem;animation:vi-spin 0.8s linear infinite" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4" stroke-dashoffset="10" /></svg>
-									{:else}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
-									{/if}
-									Merge{voiceMergeSelectedCount >= 2 ? ` (${voiceMergeSelectedCount})` : ''}
-								</button>
-								<button class="vi-btn" onclick={() => voiceInboxRef?.exitMergeMode()}>Cancel</button>
-							{/if}
-						</div>
-						{/if}
-					</div>
-					{#if !voiceInboxCollapsed}
-						<div transition:slide={{ duration: 200 }}>
-							<VoiceInbox
-								bind:this={voiceInboxRef}
-								bind:mergeMode={voiceMergeMode}
-								bind:mergeSelectedCount={voiceMergeSelectedCount}
-								bind:isMerging={voiceIsMerging}
-								bind:dismissAfterMerge={voiceDismissAfterMerge}
-								availableProjects={allProjects}
-								defaultProject={selectedProject}
-								onHasItems={(has, count) => { voiceInboxHasItems = has; if (count !== undefined) voiceInboxCount = count; }}
-							/>
-						</div>
-					{/if}
-				</div>
 				{/if}
 
 				<!-- Paused Sessions Section -->
@@ -2681,6 +2571,7 @@
 								<div class="date-filter-chips" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									{#each DATE_FILTER_OPTIONS as opt}
 										{@const count = filterCounts[opt.id]}
+										{#if opt.id !== "unscheduled" || count < filterCounts.all}
 										<button
 											class="date-filter-chip"
 											class:active={dueDateFilter === opt.id}
@@ -2692,6 +2583,7 @@
 												<span class="chip-count">{count}</span>
 											{/if}
 										</button>
+										{/if}
 									{/each}
 								</div>
 							{/if}
@@ -2918,6 +2810,121 @@
 							{/each}
 						{/if}
 					</div>
+				{/if}
+
+				<!-- Voice Inbox: hidden only when confirmed empty (null = not checked yet = show) -->
+				{#if voiceInboxHasItems !== false}
+				<div class="subsection voice-inbox-subsection">
+					<div class="subsection-header-row">
+						<button
+							class="subsection-header"
+							onclick={() => { voiceInboxCollapsed = !voiceInboxCollapsed; saveCollapseState(); }}
+							aria-expanded={!voiceInboxCollapsed}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="subsection-collapse-icon"
+								class:collapsed={voiceInboxCollapsed}
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.15 290);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
+							<span>Voice Inbox</span>
+							{#if voiceInboxCount > 0}
+							<span class="subsection-count">{voiceInboxCount}</span>
+							{/if}
+						</button>
+						<!-- Toolbar actions inline in header row -->
+						{#if !voiceInboxCollapsed && voiceInboxHasItems}
+						<div class="voice-header-actions" onclick={(e) => e.stopPropagation()}>
+							{#if !voiceMergeMode}
+								<button class="vi-btn" onclick={() => voiceInboxRef?.enterMergeMode()} title="Select notes to merge">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+									Merge
+								</button>
+								{#if !voicePendingDismissAll}
+									<button class="vi-btn" onclick={voiceStartDismiss} title="Dismiss all voice inbox items">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+										Dismiss All
+									</button>
+								{:else}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="vi-slide-container"
+										role="slider"
+										tabindex="0"
+										aria-label="Slide to dismiss all"
+										aria-valuenow={Math.round(voiceDismissProgress)}
+										aria-valuemin={0}
+										aria-valuemax={100}
+										onmousedown={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
+										onmousemove={(e) => voiceSlideMove(e, e.currentTarget)}
+										onmouseup={voiceSlideEnd}
+										onmouseleave={voiceSlideEnd}
+										ontouchstart={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
+										ontouchmove={(e) => { e.preventDefault(); voiceSlideMove(e, e.currentTarget); }}
+										ontouchend={voiceSlideEnd}
+										onkeydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault();
+												voiceIsSliding = true;
+												voiceDismissProgress = 100;
+												voiceSlideEnd();
+											} else if (e.key === 'Escape') {
+												voiceCancelDismiss();
+											}
+										}}
+									>
+										<div class="vi-slide-track">
+											<div class="vi-slide-fill" style="width: {voiceDismissProgress}%"></div>
+											<div class="vi-slide-thumb" style="left: {voiceDismissProgress}%"></div>
+											<span class="vi-slide-text">{voiceDismissProgress >= 80 ? 'Release to dismiss' : 'Slide to dismiss all'}</span>
+										</div>
+									</div>
+									<button class="vi-btn vi-btn-cancel" onclick={voiceCancelDismiss} title="Cancel">✕</button>
+								{/if}
+							{:else}
+								<label class="vi-toggle" onclick={(e) => e.stopPropagation()}>
+									<input type="checkbox" bind:checked={voiceDismissAfterMerge} />
+									<span>Dismiss sources</span>
+								</label>
+								<button
+									class="vi-btn vi-btn-primary"
+									onclick={() => voiceInboxRef?.executeMerge()}
+									disabled={voiceMergeSelectedCount < 2 || voiceIsMerging}
+									title={voiceMergeSelectedCount < 2 ? 'Select at least 2 notes' : `Merge ${voiceMergeSelectedCount} notes`}
+								>
+									{#if voiceIsMerging}
+										<svg style="width:0.75rem;height:0.75rem;animation:vi-spin 0.8s linear infinite" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4" stroke-dashoffset="10" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+									{/if}
+									Merge{voiceMergeSelectedCount >= 2 ? ` (${voiceMergeSelectedCount})` : ''}
+								</button>
+								<button class="vi-btn" onclick={() => voiceInboxRef?.exitMergeMode()}>Cancel</button>
+							{/if}
+						</div>
+						{/if}
+					</div>
+					{#if !voiceInboxCollapsed}
+						<div transition:slide={{ duration: 200 }}>
+							<VoiceInbox
+								bind:this={voiceInboxRef}
+								bind:mergeMode={voiceMergeMode}
+								bind:mergeSelectedCount={voiceMergeSelectedCount}
+								bind:isMerging={voiceIsMerging}
+								bind:dismissAfterMerge={voiceDismissAfterMerge}
+								availableProjects={allProjects}
+								defaultProject={selectedProject}
+								onHasItems={(has, count) => { voiceInboxHasItems = has; if (count !== undefined) voiceInboxCount = count; }}
+							/>
+						</div>
+					{/if}
+				</div>
 				{/if}
 
 				<!-- Completed Tasks Section -->
@@ -3516,6 +3523,19 @@
 		align-items: center;
 		gap: 0.5rem;
 		margin-left: auto;
+	}
+
+	.swarm-idle-placeholder {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem 0.5rem 1.125rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: oklch(0.45 0.02 250);
+		font-family: ui-monospace, monospace;
 	}
 
 	.subsection-count-inline {

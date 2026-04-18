@@ -21,6 +21,9 @@ export const isSidebarCollapsed = derived(sidebarState, $s => $s !== 'expanded')
 // Help panel open state (shared with +layout.svelte keyboard handler)
 export const sidebarHelpOpen = writable(false);
 
+// Transient flash on nav item when Ctrl+Shift+* shortcut fires (cleared after 600ms)
+export const navFlashRoute = writable<string | null>(null);
+
 /**
  * Sync sidebarState from preferences/localStorage.
  * Call after initPreferences() in +layout.svelte onMount.

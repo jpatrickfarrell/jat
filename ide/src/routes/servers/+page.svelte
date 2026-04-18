@@ -914,7 +914,7 @@
 	>
 		<!-- Error message (inline) -->
 		{#if error}
-			<div role="alert" class="alert alert-error mx-4 mt-2 font-mono text-xs py-2">
+			<div role="alert" class="alert alert-error mx-4 mt-2 text-xs py-2">
 				<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 				</svg>
@@ -928,10 +928,10 @@
 		{:else if projects.length === 0 && serverOnlyEntries.length === 0}
 			<div class="flex items-center justify-center py-12">
 				<div class="text-center">
-					<p class="text-base-content/60 font-mono text-sm">
+					<p class="text-base-content/60 text-sm">
 						No projects found
 					</p>
-					<p class="text-base-content/50 font-mono text-xs mt-2 mb-4">
+					<p class="text-base-content/50 text-xs mt-2 mb-4">
 						Add a project to get started with JAT
 					</p>
 					<button
@@ -948,7 +948,7 @@
 		{:else}
 			<!-- Sticky header with Add Project button -->
 			<div class="sticky top-0 z-10 bg-base-100 border-b border-base-content/20 px-4 py-2 flex items-center justify-between">
-				<span class="text-base-content/60 text-xs font-mono uppercase tracking-wider">
+				<span class="text-base-content/60 text-xs uppercase tracking-wider">
 					{projects.length} project{projects.length !== 1 ? 's' : ''}{#if serverOnlyEntries.length > 0}<span class="text-base-content/40 mx-1">·</span>{serverOnlyEntries.length} server{serverOnlyEntries.length !== 1 ? 's' : ''}{/if}
 				</span>
 				<button
@@ -967,7 +967,7 @@
 					<thead>
 						<tr class="bg-base-200 border-b border-base-content/20">
 							<th
-								class="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'name' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-4 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'name' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('name')}
 							>
 								<span class="flex items-center gap-1">
@@ -977,11 +977,8 @@
 									{/if}
 								</span>
 							</th>
-							<th class="text-base-content/60 px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider">
-								Color
-							</th>
 							<th
-								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'port' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-3 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'port' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('port')}
 							>
 								<span class="flex items-center gap-1">
@@ -992,7 +989,7 @@
 								</span>
 							</th>
 							<th
-								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'status' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-3 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'status' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('status')}
 							>
 								<span class="flex items-center gap-1">
@@ -1003,18 +1000,18 @@
 								</span>
 							</th>
 							<th
-								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'activity' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-3 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'activity' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('activity')}
 							>
 								<span class="flex items-center gap-1">
-									Last
+									Activity
 									{#if sortColumn === 'activity'}
 										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
 									{/if}
 								</span>
 							</th>
 							<th
-								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'tasks' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-3 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'tasks' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('tasks')}
 							>
 								<span class="flex items-center gap-1">
@@ -1025,7 +1022,7 @@
 								</span>
 							</th>
 							<th
-								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'agents' ? 'text-primary' : 'text-base-content/60'}"
+								class="px-3 py-3 text-left text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'agents' ? 'text-primary' : 'text-base-content/60'}"
 								onclick={() => handleColumnSort('agents')}
 							>
 								<span class="flex items-center gap-1">
@@ -1035,11 +1032,11 @@
 									{/if}
 								</span>
 							</th>
-							<th class="text-base-content/60 px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider min-w-[180px]">
-								Desc
+							<th class="text-base-content/60 px-4 py-3 text-left text-[10px] uppercase tracking-wider min-w-[180px]">
+								Description
 							</th>
-							<th class="text-base-content/50 px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider">
-								Show
+							<th class="text-base-content/50 px-2 py-3 text-center text-[10px] uppercase tracking-wider">
+								Visible
 							</th>
 						</tr>
 					</thead>
@@ -1054,46 +1051,22 @@
 								onmouseleave={() => { hoveredProject = null; }}
 								onclick={() => runningSessionName && scrollToSession(runningSessionName)}
 							>
-								<!-- Project name and path -->
-								<td class="px-4 py-2">
-									<div class="flex flex-col">
-										<div class="flex items-center gap-1.5">
-											<span class="text-base-content/90 font-mono text-sm font-medium">
-												{project.name}
-											</span>
-											{#if isServerOnly}
-												<span class="text-base-content/40 font-mono text-[9px] px-1 py-0.5 rounded bg-base-content/8 leading-none">server</span>
-											{/if}
-										</div>
-										{#if project.path}
-											<button
-												class="text-base-content/50 font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
-												title="Open folder: {project.path}"
-												onclick={(e) => { e.stopPropagation(); openFolder(project.path); }}
-											>
-												{project.path.replace(/^\/home\/[^/]+/, '~')}
-											</button>
-										{:else}
-											<span class="text-base-content/40 font-mono text-[10px]">
-												tmux: server-{project.name}
-											</span>
-										{/if}
-									</div>
-								</td>
-
-								<!-- Color (editable with picker) -->
-								<td class="px-2 py-2">
-								{#if isServerOnly}
-									<div class="flex justify-center">
-										<span class="text-base-content/25 text-xs">—</span>
-									</div>
-								{:else}
-									<div class="relative flex justify-center">
+								<!-- Project name and path (with left color stripe) -->
+								<td class="py-2 pr-4 pl-0 relative">
+									<!-- Left color accent stripe — click to edit color -->
+									{#if !isServerOnly}
+										<button
+											class="absolute left-0 top-0 bottom-0 w-1 hover:w-1.5 transition-all cursor-pointer"
+											style="background: {editingColor === project.name ? (colorDraft || 'oklch(0.40 0.02 250)') : (project.activeColor || 'oklch(0.40 0.02 250)')};"
+											onclick={(e) => { e.stopPropagation(); editingColor === project.name ? cancelEditingColor() : startEditingColor(project); }}
+											title="Click to change project color"
+											aria-label="Change color for {project.name}"
+										></button>
 										{#if editingColor === project.name}
-											<!-- Color picker dropdown -->
+											<!-- Color picker anchored to stripe -->
 											<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 											<div
-												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl bg-base-200 border border-base-content/25"
+												class="absolute top-1 left-2 z-50 p-2 rounded-lg shadow-xl bg-base-200 border border-base-content/25"
 												role="group"
 												onclick={(e) => e.stopPropagation()}
 												onkeydown={(e) => e.stopPropagation()}
@@ -1140,24 +1113,33 @@
 													</button>
 												</div>
 											</div>
-											<!-- Current color dot (clickable to close) -->
+										{/if}
+									{:else}
+										<div class="absolute left-0 top-0 bottom-0 w-0.5 bg-base-content/15"></div>
+									{/if}
+									<div class="flex flex-col pl-3">
+										<div class="flex items-center gap-1.5">
+											<span class="text-base-content/90 font-mono text-sm font-medium">
+												{project.name}
+											</span>
+											{#if isServerOnly}
+												<span class="text-base-content/40 text-[9px] px-1 py-0.5 rounded bg-base-content/8 leading-none">server</span>
+											{/if}
+										</div>
+										{#if project.path}
 											<button
-												class="w-5 h-5 rounded-full transition-transform hover:scale-110 ring-2 ring-info"
-												style="background: {colorDraft || 'oklch(0.60 0.05 250)'};"
-												onclick={(e) => { e.stopPropagation(); cancelEditingColor(); }}
-												title="Cancel"
-											></button>
+												class="text-base-content/50 font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
+												title="Open folder: {project.path}"
+												onclick={(e) => { e.stopPropagation(); openFolder(project.path); }}
+											>
+												{project.path.replace(/^\/home\/[^/]+/, '~')}
+											</button>
 										{:else}
-											<!-- Color dot (click to edit) -->
-											<button
-												class="w-5 h-5 rounded-full transition-all hover:scale-110 hover:ring-2 hover:ring-white/30"
-												style="background: {project.activeColor || 'oklch(0.60 0.05 250)'};"
-												onclick={(e) => { e.stopPropagation(); startEditingColor(project); }}
-												title="Click to change color"
-											></button>
+											<span class="text-base-content/40 font-mono text-[10px]">
+												tmux: server-{project.name}
+											</span>
 										{/if}
 									</div>
-								{/if}
 								</td>
 
 								<!-- Port (editable for projects, read-only for server sessions) -->
@@ -1364,7 +1346,7 @@
 								<!-- Description (editable for projects, read-only for server sessions) -->
 								<td class="px-4 py-3">
 									{#if isServerOnly}
-										<span class="text-base-content/50 font-mono text-xs italic">
+										<span class="text-base-content/50 text-xs italic">
 											{project.description || 'server process'}
 										</span>
 									{:else if editingDescription === project.name}
@@ -1372,7 +1354,7 @@
 											<!-- svelte-ignore a11y_autofocus -->
 											<input
 												type="text"
-												class="flex-1 px-2 py-1 rounded font-mono text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
+												class="flex-1 px-2 py-1 rounded text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
 												placeholder="Short description for AI context..."
 												bind:value={descriptionDraft}
 												onclick={(e) => e.stopPropagation()}
@@ -1410,11 +1392,11 @@
 											title="Click to edit description"
 										>
 											{#if project.description}
-												<span class="text-base-content/75 font-mono text-xs truncate max-w-[180px]">
+												<span class="text-base-content/75 text-xs truncate max-w-[180px]">
 													{project.description}
 												</span>
 											{:else}
-												<span class="text-base-content/50 font-mono text-xs italic">
+												<span class="text-base-content/50 text-xs italic">
 													Add description...
 												</span>
 											{/if}

@@ -2,13 +2,8 @@
 	/**
 	 * Task History Page
 	 *
-	 * Full page view of task completion history with:
-	 * - Search by task title/ID
-	 * - Filter by project
-	 * - Streak calendar visualization (GitHub-style)
-	 * - Daily breakdown with agent attribution
-	 * - Clickable tasks for details
-	 * - Streak statistics and milestones
+	 * Completed task log with swarm metrics, activity calendar,
+	 * per-agent attribution, and signal-data expansion.
 	 */
 
 	import { onMount } from "svelte";
@@ -48,6 +43,7 @@
 	// Filters
 	let searchQuery = $state("");
 	let selectedProject = $state("");
+	let searchInputEl = $state<HTMLInputElement | null>(null);
 
 	// Project dropdown groups (All Projects + each project)
 	const projectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
@@ -77,19 +73,28 @@
 	let memoryContent = $state("");
 	let memoryTitle = $state("");
 
-	// Sync selectedProject from URL params
-	$effect(() => {
-		const projectParam = $page.url.searchParams.get("project");
-		if (projectParam) selectedProject = projectParam;
-	});
-
 	// Fetch data on mount
 	onMount(async () => {
+		// Read URL param once — $effect would re-fire on every $page re-emission
+		// and reset the user's dropdown selection back to the URL value
+		const projectParam = $page.url.searchParams.get("project");
+		if (projectParam) selectedProject = projectParam;
+
 		initProjectColors();
 		fetchProjects();
-		fetchTasks();
+		fetchTasks(selectedProject);
 		fetchMemory();
 		projectColors = await fetchAndGetProjectColors();
+
+		function handleSlashKey(e: KeyboardEvent) {
+			if (e.key !== '/') return;
+			const tag = (e.target as HTMLElement).tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+			e.preventDefault();
+			searchInputEl?.focus();
+		}
+		window.addEventListener('keydown', handleSlashKey);
+		return () => window.removeEventListener('keydown', handleSlashKey);
 	});
 
 	async function fetchProjects() {
@@ -104,11 +109,15 @@
 		}
 	}
 
-	async function fetchTasks() {
-		loading = true;
+	async function fetchTasks(project: string = '') {
+		// Only show skeleton on initial load (when tasks is empty).
+		// Project switches update silently so the page doesn't flash.
+		if (tasks.length === 0) loading = true;
 		error = null;
 		try {
-			const response = await fetch("/api/tasks?status=closed");
+			const params = new URLSearchParams({ status: 'closed' });
+			if (project) params.set('project', project);
+			const response = await fetch(`/api/tasks?${params}`);
 			if (!response.ok) throw new Error("Failed to fetch tasks");
 			const data = await response.json();
 			tasks = data.tasks || [];
@@ -162,26 +171,16 @@
 		}
 	}
 
-	// Filtered tasks
+	// Filtered tasks — project filtering is server-side (fetchTasks re-fetches on project change)
+	// Client-side only handles search query
 	const filteredTasks = $derived.by(() => {
+		if (!searchQuery.trim()) return tasks;
+		const query = searchQuery.toLowerCase();
 		return tasks.filter((task) => {
-			// Project filter
-			if (selectedProject) {
-				const taskProject = task.project || task.id.split("-")[0];
-				if (taskProject !== selectedProject) return false;
-			}
-
-			// Search filter
-			if (searchQuery.trim()) {
-				const query = searchQuery.toLowerCase();
-				const matchesTitle = task.title.toLowerCase().includes(query);
-				// Exact match for task IDs to avoid parent matching all children
-			// (e.g. searching "jat-abc" would otherwise match "jat-abc.1", "jat-abc.2")
+			const matchesTitle = task.title.toLowerCase().includes(query);
+			// Exact ID match — avoid "jat-abc" matching "jat-abc.1"
 			const matchesId = task.id.toLowerCase() === query;
-				if (!matchesTitle && !matchesId) return false;
-			}
-
-			return true;
+			return matchesTitle || matchesId;
 		});
 	});
 
@@ -216,6 +215,7 @@
 
 		for (const task of filteredTasks) {
 			const dateStr = toLocalDateStr(task.closed_at || task.updated_at);
+			if (!dateStr) continue;
 			const date = parseLocalDate(dateStr);
 
 			if (dateStr === todayStr) todayCount++;
@@ -290,6 +290,7 @@
 
 	// Track which tasks are resuming
 	let resumingTasks = $state<Set<string>>(new Set());
+	let resumeError = $state<string | null>(null);
 
 	async function handleResumeSession(event: MouseEvent, task: CompletedTask) {
 		event.stopPropagation(); // Don't open drawer when clicking resume
@@ -306,9 +307,9 @@
 			});
 
 			if (!response.ok) {
-				const data = await response.json();
-				console.error("Failed to resume session:", data.message);
-				// Could add a toast notification here
+				const data = await response.json().catch(() => ({}));
+				resumeError = data.message || "Failed to resume session";
+				setTimeout(() => { resumeError = null; }, 5000);
 			}
 		} catch (error) {
 			console.error("Error resuming session:", error);
@@ -361,13 +362,17 @@
 				class="error-state flex flex-col items-center justify-center py-20 gap-3"
 			>
 				<p class="text-error">{error}</p>
-				<button class="btn btn-sm btn-outline" onclick={fetchTasks}
+				<button class="btn btn-sm btn-outline" onclick={() => fetchTasks(selectedProject)}
 					>Retry</button
 				>
 			</div>
 		{:else}
+			<!-- Header + Calendar: side-by-side on wide screens -->
+			<div class="header-calendar-row mb-4">
+			<!-- Left: title/instruments/filters column -->
+			<div class="header-left">
 			<!-- Page Header: Title + Instrument Strip -->
-			<div class="page-header mb-3">
+			<div class="page-header">
 				<h1 class="page-title tracking-in-expand">Task History</h1>
 				<div class="instrument-strip">
 					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center' }}>
@@ -376,7 +381,7 @@
 					</div>
 					<div class="instr-divider"></div>
 					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.05 }}>
-						<span class="instr-value instr-today"><AnimatedDigits value={stats.todayCount.toString()} /></span>
+						<span class="instr-value" class:instr-today={stats.todayCount > 0} class:instr-today-zero={stats.todayCount === 0}><AnimatedDigits value={stats.todayCount.toString()} /></span>
 						<span class="instr-label">today</span>
 					</div>
 					<div class="instr-divider"></div>
@@ -388,62 +393,73 @@
 					<div class="instr-divider"></div>
 					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.15 }}>
 						<span class="instr-value instr-agent">{stats.topAgent.name}</span>
-						<span class="instr-label">top agent · {stats.topAgent.count}</span>
+						<span class="instr-label">top agent · {stats.topAgent.count}×</span>
 					</div>
 					{/if}
 					{#if stats.topProject && !selectedProject}
 					<div class="instr-divider"></div>
 					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.2 }}>
 						<span class="instr-value instr-project">{stats.topProject.name}</span>
-						<span class="instr-label">top project · {stats.topProject.count}</span>
+						<span class="instr-label">top project · {stats.topProject.count}×</span>
 					</div>
 					{/if}
 					<div class="instr-divider"></div>
 					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.25 }}>
-						<span class="instr-value">{stats.avgPerDay.toFixed(1)}</span>
+						<span class="instr-value">{isNaN(stats.avgPerDay) ? '—' : stats.avgPerDay.toFixed(1)}</span>
 						<span class="instr-label">avg/day (30d)</span>
 					</div>
 				</div>
 			</div>
 
+			<!-- Filters: immediately below instruments so stats ↔ controls are coupled -->
+			<div class="filters-bar">
+				<input
+					type="text"
+					placeholder="Search tasks..."
+					class="industrial-input w-48"
+					bind:value={searchQuery}
+					bind:this={searchInputEl}
+				/>
+				<div style="min-width: 140px;">
+					<SearchDropdown
+						value={selectedProject}
+						groups={projectGroups}
+						placeholder="All Projects"
+						colorFn={getProjectColorFn}
+						variant="chip"
+						onChange={(v) => { selectedProject = v; fetchTasks(v); }}
+					/>
+				</div>
+				{#if searchQuery || selectedProject}
+					<button
+						type="button"
+						class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
+						onclick={() => {
+							searchQuery = "";
+							selectedProject = "";
+							fetchTasks("");
+						}}
+					>
+						Clear filters
+					</button>
+				{/if}
+			</div>
+			</div><!-- end header-left -->
+
 			<!-- Activity Calendar -->
-			<div class="calendar-row mb-4" use:reveal>
+			<div class="calendar-row" use:reveal>
 				<StreakCalendar tasks={filteredTasks} weeks={16} />
 			</div>
+			</div><!-- end header-calendar-row -->
 
 			<!-- Daily Breakdown -->
 			<section class="daily-section">
-				<!-- Filters Section (always visible) -->
-				<div class="filters-bar">
-					<input
-						type="text"
-						placeholder="Search tasks..."
-						class="industrial-input w-48"
-						bind:value={searchQuery}
-					/>
-					<div style="min-width: 140px;">
-						<SearchDropdown
-							value={selectedProject}
-							groups={projectGroups}
-							placeholder="All Projects"
-							colorFn={getProjectColorFn}
-							variant="chip"
-							onChange={(v) => { selectedProject = v; }}
-						/>
-					</div>
-					{#if searchQuery || selectedProject}
-						<button
-							type="button"
-							class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
-							onclick={() => {
-								searchQuery = "";
-								selectedProject = "";
-							}}
-						>
-							Clear filters
-						</button>
-					{/if}
+				{#if resumeError}
+				<div class="resume-error-toast">
+					<span>{resumeError}</span>
+					<button type="button" class="resume-error-close" onclick={() => resumeError = null}>×</button>
 				</div>
+				{/if}
 
 				<div class="day-list">
 					{#each tasksByDay as day, i (day.date)}
@@ -462,30 +478,27 @@
 					{/each}
 
 					{#if tasksByDay.length === 0}
-						<div class="empty-state">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="1.5"
-								stroke="currentColor"
-								class="empty-icon"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							<p>No completed tasks found</p>
-							<p class="empty-hint">
-								{#if searchQuery || selectedProject}
-									Try adjusting your filters
-								{:else}
-									Tasks will appear here when marked complete
-								{/if}
-							</p>
-						</div>
+						{#if searchQuery || selectedProject}
+							<div class="empty-state empty-state-filtered">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
+									<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+								</svg>
+								<p class="empty-filtered-msg">
+									{#if searchQuery && selectedProject}
+										No results for "<span class="empty-term">{searchQuery}</span>" in <span class="empty-term">{selectedProject}</span>
+									{:else if searchQuery}
+										No results for "<span class="empty-term">{searchQuery}</span>"
+									{:else}
+										No completed tasks in <span class="empty-term">{selectedProject}</span>
+									{/if}
+									<button type="button" class="empty-clear-btn" onclick={() => { searchQuery = ""; selectedProject = ""; fetchTasks(""); }}>Clear</button>
+								</p>
+							</div>
+						{:else}
+							<div class="empty-state">
+								<p class="empty-hint">Tasks will appear here when marked complete</p>
+							</div>
+						{/if}
 					{/if}
 				</div>
 			</section>
@@ -503,26 +516,56 @@
 <!-- Task Detail Drawer (fallback for tasks without an agent) -->
 <TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
 
-<!-- Memory Viewer Modal -->
+<!-- Memory Viewer Drawer -->
 {#if memoryViewerOpen}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-			<div class="memory-header">
-				<h3 class="memory-header-title">{memoryTitle}</h3>
-				<button type="button" class="memory-close" aria-label="Close memory viewer" onclick={() => (memoryViewerOpen = false)}>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-			<pre class="memory-body">{memoryContent}</pre>
+	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}></div>
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="memory-drawer" role="dialog" aria-label="Memory viewer" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
+		<div class="memory-header">
+			<h3 class="memory-header-title">{memoryTitle}</h3>
+			<button type="button" class="memory-close" aria-label="Close memory viewer" onclick={() => (memoryViewerOpen = false)}>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
+		<pre class="memory-body">{memoryContent}</pre>
 	</div>
 {/if}
 
 <style>
+	/* Header + calendar wrapper */
+	.header-calendar-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	/* Left column: title + instruments + filters stacked */
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	@media (min-width: 1280px) {
+		.header-calendar-row {
+			flex-direction: row;
+			align-items: flex-start;
+			gap: 1.5rem;
+		}
+
+		.header-left {
+			flex: 1;
+			min-width: 0;
+		}
+
+		.header-calendar-row .calendar-row {
+			flex-shrink: 0;
+		}
+	}
+
 	/* Page header: title + instrument strip */
 	.page-header {
 		display: flex;
@@ -539,9 +582,9 @@
 	}
 
 	.page-title {
-		font-size: 0.75rem;
+		font-size: 0.875rem;
 		font-weight: 700;
-		color: oklch(from var(--color-base-content) l c h / 50%);
+		color: oklch(from var(--color-base-content) l c h / 60%);
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		white-space: nowrap;
@@ -555,25 +598,27 @@
 		}
 	}
 
-	/* Instrument strip: borderless horizontal readout row */
+	/* Instrument strip: borderless horizontal readout row, compresses before wrapping */
 	.instrument-strip {
 		display: flex;
 		align-items: stretch;
-		flex-wrap: wrap;
-		row-gap: 0.5rem;
+		flex-wrap: nowrap;
+		overflow-x: auto;
 		gap: 0;
+		scrollbar-width: none;
+	}
+
+	.instrument-strip::-webkit-scrollbar {
+		display: none;
 	}
 
 	.instr-reading {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
-		padding: 0 1rem;
+		padding: 0;
 		gap: 0.1rem;
-	}
-
-	.instr-reading:first-child {
-		padding-left: 0;
+		flex-shrink: 0;
 	}
 
 	.instr-value {
@@ -598,9 +643,11 @@
 		height: 2rem;
 		background: var(--color-base-300);
 		flex-shrink: 0;
+		margin: 0 1rem;
 	}
 
 	.instr-today   { color: oklch(0.78 0.16 85); }
+	.instr-today-zero { color: oklch(from var(--color-base-content) l c h / 35%); }
 	.instr-agent   { color: oklch(0.62 0.16 145); font-size: 0.9rem; }
 	.instr-project { color: oklch(0.65 0.14 200); font-size: 0.9rem; }
 
@@ -619,16 +666,63 @@
 	/* Daily Section */
 	.daily-section {
 		flex: 1;
+		border-top: 1px solid var(--color-base-300);
+		padding-top: 1rem;
+		margin-top: 0.25rem;
 	}
 
-	/* Filters Bar (always visible) */
+	/* Filters Bar — lives inside header-left, directly below instruments */
 	.filters-bar {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		margin-bottom: 0.75rem;
-		padding: 0.5rem 0;
-		border-bottom: 1px solid var(--color-base-300);
+		padding: 0.375rem 0 0;
+	}
+
+	/* Resume error toast — fixed bottom-center pill */
+	.resume-error-toast {
+		position: fixed;
+		bottom: 1.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.5rem 0.875rem 0.5rem 1rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.55 0.20 25 / 0.55);
+		border-radius: 999px;
+		font-size: 0.8rem;
+		color: oklch(0.78 0.16 25);
+		font-family: system-ui, -apple-system, sans-serif;
+		box-shadow: 0 4px 20px oklch(0 0 0 / 35%);
+		white-space: nowrap;
+		animation: toast-enter 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	@keyframes toast-enter {
+		from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+		to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+	}
+
+	.resume-error-close {
+		background: none;
+		border: none;
+		color: oklch(0.55 0.12 25);
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
+		padding: 0 0.125rem;
+		flex-shrink: 0;
+	}
+
+	.resume-error-close:hover {
+		color: oklch(0.80 0.18 25);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.resume-error-toast { animation: none; }
 	}
 
 	.day-list {
@@ -651,38 +745,90 @@
 	}
 
 	.empty-icon {
-		width: 48px;
-		height: 48px;
-		color: oklch(from var(--color-base-content) l c h / 45%);
+		width: 32px;
+		height: 32px;
+		color: oklch(from var(--color-base-content) l c h / 35%);
 	}
 
 	.empty-hint {
 		font-size: 0.8rem;
-		color: oklch(from var(--color-base-content) l c h / 50%);
+		color: oklch(from var(--color-base-content) l c h / 40%);
 	}
 
-	/* Memory Viewer Modal */
+	/* Filtered empty state: icon + inline message + clear link */
+	.empty-state-filtered {
+		flex-direction: row;
+		padding: 1.5rem 1rem;
+		gap: 0.625rem;
+		justify-content: flex-start;
+		align-items: center;
+	}
+
+	.empty-filtered-msg {
+		font-size: 0.8rem;
+		color: oklch(from var(--color-base-content) l c h / 55%);
+		font-family: system-ui, -apple-system, sans-serif;
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex-wrap: wrap;
+	}
+
+	.empty-term {
+		color: oklch(from var(--color-base-content) l c h / 80%);
+		font-weight: 600;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+	}
+
+	.empty-clear-btn {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.62 0.14 240);
+		background: none;
+		border: none;
+		padding: 0 0.25rem;
+		cursor: pointer;
+		font-family: system-ui, -apple-system, sans-serif;
+		margin-left: 0.125rem;
+	}
+
+	.empty-clear-btn:hover {
+		color: oklch(0.75 0.16 240);
+	}
+
+	/* Memory Viewer Drawer */
 	.memory-overlay {
 		position: fixed;
 		inset: 0;
-		background: oklch(0 0 0 / 50%);
-		z-index: 50;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 2rem;
+		background: oklch(0 0 0 / 40%);
+		z-index: 49;
 	}
 
-	.memory-panel {
+	.memory-drawer {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: min(520px, 92vw);
 		background: var(--color-base-100);
-		border: 1px solid var(--color-base-300);
-		border-radius: 12px;
-		max-width: 700px;
-		width: 100%;
-		max-height: 80vh;
+		border-left: 1px solid var(--color-base-300);
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 25px 50px oklch(0 0 0 / 25%);
+		box-shadow: -6px 0 32px oklch(0 0 0 / 25%);
+		z-index: 50;
+		animation: memory-drawer-enter 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	@keyframes memory-drawer-enter {
+		from { transform: translateX(100%); }
+		to { transform: translateX(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.memory-drawer { animation: none; }
 	}
 
 	.memory-header {

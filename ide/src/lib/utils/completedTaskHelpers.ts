@@ -36,9 +36,11 @@ export interface DayGroup {
 	pausedSessions?: PausedSession[];
 }
 
-/** Get YYYY-MM-DD in local timezone (not UTC) */
-export function toLocalDateStr(dateStr: string): string {
+/** Get YYYY-MM-DD in local timezone (not UTC). Returns null for invalid/missing dates. */
+export function toLocalDateStr(dateStr: string | null | undefined): string | null {
+	if (!dateStr) return null;
 	const d = new Date(dateStr);
+	if (isNaN(d.getTime())) return null;
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -129,6 +131,7 @@ export function groupTasksByDay(tasks: CompletedTask[]): DayGroup[] {
 
 	for (const task of tasks) {
 		const dateStr = toLocalDateStr(task.closed_at || task.updated_at);
+		if (!dateStr) continue;
 
 		if (!groups.has(dateStr)) {
 			groups.set(dateStr, {
@@ -179,6 +182,7 @@ export function mergePausedSessions(
 
 	for (const session of paused) {
 		const dateStr = toLocalDateStr(session.endedAt);
+		if (!dateStr) continue;
 		let group = byDate.get(dateStr);
 		if (!group) {
 			group = {

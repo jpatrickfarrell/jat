@@ -13,6 +13,7 @@
 	 */
 
 	import { onDestroy, onMount } from 'svelte';
+	import { areSoundsEnabled, playTaskCompleteSound, playCelebrationSound } from '$lib/utils/soundEffects';
 	import AnimatedDigits from './AnimatedDigits.svelte';
 	import AnimatedCost from './AnimatedCost.svelte';
 	import Sparkline from './Sparkline.svelte';
@@ -150,7 +151,7 @@
 	);
 
 	// Calculate total active agents
-	const totalActiveAgents = $derived(() => {
+	const totalActiveAgents = $derived.by(() => {
 		if (!stateCounts) return activeAgentCount;
 		return (stateCounts.needsInput || 0) +
 			(stateCounts.working || 0) +
@@ -158,6 +159,39 @@
 			(stateCounts.completed || 0) +
 			(stateCounts.starting || 0) +
 			(stateCounts.idle || 0);
+	});
+
+	// Urgency-reactive border color: needs-input → purple, review → cyan, working → amber, idle → gray
+	const urgencyBorderColor = $derived.by(() => {
+		if (!stateCounts) return 'oklch(0.35 0.02 250)';
+		if (stateCounts.needsInput > 0) return 'oklch(0.55 0.15 280 / 0.7)';
+		if (stateCounts.review > 0) return 'oklch(0.55 0.15 200 / 0.6)';
+		if (stateCounts.working > 0) return 'oklch(0.50 0.10 85 / 0.4)';
+		return 'oklch(0.35 0.02 250)';
+	});
+
+	// Numeric urgency tier for escalation detection (0=idle, 1=working, 2=review, 3=needs-input)
+	const urgencyLevel = $derived.by(() => {
+		if (!stateCounts) return 0;
+		if (stateCounts.needsInput > 0) return 3;
+		if (stateCounts.review > 0) return 2;
+		if (stateCounts.working > 0) return 1;
+		return 0;
+	});
+
+	// Escalation flash: fires when urgency tier increases (alert light coming online)
+	let borderEscalated = $state(false);
+	let borderEscalatedTimeout: ReturnType<typeof setTimeout> | null = null;
+	let _prevUrgencyLevel = -1; // plain JS, not reactive — tracks previous tier
+
+	$effect(() => {
+		const current = urgencyLevel; // reactive read
+		if (_prevUrgencyLevel >= 0 && current > _prevUrgencyLevel) {
+			borderEscalated = true;
+			if (borderEscalatedTimeout) clearTimeout(borderEscalatedTimeout);
+			borderEscalatedTimeout = setTimeout(() => { borderEscalated = false; }, 600);
+		}
+		_prevUrgencyLevel = current;
 	});
 
 	// Streak calculation
@@ -225,6 +259,7 @@
 
 			if (newCount > completedCount && completedCount > 0) {
 				justIncremented = true;
+				if (areSoundsEnabled()) playTaskCompleteSound();
 				if (justIncrementedTimeout) clearTimeout(justIncrementedTimeout);
 				justIncrementedTimeout = setTimeout(() => {
 					justIncremented = false;
@@ -235,6 +270,7 @@
 				if (crossedMilestone) {
 					hitMilestone = true;
 					milestoneNumber = crossedMilestone;
+					if (areSoundsEnabled()) playCelebrationSound();
 					if (hitMilestoneTimeout) clearTimeout(hitMilestoneTimeout);
 					hitMilestoneTimeout = setTimeout(() => {
 						hitMilestone = false;
@@ -288,6 +324,10 @@
 			clearTimeout(hitMilestoneTimeout);
 			hitMilestoneTimeout = null;
 		}
+		if (borderEscalatedTimeout) {
+			clearTimeout(borderEscalatedTimeout);
+			borderEscalatedTimeout = null;
+		}
 		if (completedTasksInterval) {
 			clearInterval(completedTasksInterval);
 			completedTasksInterval = null;
@@ -295,16 +335,6 @@
 		if (completedTasksAbortController) {
 			completedTasksAbortController.abort();
 			completedTasksAbortController = null;
-		}
-	});
-
-	// Focus search input when dropdown opens
-	$effect(() => {
-		if (showDropdown && searchInputRef) {
-			// Small delay to ensure the dropdown is rendered
-			requestAnimationFrame(() => {
-				searchInputRef?.focus();
-			});
 		}
 	});
 
@@ -500,10 +530,32 @@
 		class="h-7 px-2 py-0.5 rounded text-xs font-mono flex items-center gap-2 transition-all duration-300 cursor-pointer"
 		class:badge-pop={justIncremented}
 		class:badge-milestone={hitMilestone}
+		class:badge-escalate={borderEscalated}
+		tabindex="0"
+		role="button"
+		aria-expanded={showDropdown}
+		aria-haspopup="true"
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				if (showDropdown) {
+					showDropdown = false;
+					searchQuery = '';
+					debouncedSearchQuery = '';
+				} else {
+					showDropdown = true;
+				}
+			} else if (e.key === 'Escape' && showDropdown) {
+				showDropdown = false;
+				searchQuery = '';
+				debouncedSearchQuery = '';
+			}
+		}}
 		style="
 			background: oklch(0.18 0.01 250);
-			border: 1px solid oklch(0.40 0.05 200);
+			border: 1px solid {urgencyBorderColor};
 			color: oklch(0.70 0.05 200);
+			--escalate-color: {urgencyLevel === 3 ? 'oklch(0.70 0.20 280 / 0.8)' : urgencyLevel === 2 ? 'oklch(0.70 0.18 200 / 0.8)' : 'oklch(0.70 0.15 85 / 0.8)'};
 		"
 	>
 		<!-- Active session count (state dots moved to project chips in TopBar) -->
@@ -730,7 +782,7 @@
 							>
 								<div class="flex items-start justify-between gap-2 w-full">
 									<div class="flex-1 min-w-0 text-left">
-										<div class="text-xs font-mono truncate" style="color: oklch(0.85 0.02 250);">
+										<div class="text-xs truncate" style="color: oklch(0.85 0.02 250);">
 											<FxText text={task.title || task.id} context={{ title: task.title, status: task.status, priority: task.priority }} />
 										</div>
 										<div class="flex items-center gap-2 mt-0.5">
@@ -757,10 +809,10 @@
 			<!-- Milestone celebration -->
 			{#if hitMilestone}
 				<div
-					class="px-3 py-2 text-center text-xs font-bold animate-pulse"
+					class="px-3 py-2 text-center text-xs font-bold task-completed"
 					style="background: oklch(0.25 0.15 85); color: oklch(0.90 0.20 85);"
 				>
-					{milestoneNumber} tasks milestone!
+					<span class="tracking-in-expand">{milestoneNumber}</span> tasks milestone!
 				</div>
 			{/if}
 
@@ -821,6 +873,17 @@
 		50% { transform: scale(1.1); }
 		75% { transform: scale(1.2); }
 		100% { transform: scale(1); }
+	}
+
+	/* Urgency escalation flash — border ring pulses when alert tier increases */
+	.badge-escalate {
+		animation: badge-escalate 0.55s ease-out forwards;
+	}
+
+	@keyframes badge-escalate {
+		0% { box-shadow: none; }
+		35% { box-shadow: 0 0 0 2px var(--escalate-color), 0 0 10px var(--escalate-color); }
+		100% { box-shadow: none; }
 	}
 
 	.animate-ping-once {

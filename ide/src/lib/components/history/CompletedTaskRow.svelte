@@ -21,6 +21,7 @@
 		resuming = false,
 		memoryFilename,
 		integration = null,
+		maxDuration = 0,
 	}: {
 		task: CompletedTask;
 		onTaskClick: (id: string) => void;
@@ -31,6 +32,7 @@
 		resuming?: boolean;
 		memoryFilename?: string;
 		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+		maxDuration?: number;
 	} = $props();
 
 	const projectColor = $derived(getProjectColor(task.project || task.id.split('-')[0]));
@@ -39,6 +41,14 @@
 	const resolvedIntegration = $derived(integration ?? task.integration ?? null);
 	const integrationIcon = $derived(resolvedIntegration ? getIntegrationIcon(resolvedIntegration.sourceType) : null);
 	const durationText = $derived(formatDuration(getTaskDuration(task)));
+	const stripeWidth = $derived(
+		maxDuration > 0
+			? Math.max(4, Math.round((getTaskDuration(task) / maxDuration) * 100))
+			: 100
+	);
+	const hasExtraActions = $derived(
+		!!(memoryFilename && onMemoryClick) || !!onReopenTask || !!onDuplicateTask
+	);
 
 	// === Signal data for completion summary ===
 	type SignalState = null | 'loading' | 'empty' | CompletionBundle;
@@ -275,8 +285,8 @@
 		ontouchend={onTouchEnd}
 		ontouchcancel={onTouchEnd}
 	>
-		<!-- Green stripe at bottom — indicates completed -->
-		<div class="ctr-duration-stripe"></div>
+		<!-- Duration stripe: width proportional to task duration relative to day's longest -->
+		<div class="ctr-duration-stripe" style="width: {stripeWidth}%;"></div>
 
 		<!-- Compact row -->
 		<div class="ctr-inner">
@@ -327,6 +337,16 @@
 
 			<!-- Right: primary action column (always visible) + extras on hover -->
 			<div class="ctr-primary-col">
+				<!-- Touch-only expand chevron: visible on touch devices, rotates when expanded -->
+				<div class="ctr-expand-hint" class:ctr-expand-hint-open={isExpanded} aria-hidden="true">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12">
+						<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+					</svg>
+				</div>
+				<!-- Hint: fades out as extras slide in on hover -->
+				{#if hasExtraActions}
+					<span class="ctr-more-hint" aria-hidden="true">···</span>
+				{/if}
 				<!-- Extra actions: slide in on desktop hover -->
 				<div class="ctr-extras">
 					{#if memoryFilename && onMemoryClick}
@@ -527,15 +547,32 @@
 		background: oklch(0.19 0.01 250);
 	}
 
-	/* Green stripe at bottom — indicates completed */
+	/* Duration stripe: width = proportion of task duration vs day's longest task */
 	.ctr-duration-stripe {
 		position: absolute;
 		bottom: 0;
 		left: 0;
-		right: 0;
 		height: 2px;
-		background: linear-gradient(90deg, oklch(0.55 0.18 145 / 0.5), oklch(0.55 0.18 145 / 0.15));
+		background: linear-gradient(90deg, oklch(0.55 0.18 145 / 0.55), oklch(0.55 0.18 145 / 0.05));
 		pointer-events: none;
+		transition: width 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	/* More-actions hint: fades out when extras expand */
+	.ctr-more-hint {
+		font-size: 0.65rem;
+		color: oklch(0.38 0.02 250);
+		padding: 0 3px;
+		letter-spacing: 0.05em;
+		pointer-events: none;
+		transition: opacity 0.15s;
+		flex-shrink: 0;
+	}
+
+	@media (min-width: 640px) {
+		.ctr-card:hover .ctr-more-hint {
+			opacity: 0;
+		}
 	}
 
 	/* Inner flex row */
@@ -698,6 +735,33 @@
 		align-items: center;
 		flex-shrink: 0;
 		border-left: 1px solid oklch(0.22 0.02 250);
+		flex-direction: row;
+		position: relative;
+	}
+
+	/* Touch-only expand chevron */
+	.ctr-expand-hint {
+		display: none;
+		position: absolute;
+		top: 4px;
+		left: 50%;
+		transform: translateX(-50%);
+		color: oklch(0.45 0.03 250);
+		transition: transform 0.2s ease-out, color 0.15s;
+		pointer-events: none;
+	}
+
+	.ctr-expand-hint-open {
+		transform: translateX(-50%) rotate(180deg);
+		color: oklch(0.60 0.10 145);
+	}
+
+	@media (hover: none) {
+		.ctr-expand-hint {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
 	}
 
 	/* Extra icon buttons: hidden by default, slide in on desktop hover */

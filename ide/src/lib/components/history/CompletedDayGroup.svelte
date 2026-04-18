@@ -9,6 +9,7 @@
 	import {
 		getTaskEndTime,
 		getPausedEndTime,
+		getTaskDuration,
 	} from "$lib/utils/completedTaskHelpers";
 
 	let {
@@ -53,12 +54,28 @@
 
 	const totalCount = $derived(day.tasks.length + (day.pausedSessions?.length || 0));
 	const pausedCount = $derived(day.pausedSessions?.length || 0);
+	const maxDuration = $derived(
+		day.tasks.length === 0 ? 1 : Math.max(1, ...day.tasks.map(t => getTaskDuration(t)))
+	);
+	const typeBreakdown = $derived.by(() => {
+		if (day.tasks.length === 0) return '0 tasks';
+		const counts = new Map<string, number>();
+		for (const t of day.tasks) {
+			const type = t.issue_type || 'task';
+			counts.set(type, (counts.get(type) || 0) + 1);
+		}
+		return [...counts.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.map(([type, n]) => `${n} ${type}${n !== 1 ? 's' : ''}`)
+			.join(' · ');
+	});
 </script>
 
 <div class="day-group">
 	<div class="day-header">
 		<span class="day-date">{day.displayDate}</span>
-		<span class="day-count">{totalCount} item{totalCount !== 1 ? "s" : ""}</span>
+		<span class="day-count-total">{totalCount}</span>
+		<span class="day-count-breakdown">{typeBreakdown}</span>
 		{#if pausedCount > 0}
 			<span class="day-paused-count">{pausedCount} paused</span>
 		{/if}
@@ -76,6 +93,7 @@
 					resuming={resumingTasks?.has(entry.task.id) ?? false}
 					memoryFilename={memoryMap?.get(entry.task.id)}
 					integration={taskIntegrations[entry.task.id] || entry.task.integration || null}
+					{maxDuration}
 				/>
 			{:else}
 				<PausedSessionRow
@@ -113,12 +131,20 @@
 		font-family: ui-monospace, monospace;
 	}
 
-	.day-count {
+	.day-count-total {
 		font-size: 0.75rem;
-		color: oklch(from var(--color-base-content) l c h / 60%);
+		font-weight: 700;
+		color: var(--color-base-content);
+		font-family: ui-monospace, monospace;
 		padding: 0.125rem 0.5rem;
 		background: var(--color-base-300);
 		border-radius: 10px;
+	}
+
+	.day-count-breakdown {
+		font-size: 0.7rem;
+		color: oklch(from var(--color-base-content) l c h / 45%);
+		font-family: system-ui, -apple-system, sans-serif;
 	}
 
 	.day-paused-count {

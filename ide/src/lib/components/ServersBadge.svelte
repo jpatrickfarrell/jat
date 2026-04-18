@@ -80,6 +80,21 @@
 	let pendingStopTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastFailedAction = $state<{ type: 'start' | 'stop' | 'restart'; projectKey: string } | null>(null);
 
+	// WebSocket reconnection flash — dot pulses when connection re-establishes
+	let wsJustConnected = $state(false);
+	let _prevConnectionState = ''; // plain JS, not reactive
+	let _wsConnectedTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		const current = websocketState.connectionState;
+		if (_prevConnectionState !== '' && current === 'connected' && _prevConnectionState !== 'connected') {
+			wsJustConnected = true;
+			if (_wsConnectedTimeout) clearTimeout(_wsConnectedTimeout);
+			_wsConnectedTimeout = setTimeout(() => { wsJustConnected = false; }, 900);
+		}
+		_prevConnectionState = current;
+	});
+
 	// Get sessions reactively
 	const sessions = $derived(serverSessionsState.sessions);
 
@@ -343,6 +358,18 @@
 >
 	<span
 		class="h-7 px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all duration-300 cursor-pointer"
+		tabindex="0"
+		role="button"
+		aria-expanded={showDropdown}
+		aria-haspopup="true"
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				showDropdown = !showDropdown;
+			} else if (e.key === 'Escape' && showDropdown) {
+				showDropdown = false;
+			}
+		}}
 		style="
 			background: oklch(0.18 0.01 250);
 			border: 1px solid {runningCount > 0
@@ -373,6 +400,7 @@
 		<div
 			class="w-1.5 h-1.5 rounded-full ml-0.5"
 			class:animate-pulse={wsConfig.pulse}
+			class:ws-reconnected={wsJustConnected}
 			style="background: {wsConfig.color}; box-shadow: 0 0 4px {wsConfig.color};"
 			title="WebSocket: {wsConfig.label}"
 		></div>
@@ -396,7 +424,7 @@
 						class="text-[10px] font-mono"
 						style="color: oklch(0.65 0.02 250);"
 					>
-						IDE
+						Backend
 					</span>
 				</div>
 				<span class="text-[10px] font-mono" style="color: {wsConfig.color};">
@@ -849,5 +877,17 @@
 	.view-all-btn:hover {
 		background: oklch(0.28 0.06 200 / 0.6);
 		color: oklch(0.85 0.12 200);
+	}
+
+	/* WS reconnection flash — dot scales up and glows on connection re-established */
+	.ws-reconnected {
+		animation: ws-reconnect 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+	}
+
+	@keyframes ws-reconnect {
+		0%   { transform: scale(1); }
+		40%  { transform: scale(3); box-shadow: 0 0 10px oklch(0.72 0.19 145 / 0.9); }
+		70%  { transform: scale(1.5); }
+		100% { transform: scale(1); }
 	}
 </style>

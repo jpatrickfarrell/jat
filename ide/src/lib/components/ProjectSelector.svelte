@@ -138,7 +138,7 @@
 	let hoveredAttackEpicId = $state<string | null>(null);
 	let expandedEpics = $state(new Set<string>());
 	let dropdownPos = $state({ top: 0, left: 0 });
-	let hoverCloseTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
 	let dropdownFocusIdx = $state(-1);
 
 	function computeDropdownPos() {

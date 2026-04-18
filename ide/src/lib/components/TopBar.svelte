@@ -10,7 +10,9 @@
 	import {
 		openTaskDrawer,
 		toggleSidebar,
+		cycleSidebarState,
 		isSidebarCollapsed,
+		sidebarState,
 		openProjectDrawer,
 	} from "$lib/stores/drawerStore";
 	import {
@@ -406,6 +408,26 @@
 	// Roving tabindex: tracks which chip holds tabindex=0
 	let focusedChipProject = $state<string | null>(null);
 
+	// Chip overflow fade — scroll listener toggles right-edge fade indicator
+	let favChipsScrollEl = $state<HTMLDivElement | null>(null);
+	let favChipsAtEnd = $state(true);
+
+	function updateChipsScrollState() {
+		if (!favChipsScrollEl) return;
+		const { scrollLeft, scrollWidth, clientWidth } = favChipsScrollEl;
+		favChipsAtEnd = scrollWidth <= clientWidth || scrollLeft + clientWidth >= scrollWidth - 2;
+	}
+
+	$effect(() => {
+		if (!favChipsScrollEl) return;
+		updateChipsScrollState();
+		favChipsScrollEl.addEventListener('scroll', updateChipsScrollState, { passive: true });
+		window.addEventListener('resize', updateChipsScrollState, { passive: true });
+		return () => {
+			favChipsScrollEl?.removeEventListener('scroll', updateChipsScrollState);
+			window.removeEventListener('resize', updateChipsScrollState);
+		};
+	});
 
 	// Max sessions from user preferences (reactive)
 	const maxSessions = $derived(getMaxSessions());
@@ -582,29 +604,12 @@
 		border-bottom: {activeProjectColor ? `3px solid ${activeProjectColor}` : '1px solid oklch(0.25 0.02 250)'};
 	"
 >
-	<!-- Mobile hamburger menu (visible on small screens) -->
-	<label
-		for="main-drawer"
-		aria-label="open menu"
-		class="lg:hidden flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105 bg-base-200 border border-base-content/20 text-primary"
-	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke-width="2"
-			stroke="currentColor"
-			class="w-4 h-4"
-		>
-			<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-		</svg>
-	</label>
-
-	<!-- Sidebar toggle (industrial - visible on large screens) -->
+	<!-- Sidebar toggle — single button, all screen sizes, cycles hidden→icon→full -->
 	<button
-		onclick={toggleSidebar}
-		aria-label={$isSidebarCollapsed ? "expand sidebar" : "collapse sidebar"}
-		class="hidden lg:flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105 bg-base-200 border border-base-content/20 text-primary"
+		onclick={cycleSidebarState}
+		aria-label={$sidebarState === 'hidden' ? 'show sidebar' : $isSidebarCollapsed ? 'expand sidebar' : 'collapse sidebar'}
+		class="flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105 bg-base-200 border border-base-content/20 text-primary"
+		title="Cycle sidebar (Ctrl+B)"
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -614,11 +619,9 @@
 			stroke-width="2"
 			fill="none"
 			stroke="currentColor"
-			class="w-4 h-4 transition-transform {$isSidebarCollapsed ? 'rotate-180' : ''}"
+			class="w-4 h-4 transition-transform {$sidebarState === 'hidden' ? 'rotate-180' : ''}"
 		>
-			<path
-				d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"
-			></path>
+			<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"></path>
 			<path d="M9 4v16"></path>
 			<path d="M14 10l2 2l-2 2"></path>
 		</svg>
@@ -626,7 +629,8 @@
 
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
-		<div class="fav-chips-scroll ml-3 hidden lg:flex items-center gap-1.5" role="list" aria-label="Favorite projects">
+		<div class="fav-chips-wrapper hidden lg:block" class:fav-chips-end={favChipsAtEnd}>
+		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5" bind:this={favChipsScrollEl} role="list" aria-label="Favorite projects">
 			{#each favoriteChips as favProject, chipIdx (favProject)}
 				<div
 					class="fav-flip-wrapper"
@@ -773,6 +777,7 @@
 					</div>
 				{/if}
 			</div>
+		</div>
 		</div>
 	{/if}
 
@@ -923,8 +928,8 @@
 		<div class="hidden lg:block w-px h-5 mx-1 bg-gradient-to-b from-transparent via-base-content/30 to-transparent flex-shrink-0"></div>
 		{/if}
 
-		<!-- Swarm loading indicator -->
-		{#if swarmLoading}
+		<!-- Swarm loading slot — always rendered so Activity/Servers badges don't shift -->
+		<div class="swarm-slot" class:swarm-slot-hidden={!swarmLoading}>
 			<!-- Mobile: icon only -->
 			<div class="flex lg:hidden items-center justify-center w-7 h-7" style="color: oklch(0.75 0.18 85);">
 				<svg class="w-4 h-4 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -938,7 +943,7 @@
 				</svg>
 				<span class="font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.75 0.15 85);">Spawning</span>
 			</div>
-		{/if}
+		</div>
 
 		<!-- Combined Activity Badge (hidden on small screens) -->
 		<div class="hidden lg:block">
@@ -1039,11 +1044,32 @@
 		.search-cmd-hint { display: inline; }
 	}
 
-	/* Chips container — shrinks on narrow viewports, scrolls horizontally.
+	/* Chips wrapper — takes available flex space, hosts overflow fade ::after */
+	.fav-chips-wrapper {
+		position: relative;
+		flex: 1 1 0%;
+		min-width: 0;
+	}
+	.fav-chips-wrapper::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: 2.5rem;
+		background: linear-gradient(to left, var(--color-base-200) 20%, transparent);
+		pointer-events: none;
+		z-index: 1;
+		transition: opacity 0.15s ease;
+	}
+	.fav-chips-wrapper.fav-chips-end::after {
+		opacity: 0;
+	}
+
+	/* Chips container — scrolls horizontally.
 	   ProjectSelector dropdown uses position:fixed so it's not clipped. */
 	.fav-chips-scroll {
-		min-width: 0;
-		flex: 1 1 0%;
+		width: 100%;
 		overflow-x: auto;
 		scrollbar-width: none; /* Firefox */
 	}
@@ -1468,6 +1494,16 @@
 		outline-offset: 2px;
 	}
 
+	/* ── Swarm loading slot (reserved space prevents Activity/Servers badge shift) ── */
+	.swarm-slot {
+		display: flex;
+		align-items: center;
+	}
+	.swarm-slot-hidden {
+		visibility: hidden;
+		pointer-events: none;
+	}
+
 	/* ── Chip drag affordance ── */
 	.fav-drag-handle {
 		position: absolute;
@@ -1477,7 +1513,7 @@
 		font-size: 10px;
 		line-height: 1;
 		color: oklch(0.55 0.08 240 / 0.6);
-		opacity: 0.3;
+		opacity: 0.55;
 		transition: opacity 0.15s ease;
 		pointer-events: none;
 		z-index: 2;

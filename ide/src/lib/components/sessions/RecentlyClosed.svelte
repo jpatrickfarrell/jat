@@ -77,6 +77,7 @@
 		const groups = new Map<string, RecentSessionDayGroup>();
 		for (const session of sessions) {
 			const dateStr = toLocalDateStr(session.timestamp);
+			if (!dateStr) continue;
 			if (!groups.has(dateStr)) {
 				groups.set(dateStr, {
 					date: dateStr,

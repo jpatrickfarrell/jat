@@ -58,7 +58,7 @@
 		return 'oklch(0.70 0.18 250)'; // Default blue
 	});
 
-	let loadState: 'loading' | 'success' | 'error' = $state('loading');
+	let loadState: 'loading' | 'pending' | 'success' | 'error' = $state('loading');
 	let svgContent: string | null = $state(null);
 	let currentFetchedName = $state<string | null>(null);
 
@@ -70,9 +70,16 @@
 	// Maps cacheKey -> timestamp of when fallback was cached (for retry logic)
 	const noAvatarCache: Map<string, number> = (globalThis as any).__noAvatarCache ??= new Map();
 
+	// Cache for "pending generation" results (server returned 202 Accepted)
+	// Retried faster than noAvatarCache since generation completes in ~5-10s
+	const pendingAvatarCache: Map<string, number> = (globalThis as any).__pendingAvatarCache ??= new Map();
+
 	// How long to cache a "no avatar" result before retrying (30 seconds)
 	// This allows queued avatar generations to complete before retrying
 	const NO_AVATAR_RETRY_MS = 30_000;
+
+	// How long to wait before re-polling a pending (202) generation
+	const PENDING_RETRY_MS = 3_000;
 
 	// Expose caches for debugging in browser console: window.__avatarCache, window.__noAvatarCache
 	if (typeof window !== 'undefined') {
@@ -96,6 +103,14 @@
 		try {
 			const response = await fetch(url);
 
+			// 202 Accepted = server is still generating the avatar. Body is a plain
+			// status string ("Avatar generation in progress"), NOT an SVG — do not
+			// consume it as content or it will render as literal text via {@html}.
+			if (response.status === 202) {
+				pendingAvatarCache.set(cacheKey, Date.now());
+				return null;
+			}
+
 			if (response.ok) {
 				const svg = await response.text();
 				// Only use real generated avatars, not fallbacks with initials
@@ -106,6 +121,7 @@
 					return null; // Return null so generic avatar icon is shown
 				}
 				avatarCache.set(cacheKey, svg);
+				pendingAvatarCache.delete(cacheKey);
 				return svg;
 			}
 			// API error - don't cache, might be transient
@@ -133,6 +149,19 @@
 			loadState = 'success';
 			currentFetchedName = agentName;
 			return;
+		}
+
+		// Check pending cache (server generating - shows spinner)
+		// Retried quickly since generation typically completes in seconds
+		const pendingTimestamp = pendingAvatarCache.get(cacheKey);
+		if (pendingTimestamp !== undefined) {
+			if (Date.now() - pendingTimestamp < PENDING_RETRY_MS) {
+				svgContent = null;
+				loadState = 'pending';
+				currentFetchedName = agentName;
+				return;
+			}
+			pendingAvatarCache.delete(cacheKey);
 		}
 
 		// Check negative cache (no avatar - shows fallback icon)
@@ -165,6 +194,9 @@
 			if (svg) {
 				svgContent = svg;
 				loadState = 'success';
+			} else if (pendingAvatarCache.has(cacheKey)) {
+				// 202 response - keep spinner visible while server generates
+				loadState = 'pending';
 			} else {
 				loadState = 'error';
 			}
@@ -192,18 +224,27 @@
 		}
 	});
 
-	// Retry timer: if we got a fallback, retry after the delay
-	// This picks up avatars that were queued and generated after our initial request
+	// Retry timer: re-fetch when we have a pending (202) or fallback (error) result
+	// Pending retries quickly; fallbacks retry after NO_AVATAR_RETRY_MS
 	$effect(() => {
-		if (loadState !== 'error' || !name) return;
+		if (!name) return;
 
 		const cacheKey = `${name}:v${CACHE_VERSION}`;
-		const noAvatarTimestamp = noAvatarCache.get(cacheKey);
-		if (noAvatarTimestamp === undefined) return;
+		let remaining: number | null = null;
 
-		const elapsed = Date.now() - noAvatarTimestamp;
-		const remaining = NO_AVATAR_RETRY_MS - elapsed;
-		if (remaining <= 0) return; // Will be retried on next fetchAvatar call
+		if (loadState === 'pending') {
+			const ts = pendingAvatarCache.get(cacheKey);
+			if (ts !== undefined) {
+				remaining = Math.max(0, PENDING_RETRY_MS - (Date.now() - ts));
+			}
+		} else if (loadState === 'error') {
+			const ts = noAvatarCache.get(cacheKey);
+			if (ts !== undefined) {
+				remaining = Math.max(0, NO_AVATAR_RETRY_MS - (Date.now() - ts));
+			}
+		}
+
+		if (remaining === null) return;
 
 		const timer = setTimeout(() => {
 			// Clear the cached name to force a re-fetch
@@ -233,7 +274,7 @@
 			class="inline-flex items-center justify-center overflow-hidden"
 			style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 		>
-			{#if loadState === 'loading'}
+			{#if loadState === 'loading' || loadState === 'pending'}
 				<div class="w-full h-full flex items-center justify-center" style="background: oklch(0.22 0.02 250);">
 					<span class="loading loading-infinity text-base-content/30" style="width: {Math.max(Math.round(size * 0.55), 10)}px; height: {Math.max(Math.round(size * 0.55), 10)}px;"></span>
 				</div>
@@ -256,8 +297,8 @@
 		class="inline-flex items-center justify-center overflow-hidden flex-shrink-0 {className}"
 		style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 	>
-		{#if loadState === 'loading'}
-			<!-- Loading spinner -->
+		{#if loadState === 'loading' || loadState === 'pending'}
+			<!-- Loading spinner (includes 'pending' state while server generates) -->
 			<div class="w-full h-full flex items-center justify-center" style="background: oklch(0.22 0.02 250);">
 				<span class="loading loading-infinity text-base-content/30" style="width: {Math.max(Math.round(size * 0.55), 10)}px; height: {Math.max(Math.round(size * 0.55), 10)}px;"></span>
 			</div>

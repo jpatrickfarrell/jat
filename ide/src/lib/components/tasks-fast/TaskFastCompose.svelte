@@ -11,15 +11,27 @@
 	 * Parent can call focus() to jump focus here (r/c from detail mode).
 	 */
 
-	import type { Task } from "$lib/types/api.types";
+	import type { TaskActor } from "$lib/types/api.types";
 	import {
 		resolveRoutingTarget,
 		getActorDisplayName,
 	} from "$lib/utils/taskRouting";
 
+	// Minimal task shape needed to resolve the routing target. Using a local
+	// interface keeps this component structurally compatible with the varied
+	// Task shapes used by callers (TaskFastDetail, /tasks-fast page, etc.).
+	interface RoutingTaskShape {
+		approver?: TaskActor | null;
+		approver_id?: string | null;
+		requester?: TaskActor | null;
+		requester_id?: string | null;
+		creator?: TaskActor | null;
+		creator_id?: string | null;
+	}
+
 	interface Props {
 		taskId: string;
-		task?: Task | null;
+		task?: RoutingTaskShape | null;
 		onSent?: (comment: any) => void;
 		// Called after the comment (if any) is successfully posted. Parent handles
 		// reassignment + advance. Returning a promise keeps the compose in its
@@ -38,7 +50,7 @@
 		onFocus,
 	}: Props = $props();
 
-	const routingTarget = $derived(task ? resolveRoutingTarget(task) : null);
+	const routingTarget = $derived(task ? resolveRoutingTarget(task as any) : null);
 	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
 
 	let textarea = $state<HTMLTextAreaElement | null>(null);

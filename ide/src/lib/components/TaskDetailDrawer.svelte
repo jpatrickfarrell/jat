@@ -87,6 +87,47 @@
 		user_agent?: string | null;
 		metadata?: Record<string, any> | null;
 		db_id?: string | null;  // postgres UUID for replay links
+		// Task identity (jat-9e5tc): creator immutable, requester/approver mutable.
+		// Postgres returns TaskActor JSONB; SQLite returns plain TEXT (email/name).
+		creator?: TaskActorLike | null;
+		requester?: TaskActorLike | null;
+		approver?: TaskActorLike | null;
+	}
+
+	// Task identity actor — postgres returns an object; SQLite returns a string.
+	type TaskActorLike = string | { email?: string; name?: string; role?: string; source?: string; agent?: string };
+
+	function actorDisplayName(actor: TaskActorLike | null | undefined): string | null {
+		if (actor == null) return null;
+		if (typeof actor === 'string') return actor.trim() || null;
+		return actor.name || actor.email || actor.agent || null;
+	}
+
+	function actorRole(actor: TaskActorLike | null | undefined): string | null {
+		if (!actor || typeof actor === 'string') return null;
+		return actor.role || null;
+	}
+
+	function actorSource(actor: TaskActorLike | null | undefined): string | null {
+		if (!actor || typeof actor === 'string') return null;
+		return actor.source || null;
+	}
+
+	function actorKey(actor: TaskActorLike | null | undefined): string {
+		if (actor == null) return '';
+		if (typeof actor === 'string') return actor.trim().toLowerCase();
+		const parts = [actor.email, actor.name, actor.agent]
+			.filter(Boolean)
+			.map((v) => String(v).trim().toLowerCase());
+		return parts.join('|');
+	}
+
+	function actorsEqual(a: TaskActorLike | null | undefined, b: TaskActorLike | null | undefined): boolean {
+		return actorKey(a) === actorKey(b);
+	}
+
+	function resolveReplyTo(t: DrawerTask): TaskActorLike | null {
+		return t.approver ?? t.requester ?? t.creator ?? null;
 	}
 
 	// Derive source origin from ingest-enriched `integration` or labels.
@@ -222,6 +263,8 @@
 	let copiedTaskId = $state(false);
 	let copiedPageUrl = $state(false);
 	let editingLabels = $state(false);
+	let editingRequester = $state(false);
+	let editingApprover = $state(false);
 
 	// Action state
 	let isSpawning = $state(false);
@@ -3088,6 +3131,141 @@
 								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
 							/>
 						</div>
+
+						<!-- Origin (creator read-only, reply-to derived) - jat-9e5tc -->
+						{#if actorDisplayName(task.creator) || resolveReplyTo(task)}
+							{@const replyTo = resolveReplyTo(task)}
+							{@const creatorName = actorDisplayName(task.creator)}
+							{@const creatorSrc = actorSource(task.creator)}
+							{@const replyName = actorDisplayName(replyTo)}
+							{@const replyRole = actorRole(replyTo)}
+							{@const showSplit = !!task.requester && !!task.approver && !actorsEqual(task.requester, task.approver)}
+							<div class="mt-4">
+								<TaskFieldLabel>Origin</TaskFieldLabel>
+								<div class="flex flex-col gap-1.5">
+									{#if creatorName}
+										<div class="flex items-center gap-2 text-sm">
+											<span class="text-xs text-base-content/50 w-20 shrink-0">Creator</span>
+											<span class="font-mono text-base-content">{creatorName}</span>
+											{#if creatorSrc}
+												<span class="badge badge-xs bg-base-300 text-base-content/70 normal-case">via {creatorSrc}</span>
+											{/if}
+										</div>
+									{/if}
+									{#if replyName}
+										<div class="flex items-center gap-2 text-sm">
+											<span class="text-xs text-base-content/50 w-20 shrink-0">Reply to</span>
+											<span class="font-mono text-base-content">{replyName}</span>
+											{#if replyRole}
+												<span class="badge badge-xs bg-primary/30 text-base-content normal-case">{replyRole}</span>
+											{/if}
+										</div>
+									{/if}
+									{#if showSplit}
+										{@const reqName = actorDisplayName(task.requester)}
+										{@const apprName = actorDisplayName(task.approver)}
+										<div class="flex items-center gap-2 text-xs text-base-content/60">
+											<span class="w-20 shrink-0"></span>
+											{#if reqName}<span>Requester: <span class="font-mono text-base-content/80">{reqName}</span></span>{/if}
+											{#if reqName && apprName}<span class="text-base-content/30">·</span>{/if}
+											{#if apprName}<span>Approver: <span class="font-mono text-base-content/80">{apprName}</span></span>{/if}
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Advanced: requester/approver overrides (jat-9e5tc) -->
+						<details class="group mt-4">
+							<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+								<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+								</svg>
+								Advanced
+								{#if task.requester || task.approver}
+									<span class="badge badge-xs bg-primary/30 text-base-content ml-1 normal-case tracking-normal font-normal">routing override</span>
+								{/if}
+							</summary>
+							<div class="mt-2 flex flex-col gap-3">
+								<!-- Requester -->
+								<div class="flex items-start gap-2">
+									<span class="text-xs text-base-content/50 w-24 shrink-0 pt-0.5">Requester</span>
+									{#if editingRequester}
+										<input
+											type="text"
+											class="input input-sm flex-1 text-sm font-mono bg-base-200 border border-base-300 text-base-content"
+											value={actorDisplayName(task.requester) || ''}
+											placeholder="Who needs this done (email or name)"
+											onblur={async (e) => {
+												const val = e.currentTarget.value.trim();
+												await autoSave('requester', val || null);
+												editingRequester = false;
+											}}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') e.currentTarget.blur();
+												else if (e.key === 'Escape') editingRequester = false;
+											}}
+											disabled={isSaving}
+											use:autofocusAction
+										/>
+									{:else}
+										<button
+											class="flex-1 text-left rounded px-2 py-0.5 transition-colors industrial-hover bg-base-200 min-h-6"
+											onclick={() => (editingRequester = true)}
+											type="button"
+										>
+											{#if actorDisplayName(task.requester)}
+												<span class="text-sm font-mono">{actorDisplayName(task.requester)}</span>
+												{#if actorRole(task.requester)}
+													<span class="badge badge-xs bg-primary/30 text-base-content ml-1.5 normal-case">{actorRole(task.requester)}</span>
+												{/if}
+											{:else}
+												<span class="text-sm text-base-content/40 italic">Who needs this done</span>
+											{/if}
+										</button>
+									{/if}
+								</div>
+
+								<!-- Approver -->
+								<div class="flex items-start gap-2">
+									<span class="text-xs text-base-content/50 w-24 shrink-0 pt-0.5">Approver</span>
+									{#if editingApprover}
+										<input
+											type="text"
+											class="input input-sm flex-1 text-sm font-mono bg-base-200 border border-base-300 text-base-content"
+											value={actorDisplayName(task.approver) || ''}
+											placeholder="Who signs off (defaults to requester)"
+											onblur={async (e) => {
+												const val = e.currentTarget.value.trim();
+												await autoSave('approver', val || null);
+												editingApprover = false;
+											}}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') e.currentTarget.blur();
+												else if (e.key === 'Escape') editingApprover = false;
+											}}
+											disabled={isSaving}
+											use:autofocusAction
+										/>
+									{:else}
+										<button
+											class="flex-1 text-left rounded px-2 py-0.5 transition-colors industrial-hover bg-base-200 min-h-6"
+											onclick={() => (editingApprover = true)}
+											type="button"
+										>
+											{#if actorDisplayName(task.approver)}
+												<span class="text-sm font-mono">{actorDisplayName(task.approver)}</span>
+												{#if actorRole(task.approver)}
+													<span class="badge badge-xs bg-primary/30 text-base-content ml-1.5 normal-case">{actorRole(task.approver)}</span>
+												{/if}
+											{:else}
+												<span class="text-sm text-base-content/40 italic">Defaults to requester</span>
+											{/if}
+										</button>
+									{/if}
+								</div>
+							</div>
+						</details>
 
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div class="mt-4" data-field="labels">

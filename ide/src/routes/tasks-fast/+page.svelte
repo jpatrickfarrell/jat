@@ -14,6 +14,8 @@
 	import TaskFastDetail from "$lib/components/tasks-fast/TaskFastDetail.svelte";
 	import KeyboardShortcutsOverlay from "$lib/components/KeyboardShortcutsOverlay.svelte";
 	import { setSubmittedTasksCount } from "$lib/stores/drawerStore";
+	import type { TaskActor } from "$lib/types/api.types";
+	import { resolveRoutingTarget, isUuid } from "$lib/utils/taskRouting";
 
 	// Mirrors KeyboardShortcutsOverlay's ShortcutSection — kept local to avoid
 	// cross-component type imports from a .svelte module.
@@ -30,7 +32,13 @@
 		priority: number;
 		issue_type?: string;
 		assignee?: string | null;
-		requester?: string | null;
+		assignee_id?: string | null;
+		requester?: TaskActor | null;
+		requester_id?: string | null;
+		approver?: TaskActor | null;
+		approver_id?: string | null;
+		creator?: TaskActor | null;
+		creator_id?: string | null;
 		labels?: string[];
 		project?: string;
 		created_at?: string;
@@ -103,7 +111,8 @@
 		const set = new Set<string>();
 		for (const t of tasks) {
 			if (t.assignee) set.add(t.assignee);
-			if (t.requester) set.add(t.requester);
+			const handle = t.requester?.email || t.requester?.agent;
+			if (handle) set.add(handle);
 		}
 		return [...set].sort();
 	});
@@ -454,35 +463,42 @@
 			throw new Error("Task not found");
 		}
 
-		// Target assignee: requester first, else current assignee if it looks
-		// human-ish. We don't have task history in this payload, so "most recent
-		// non-agent human" collapses to "current assignee if set". Agent-name
-		// detection is best-effort (Agent Registry lookup would be overkill for
-		// the compose hot path); the user can always retry with an explicit
-		// assignee via the action bar (jat-nm0nq.6).
-		const targetAssignee = (task.requester || task.assignee || "").trim();
+		// Target: approver → requester → creator (post jat-9e5tc refactor).
+		// Falls back to the current human-ish assignee only when no identity
+		// snapshot is set, so legacy tasks still route somewhere sensible.
+		const target = resolveRoutingTarget(task as any);
+		const targetAssignee = (
+			target?.actor.email ||
+			target?.actor.agent ||
+			task.assignee ||
+			""
+		).trim();
 		if (!targetAssignee) {
 			throw new Error(
-				"No requester or assignee to route to — set one via the task detail first.",
+				"No approver, requester, creator, or assignee to route to — set one via the task detail first.",
 			);
 		}
+		const targetAssigneeId = isUuid(target?.id) ? target!.id : null;
 
 		const nextStatus =
 			task.status === "submitted" || task.status === "open"
 				? "waiting"
 				: task.status;
 
+		const body: Record<string, unknown> = {
+			assignee: targetAssignee,
+			status: nextStatus,
+		};
+		if (targetAssigneeId) body.assignee_id = targetAssigneeId;
+
 		const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				assignee: targetAssignee,
-				status: nextStatus,
-			}),
+			body: JSON.stringify(body),
 		});
 		if (!res.ok) {
-			const body = await res.json().catch(() => ({}));
-			throw new Error(body.error || `Route failed (HTTP ${res.status})`);
+			const errBody = await res.json().catch(() => ({}));
+			throw new Error(errBody.error || `Route failed (HTTP ${res.status})`);
 		}
 
 		// Apply the update locally so the UI reacts immediately instead of
@@ -493,6 +509,7 @@
 			tasks[idx] = {
 				...tasks[idx],
 				assignee: targetAssignee,
+				assignee_id: targetAssigneeId ?? tasks[idx].assignee_id ?? null,
 				status: nextStatus,
 			};
 		}

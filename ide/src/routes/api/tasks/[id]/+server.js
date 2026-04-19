@@ -200,6 +200,15 @@ export async function PUT({ params, request }) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
 		}
 
+		// Task identity (jat-9e5tc): requester/approver are mutable overrides.
+		// Accept string (email/name — backends normalize) or TaskActor object.
+		if (updates.requester !== undefined) {
+			updateFields.requester = updates.requester;
+		}
+		if (updates.approver !== undefined) {
+			updateFields.approver = updates.approver;
+		}
+
 		// Tasks with a cron schedule are automatically chores
 		if (updateFields.schedule_cron) {
 			updateFields.issue_type = 'chore';
@@ -387,6 +396,15 @@ export async function PATCH({ params, request }) {
 		}
 		if (updates.due_date !== undefined) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
+		}
+
+		// Task identity (jat-9e5tc): requester/approver are mutable overrides.
+		// Accept string (email/name — backends normalize) or TaskActor object.
+		if (updates.requester !== undefined) {
+			updateFields.requester = updates.requester;
+		}
+		if (updates.approver !== undefined) {
+			updateFields.approver = updates.approver;
 		}
 
 		// Tasks with a cron schedule are automatically chores

@@ -20,13 +20,21 @@
 	} from "$lib/components/SearchDropdown.svelte";
 	import { openTaskDetailDrawer } from "$lib/stores/drawerStore";
 
+	interface RequesterActor {
+		email?: string;
+		name?: string;
+		agent?: string;
+		role?: string;
+		source?: string;
+	}
+
 	interface Task {
 		id: string;
 		title: string;
 		status: string;
 		priority: number;
 		assignee?: string | null;
-		requester?: string | null;
+		requester?: RequesterActor | null;
 	}
 
 	interface Props {
@@ -96,7 +104,9 @@
 		if (currentUser) seen.add(currentUser.toLowerCase());
 		const rest: { value: string; label: string }[] = [];
 		const candidates = [...allAssignees];
-		if (task.requester) candidates.push(task.requester);
+		const requesterHandle =
+			task.requester?.email || task.requester?.agent || null;
+		if (requesterHandle) candidates.push(requesterHandle);
 		for (const raw of candidates) {
 			if (!raw) continue;
 			const key = raw.toLowerCase();

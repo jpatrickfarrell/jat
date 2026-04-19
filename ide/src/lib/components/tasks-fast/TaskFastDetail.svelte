@@ -333,6 +333,28 @@
 		opacity: 0.85;
 	}
 
+	.role-badge {
+		text-transform: capitalize;
+		margin-left: 0.25rem;
+		opacity: 0.75;
+	}
+
+	.reply-unknown {
+		opacity: 0.65;
+		font-style: italic;
+	}
+
+	.detail-meta-split {
+		flex-basis: 100%;
+		font-size: 0.75rem;
+		opacity: 0.7;
+	}
+
+	.detail-meta-divider {
+		margin: 0 0.5rem;
+		opacity: 0.5;
+	}
+
 	.detail-body {
 		flex: 1 1 auto;
 		overflow-y: auto;

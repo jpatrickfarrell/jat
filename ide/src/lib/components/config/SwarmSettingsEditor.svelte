@@ -312,7 +312,7 @@
 			</div>
 
 			<div class="form-control mt-3">
-				<label class="label cursor-pointer justify-start gap-3">
+				<label class="label cursor-pointer justify-start gap-3" class:toggle-pending={awaitingAutoModeConfirm}>
 					<input
 						type="checkbox"
 						class="toggle toggle-warning"
@@ -321,6 +321,9 @@
 						disabled={saving || awaitingAutoModeConfirm}
 					/>
 					<span class="label-text font-semibold tc-secondary">Enable autonomous mode</span>
+					{#if awaitingAutoModeConfirm}
+						<span class="pending-pill animate-pulse-subtle">confirm below ↓</span>
+					{/if}
 				</label>
 				<p class="text-xs ml-1 tc-hint">
 					Pass <code class="icode">--dangerously-skip-permissions</code> to Claude and <code class="icode">--full-auto</code> to Codex.
@@ -630,16 +633,6 @@
 		background: oklch(0.165 0.015 220);
 	}
 
-	/* VPS section — visually receded */
-	.section-vps {
-		opacity: 0.80;
-		transition: opacity 0.15s;
-	}
-	.section-vps:hover,
-	.section-vps:focus-within {
-		opacity: 1;
-	}
-
 	.section-header-with-actions {
 		display: flex;
 		align-items: center;
@@ -883,6 +876,33 @@
 		transition: transform 0.2s ease;
 	}
 	.accordion-chevron.rotated { transform: rotate(180deg); }
+
+	.accordion-toggle:hover .section-header-muted {
+		color: oklch(0.68 0.03 250);
+	}
+	.accordion-toggle:focus-visible {
+		outline: 2px solid oklch(0.50 0.15 200);
+		outline-offset: 2px;
+		border-radius: 4px;
+	}
+
+	/* ── Autonomous mode pending state ─────────────────────────── */
+	.toggle-pending {
+		opacity: 0.6;
+		pointer-events: none;
+	}
+	.pending-pill {
+		display: inline-block;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		padding: 0.1rem 0.4rem;
+		border-radius: 3px;
+		background: oklch(0.35 0.10 45 / 0.4);
+		border: 1px solid oklch(0.50 0.15 45 / 0.5);
+		color: oklch(0.75 0.15 45);
+	}
 
 	.accordion-body {
 		display: grid;

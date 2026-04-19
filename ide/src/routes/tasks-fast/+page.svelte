@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from "svelte";
+	import { fly, slide } from "svelte/transition";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
 	import { browser } from "$app/environment";
@@ -88,6 +89,10 @@
 	// right where they acted — no page-level banner needed.
 	let flashTaskId = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+	let undoTask = $state<Task | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+	const UNDO_MS = 4000;
 
 	// Filter + sort state — hydrated from URL on mount.
 	let filterStatuses = $state<Set<string>>(new Set(DEFAULT_STATUSES));
@@ -276,6 +281,7 @@
 				{ key: "k / ↑", description: "Focus previous task" },
 				{ key: "Enter / Space", description: "Open detail panel" },
 				{ key: "/", description: "Focus filter search input" },
+				{ key: "u", description: "Undo last dismiss (while toast is visible)" },
 				{ key: "Esc", description: "Close panel / exit filter" },
 			],
 		},
@@ -371,6 +377,13 @@
 			return;
 		}
 
+		// "u" undoes the last dismiss if an undo is pending.
+		if (e.key === "u" && !isTypingTarget(e.target) && undoTask) {
+			e.preventDefault();
+			handleUndo();
+			return;
+		}
+
 		if (isTypingTarget(e.target)) return;
 
 		// Detail-zone shortcuts run BEFORE list navigation so Space spawns
@@ -441,8 +454,16 @@
 		// Remove from source list. "closed" isn't in FETCH_STATUSES so it will
 		// naturally be gone on the next refetch; we just don't want to wait.
 		const srcIdx = tasks.findIndex((t) => t.id === taskId);
+		const removed = srcIdx >= 0 ? tasks[srcIdx] : null;
 		if (srcIdx >= 0) tasks.splice(srcIdx, 1);
 		tasks = tasks;
+
+		// Offer undo for 4 seconds — re-opens on server if claimed.
+		if (removed) {
+			undoTask = removed;
+			if (undoTimer) clearTimeout(undoTimer);
+			undoTimer = setTimeout(() => { undoTask = null; undoTimer = null; }, UNDO_MS);
+		}
 
 		triggerFlash(taskId);
 
@@ -459,6 +480,28 @@
 			selectedIdx = Math.min(next, filteredAfter.length - 1);
 			focusZone = "detail";
 		});
+	}
+
+	async function handleUndo() {
+		if (!undoTask) return;
+		const task = undoTask;
+		undoTask = null;
+		if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+
+		// Re-insert at front and re-open on server (best effort).
+		tasks = [task, ...tasks];
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: task.status }),
+			});
+		} catch { /* silent — task is back in local list either way */ }
+
+		// Navigate to the restored task.
+		await tick();
+		const idx = filteredTasks.findIndex((t) => t.id === task.id);
+		if (idx >= 0) selectTask(idx);
 	}
 
 	// --- Send + Route -------------------------------------------------------
@@ -611,6 +654,9 @@
 				selectedIdx = 0;
 				panelOpen = true;
 				focusZone = "detail";
+				// Sync listNav so j/k starts from position 0, not undefined.
+				await tick();
+				navController.focus(0);
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -894,12 +940,16 @@
 						class="input input-xs input-bordered"
 						placeholder="@me · name"
 						aria-label="Assignee filter"
+						list="assignee-list"
 					/>
+					<datalist id="assignee-list">
+						{#each allAssignees as a}<option value={a} />{/each}
+					</datalist>
 				</label>
 			</div>
 
 			{#if projectOptions.length > 1}
-				<div class="filter-row filter-row-projects">
+				<div class="filter-row filter-row-projects" transition:slide={{ duration: 150, axis: "y" }}>
 					<div class="chip-group" aria-label="Project">
 						<span class="filter-label">Project</span>
 						{#each projectOptions as proj}
@@ -989,6 +1039,18 @@
 					</li>
 				{/each}
 			</ul>
+		{/if}
+
+		{#if undoTask}
+			<div
+				class="undo-toast"
+				transition:fly={{ y: 6, duration: 150 }}
+				role="status"
+				aria-live="polite"
+			>
+				<span class="undo-message">dismissed · <kbd class="undo-kbd">u</kbd> to undo</span>
+				<button type="button" class="undo-btn" onclick={handleUndo}>Undo</button>
+			</div>
 		{/if}
 
 		<footer class="status-bar" aria-label="Status">
@@ -1451,6 +1513,52 @@
 
 	.state-error .btn {
 		margin-top: 0.75rem;
+	}
+
+	/* ---- Undo toast ---- */
+
+	.undo-toast {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.3rem 1rem;
+		background: oklch(0.75 0.15 85 / 0.10);
+		border-top: 1px solid oklch(0.75 0.15 85 / 0.25);
+		font-size: 0.72rem;
+		gap: 0.75rem;
+	}
+
+	.undo-message {
+		opacity: 0.8;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.68rem;
+		color: oklch(0.85 0.12 85);
+	}
+
+	.undo-kbd {
+		display: inline-block;
+		padding: 0.05rem 0.3rem;
+		font-size: 0.65rem;
+		border: 1px solid oklch(0.75 0.15 85 / 0.4);
+		border-radius: 0.2rem;
+		background: oklch(0.75 0.15 85 / 0.12);
+		font-family: inherit;
+	}
+
+	.undo-btn {
+		padding: 0.1rem 0.55rem;
+		font-size: 0.68rem;
+		border: 1px solid oklch(0.75 0.15 85 / 0.45);
+		border-radius: 0.25rem;
+		background: oklch(0.75 0.15 85 / 0.15);
+		color: oklch(0.88 0.15 85);
+		cursor: pointer;
+		transition: background 0.1s ease;
+		white-space: nowrap;
+	}
+
+	.undo-btn:hover {
+		background: oklch(0.75 0.15 85 / 0.28);
 	}
 
 	/* ---- Inbox summary (empty detail panel) ---- */

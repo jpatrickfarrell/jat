@@ -915,7 +915,7 @@
 		     Hidden on narrow: MobileProjectSelector already opens the same palette when tapped. -->
 		{#if onGlobalSearchOpen}
 			<button
-				class="search-cmd-btn hidden lg:flex"
+				class="search-cmd-btn"
 				onclick={onGlobalSearchOpen}
 				aria-label="Search and commands (Ctrl+K)"
 				title="Search and commands (Ctrl+K)"
@@ -1009,9 +1009,9 @@
 		outline-offset: 2px;
 	}
 
-	/* Ctrl+K search/command button */
+	/* Ctrl+K search/command button — hidden on narrow (MobileProjectSelector opens the same palette) */
 	.search-cmd-btn {
-		display: flex;
+		display: none;
 		align-items: center;
 		gap: 0.3rem;
 		height: 1.75rem;
@@ -1023,6 +1023,11 @@
 		cursor: pointer;
 		transition: color 0.15s, background 0.15s, border-color 0.15s;
 		flex-shrink: 0;
+	}
+	@media (min-width: 1024px) {
+		.search-cmd-btn {
+			display: flex;
+		}
 	}
 	.search-cmd-btn:hover {
 		color: oklch(0.75 0.02 250);

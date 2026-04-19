@@ -12,6 +12,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { createTask, getScheduledTasks, updateTask, closeTask } from '$lib/server/jat-tasks.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 const CONFIG_DIR = join(homedir(), '.config', 'jat');
 const TEMPLATES_FILE = join(CONFIG_DIR, 'quick-commands.json');
@@ -172,6 +173,14 @@ export async function POST({ params, request }) {
 
 		const description = `Scheduled ${isSpawnAgent ? 'agent task' : 'quick command'}: ${template.name}${promptSection}\ntemplate-id:${params.id}${variableBlock}`;
 
+		// Build identity for the scheduled task (system/scheduler as creator)
+		const requesterStr = requester && typeof requester === 'string' ? requester.trim() : null;
+		const identity = buildTaskIdentity({
+			source: 'ide',
+			email: requesterStr?.includes('@') ? requesterStr : undefined,
+			name: !requesterStr?.includes('@') ? requesterStr : undefined,
+		});
+
 		// Create the task
 		const task = createTask({
 			projectPath: projectInfo.path,
@@ -184,7 +193,7 @@ export async function POST({ params, request }) {
 			model: model || (isSpawnAgent ? 'sonnet' : template.defaultModel || 'haiku'),
 			schedule_cron: cronExpr,
 			next_run_at: nextRunAt,
-			requester: requester && typeof requester === 'string' ? requester.trim() : null
+			requester: identity.creator.email || identity.creator.name || null
 		});
 
 		return json({

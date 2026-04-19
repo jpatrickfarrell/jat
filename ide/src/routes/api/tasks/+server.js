@@ -10,6 +10,7 @@ import { getProjectPath } from '$lib/server/projectPaths.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { lookupIntegrations } from '$lib/server/integrationLookup.js';
 import { resolveBackendForProject, getProjectConfig } from '../../../../../lib/projects-config.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -321,8 +322,7 @@ export async function POST({ request }) {
 
 		// Task identity (jat-9e5tc): accept creator/requester/approver as either
 		// a string (legacy — email or agent name) or a structured TaskActor
-		// object. Postgres backend stores JSONB; SQLite backend collapses to
-		// string aliases (creator/approver on SQLite; requester is legacy-only).
+		// object. Postgres stores JSONB; SQLite collapses to string aliases.
 		/** @param {unknown} v */
 		const toActor = (v) => {
 			if (v == null) return null;
@@ -330,11 +330,6 @@ export async function POST({ request }) {
 			if (typeof v === 'object') return v;
 			return null;
 		};
-		const creator   = toActor(body.creator);
-		const requester = toActor(body.requester);
-		const approver  = toActor(body.approver);
-		// SQLite backend accepts string-only for requester; derive a routing
-		// email from whichever actor is most "authoritative" for legacy paths.
 		/** @param {unknown} a */
 		const actorToString = (a) => {
 			if (!a) return null;
@@ -343,6 +338,17 @@ export async function POST({ request }) {
 			const o = a;
 			return o.email || o.agent || o.name || null;
 		};
+		const bodyCreator   = toActor(body.creator);
+		const bodyRequester = toActor(body.requester);
+		const bodyApprover  = toActor(body.approver);
+		// Build default identity for when no actor fields are provided in body
+		const defaultIdentity = buildTaskIdentity({ source: 'ide', userId: body.creator_id || undefined });
+		const creator   = bodyCreator   ?? defaultIdentity.creator;
+		const requester = (bodyRequester ?? bodyCreator) ?? defaultIdentity.requester;
+		const approver  = (bodyApprover ?? bodyRequester ?? bodyCreator) ?? defaultIdentity.approver;
+		const creator_id   = body.creator_id   || defaultIdentity.creator_id   || null;
+		const requester_id = body.requester_id || defaultIdentity.requester_id || null;
+		const approver_id  = body.approver_id  || defaultIdentity.approver_id  || null;
 		const sqliteRequester = actorToString(approver) || actorToString(requester) || actorToString(creator);
 
 		/** @type {any} */
@@ -357,11 +363,11 @@ export async function POST({ request }) {
 				deps,
 				assignee: null,
 				creator,
-				creator_id: body.creator_id || null,
+				creator_id,
 				requester,
-				requester_id: body.requester_id || null,
+				requester_id,
 				approver,
-				approver_id: body.approver_id || null,
+				approver_id,
 				notes,
 				...schedulingFields
 			})

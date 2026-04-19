@@ -22,6 +22,7 @@ import { homedir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createHash } from 'crypto';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -273,6 +274,17 @@ export async function POST({ request }) {
 			.digest('hex')
 			.slice(0, 32);
 
+		// Build reporter identity from widget body fields
+		const reporterStr = body.reporter && typeof body.reporter === 'string' ? body.reporter.trim() : null;
+		const identity = buildTaskIdentity({
+			source: 'widget',
+			userId: body.reporter_user_id || undefined,
+			email: body.reporter_email || (reporterStr?.includes('@') ? reporterStr : undefined),
+			name: body.reporter_name || (!reporterStr?.includes('@') ? reporterStr : undefined),
+			role: body.reporter_role || undefined,
+		});
+		const sqliteRequester = identity.creator.email || identity.creator.name || identity.creator.agent || null;
+
 		// Create the task — catch unique-constraint conflicts (dedup) silently
 		let createdTask;
 		try {
@@ -285,7 +297,7 @@ export async function POST({ request }) {
 				labels: ['widget', 'bug-report'],
 				deps: [],
 				assignee: null,
-				requester: body.reporter && typeof body.reporter === 'string' ? body.reporter.trim() : null,
+				requester: sqliteRequester,
 				notes: '',
 				source: 'feedback-widget',
 				source_item_id: sourceItemId,

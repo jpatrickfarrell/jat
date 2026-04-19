@@ -30,6 +30,7 @@ import {
 	organizeTranscript,
 	appendToVoiceTimeline
 } from '$lib/server/voice-core.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 /**
  * In-memory job status map for voice transcription polling.
@@ -99,6 +100,11 @@ export async function PATCH({ url, request }) {
 	if (title) {
 		try {
 			const projectPath = process.cwd().replace(/\/ide$/, '');
+			const identity = buildTaskIdentity({
+				source: 'voice',
+				email: widgetRequester?.includes('@') ? widgetRequester : undefined,
+				name: !widgetRequester?.includes('@') ? widgetRequester : undefined,
+			});
 			const createdTask = createTask({
 				projectPath,
 				title,
@@ -108,7 +114,7 @@ export async function PATCH({ url, request }) {
 				labels: ['voice'],
 				deps: [],
 				assignee: null,
-				requester: widgetRequester,
+				requester: identity.creator.email || identity.creator.name || null,
 				notes: '',
 				source: 'voice'
 			});
@@ -164,9 +170,10 @@ function getAudioDate(filePath) {
  * @param {string} audioPath
  * @param {string} title
  * @param {number} priority
+ * @param {string|null} requester
  * @returns {Promise<{ tasks: {title: string, description: string}[], title: string }>}
  */
-function transcribeAndOrganize(audioPath, title, priority) {
+function transcribeAndOrganize(audioPath, title, priority, requester) {
 	return new Promise((resolve) => {
 		const id = randomBytes(4).toString('hex');
 		const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
@@ -223,6 +230,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 				// Fallback: create a single task from the transcript directly
 				const projectPath = process.cwd().replace(/\/ide$/, '');
 				try {
+					const fallbackIdentity = buildTaskIdentity({ source: 'voice' });
 					const createdTask = createTask({
 						projectPath,
 						title,
@@ -232,7 +240,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 						labels: ['voice'],
 						deps: [],
 						assignee: null,
-						requester: postRequester,
+						requester: requester || fallbackIdentity.creator.source,
 						notes: '',
 						source: 'voice'
 					});
@@ -286,10 +294,17 @@ export async function POST({ request }) {
 				const priority = body.priority !== undefined ? parseInt(body.priority) : 2;
 				const projectPath = process.cwd().replace(/\/ide$/, '');
 				try {
+					const textFallbackIdentity = buildTaskIdentity({
+						source: 'voice',
+						email: postRequester?.includes('@') ? postRequester : undefined,
+						name: !postRequester?.includes('@') ? postRequester : undefined,
+					});
 					const createdTask = createTask({
 						projectPath, title, description: text, type: 'task',
 						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'], deps: [], assignee: null, requester: postRequester, notes: '',
+						labels: ['voice'], deps: [], assignee: null,
+						requester: textFallbackIdentity.creator.email || textFallbackIdentity.creator.name || null,
+						notes: '',
 						source: 'voice'
 					});
 					invalidateCache.tasks();
@@ -319,6 +334,7 @@ export async function POST({ request }) {
 			let title = '';
 			let priority = 2;
 			let audioTempPath = '';
+			let postRequester = null;
 
 			if (contentType.includes('multipart/form-data')) {
 				const formData = await request.formData();
@@ -326,6 +342,8 @@ export async function POST({ request }) {
 				title = /** @type {string} */ (formData.get('title'))?.trim() || '';
 				const priorityStr = /** @type {string} */ (formData.get('priority'));
 				priority = priorityStr ? parseInt(priorityStr) : 2;
+				const requesterField = formData.get('requester');
+				if (requesterField && typeof requesterField === 'string') postRequester = requesterField.trim() || null;
 
 				if (!file || !(file instanceof File)) {
 					return json({ error: true, message: 'Missing audio file' }, { status: 400, headers: CORS_HEADERS });
@@ -369,7 +387,7 @@ export async function POST({ request }) {
 
 			// Fire and forget — transcription + organize happens in background
 			// Update voiceJobs with all tasks for widget review form
-			transcribeAndOrganize(audioTempPath, title, priority).then((result) => {
+			transcribeAndOrganize(audioTempPath, title, priority, postRequester).then((result) => {
 				voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
 			}).catch(() => {
 				voiceJobs.set(jobId, { status: 'open', tasks: [{ title, description: '' }], title });

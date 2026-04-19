@@ -244,7 +244,9 @@ if [[ -f "$PERSISTENT_STATE_FILE" ]]; then
 fi
 
 # Fallback: If no state file but agent has in_progress task, query jt (if available)
-if [[ -z "$TASK_ID" ]] && command -v jt &>/dev/null; then
+# Skip on fresh startup (source=startup) — /jat:start handles context setup for new sessions.
+# Only run for compaction/resume/clear where the agent was already working.
+if [[ -z "$TASK_ID" ]] && [[ "$SOURCE" != "startup" ]] && command -v jt &>/dev/null; then
     # Only try jt if we're in a directory with .jat/ (graceful degradation)
     if [[ -d "$PROJECT_DIR/.jat" ]]; then
         TASK_ID=$(jt list --json 2>/dev/null | jq -r --arg a "$AGENT_NAME" '.[] | select(.assignee == $a and .status == "in_progress") | .id' 2>/dev/null | head -1)

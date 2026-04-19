@@ -30,6 +30,19 @@
 		getActorHandle,
 	} from "$lib/utils/taskRouting";
 
+	interface SelectedElement {
+		tagName?: string;
+		textContent?: string;
+		selector?: string;
+		xpath?: string;
+	}
+
+	interface TaskAttachment {
+		id: string;
+		path: string;
+		uploadedAt?: string;
+	}
+
 	interface Task {
 		id: string;
 		title: string;
@@ -48,6 +61,11 @@
 		project?: string;
 		created_at?: string;
 		updated_at?: string;
+		// Feedback context fields (fetched from full task detail)
+		page_url?: string | null;
+		recording_url?: string | null;
+		selected_elements?: SelectedElement[] | null;
+		db_id?: string | null;
 	}
 
 	interface Props {
@@ -89,6 +107,19 @@
 	// Reload key — bumped after sending a comment so CommentsThread re-fetches.
 	let reloadKey = $state(0);
 
+	// Extra context fields fetched from /api/tasks/[id] (not in list API)
+	let contextDetail = $state<{
+		page_url?: string | null;
+		recording_url?: string | null;
+		selected_elements?: SelectedElement[] | null;
+		db_id?: string | null;
+	} | null>(null);
+
+	// Attachments fetched from /api/tasks/[id]/image
+	let attachments = $state<TaskAttachment[]>([]);
+	let attachmentsLoading = $state(false);
+	let urlCopied = $state(false);
+
 	marked.setOptions({ gfm: true, breaks: true });
 
 	const routingTarget = $derived(resolveRoutingTarget(task as any));
@@ -119,6 +150,42 @@
 		void task.id;
 		descExpanded = false;
 		descOverflows = false;
+		contextDetail = null;
+		attachments = [];
+		urlCopied = false;
+
+		// Fetch full task detail for feedback context fields (page_url, recording_url, etc.)
+		const id = task.id;
+		fetch(`/api/tasks/${encodeURIComponent(id)}`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((data) => {
+				if (!data?.task || task.id !== id) return;
+				const t = data.task;
+				if (t.page_url || t.recording_url || t.selected_elements || t.db_id) {
+					contextDetail = {
+						page_url: t.page_url ?? null,
+						recording_url: t.recording_url ?? null,
+						selected_elements: t.selected_elements ?? null,
+						db_id: t.db_id ?? null,
+					};
+				}
+			})
+			.catch(() => {});
+
+		// Fetch attachments
+		attachmentsLoading = true;
+		fetch(`/api/tasks/${encodeURIComponent(id)}/image`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((data) => {
+				if (task.id !== id) return;
+				attachments = data?.images ?? [];
+			})
+			.catch(() => {
+				attachments = [];
+			})
+			.finally(() => {
+				if (task.id === id) attachmentsLoading = false;
+			});
 	});
 
 	// Measure description overflow after render.
@@ -173,6 +240,25 @@
 	function handleSendAndRoute(text: string) {
 		onSendAndRoute?.(task.id, text);
 	}
+
+	async function copyPageUrl(url: string) {
+		try {
+			await navigator.clipboard.writeText(url);
+			urlCopied = true;
+			setTimeout(() => (urlCopied = false), 1500);
+		} catch {}
+	}
+
+	// Merge task-level feedback fields with supplemental fetch results
+	const feedbackContext = $derived.by(() => {
+		// Prefer direct props (if list API ever includes them) over fetched detail
+		const page_url = task.page_url ?? contextDetail?.page_url ?? null;
+		const recording_url = task.recording_url ?? contextDetail?.recording_url ?? null;
+		const selected_elements = task.selected_elements ?? contextDetail?.selected_elements ?? null;
+		const db_id = task.db_id ?? contextDetail?.db_id ?? null;
+		if (!page_url && !recording_url && !selected_elements?.length) return null;
+		return { page_url, recording_url, selected_elements, db_id };
+	});
 </script>
 
 <div class="detail-root">
@@ -262,6 +348,94 @@
 		{:else}
 			<section class="detail-description detail-description-empty">
 				No description.
+			</section>
+		{/if}
+
+		{#if feedbackContext}
+			<section class="detail-context">
+				<h3 class="section-label">Context</h3>
+				<div class="context-items">
+					{#if feedbackContext.recording_url || feedbackContext.db_id}
+						{@const replayBase = (() => { try { return new URL(feedbackContext.page_url || '').origin; } catch { return ''; } })()}
+						{@const replayUrl = feedbackContext.db_id && replayBase ? `${replayBase}/feedback/replay?id=${feedbackContext.db_id}` : feedbackContext.recording_url || ''}
+						{#if replayUrl}
+							<a
+								href={replayUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="context-recording-link"
+							>
+								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+								</svg>
+								Watch Recording
+							</a>
+						{/if}
+					{/if}
+					{#if feedbackContext.page_url}
+						<div class="context-url-row">
+							<a
+								href={feedbackContext.page_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="context-url-link"
+								title={feedbackContext.page_url}
+							>
+								<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+								</svg>
+								<span class="context-url-text">{feedbackContext.page_url}</span>
+							</a>
+							<button
+								type="button"
+								class="context-url-copy"
+								onclick={() => copyPageUrl(feedbackContext.page_url!)}
+								title="Copy URL"
+							>
+								{urlCopied ? '✓' : '⎘'}
+							</button>
+						</div>
+					{/if}
+					{#if feedbackContext.selected_elements?.length}
+						<div class="context-elements">
+							<span class="context-elements-label">Selected elements:</span>
+							{#each feedbackContext.selected_elements as el}
+								<code class="context-element">{el.tagName ?? ''}{el.textContent ? ` "${el.textContent.slice(0, 60)}${el.textContent.length > 60 ? '…' : ''}"` : (el.selector ?? el.xpath ?? '')}</code>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</section>
+		{/if}
+
+		{#if attachmentsLoading || attachments.length > 0}
+			<section class="detail-attachments">
+				<h3 class="section-label">Attachments{#if attachments.length > 0}<span class="attachment-count">{attachments.length}</span>{/if}</h3>
+				{#if attachmentsLoading && attachments.length === 0}
+					<div class="attachment-loading">
+						<span class="loading loading-spinner loading-xs"></span>
+					</div>
+				{:else}
+					<div class="attachment-grid">
+						{#each attachments as att (att.id)}
+							<a
+								href={`/api/work/image${att.path}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="attachment-thumb"
+								title={att.path.split('/').pop()}
+							>
+								<img
+									src={`/api/work/image${att.path}`}
+									alt="Attachment"
+									class="attachment-img"
+									loading="lazy"
+								/>
+							</a>
+						{/each}
+					</div>
+				{/if}
 			</section>
 		{/if}
 
@@ -413,6 +587,156 @@
 		letter-spacing: 0.04em;
 		opacity: 0.6;
 		margin: 0 0 0.5rem;
+	}
+
+	/* ---- Feedback Context ---- */
+
+	.context-items {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.context-recording-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.625rem;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: oklch(0.85 0.12 200);
+		background: oklch(0.60 0.15 200 / 0.12);
+		border: 1px solid oklch(0.60 0.15 200 / 0.3);
+		text-decoration: none;
+		width: max-content;
+		transition: background 0.1s ease;
+	}
+
+	.context-recording-link:hover {
+		background: oklch(0.60 0.15 200 / 0.22);
+	}
+
+	.context-url-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+
+	.context-url-link {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.75rem;
+		color: oklch(0.70 0.10 240);
+		text-decoration: none;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.context-url-link:hover {
+		color: oklch(0.85 0.15 240);
+	}
+
+	.context-url-text {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		opacity: 0.8;
+	}
+
+	.context-url-copy {
+		flex-shrink: 0;
+		padding: 0.1rem 0.3rem;
+		font-size: 0.7rem;
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.25rem;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		opacity: 0.6;
+		transition: opacity 0.1s ease;
+	}
+
+	.context-url-copy:hover {
+		opacity: 1;
+	}
+
+	.context-elements {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		font-size: 0.75rem;
+	}
+
+	.context-elements-label {
+		font-size: 0.65rem;
+		opacity: 0.5;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.context-element {
+		font-size: 0.7rem;
+		padding: 0.1rem 0.35rem;
+		border-radius: 0.25rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		color: oklch(0.78 0.05 240);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* ---- Attachments ---- */
+
+	.detail-attachments .attachment-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin-left: 0.3rem;
+		padding: 0 0.3rem;
+		min-width: 1.1rem;
+		height: 1.1rem;
+		border-radius: 999px;
+		background: oklch(0.28 0.02 250);
+		color: oklch(0.75 0.05 250);
+		font-size: 0.6rem;
+		font-variant-numeric: tabular-nums;
+		vertical-align: middle;
+	}
+
+	.attachment-loading {
+		opacity: 0.5;
+		padding: 0.25rem 0;
+	}
+
+	.attachment-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.attachment-thumb {
+		display: block;
+		border-radius: 0.375rem;
+		overflow: hidden;
+		border: 1px solid oklch(0.28 0.02 250);
+		transition: border-color 0.1s ease;
+	}
+
+	.attachment-thumb:hover {
+		border-color: oklch(0.55 0.08 240);
+	}
+
+	.attachment-img {
+		display: block;
+		width: 80px;
+		height: 60px;
+		object-fit: cover;
+		background: oklch(0.18 0.02 250);
 	}
 
 	/* Let markdown output follow the existing prose utilities, but trim the

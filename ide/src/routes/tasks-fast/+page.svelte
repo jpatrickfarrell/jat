@@ -822,6 +822,11 @@
 			.catch(() => {});
 
 		fetchTasks();
+
+		return () => {
+			if (undoTimer) clearTimeout(undoTimer);
+			if (flashTimer) clearTimeout(flashTimer);
+		};
 	});
 </script>
 
@@ -969,7 +974,10 @@
 		</div>
 
 		{#if loading}
-			<div class="state-message">Loading tasks…</div>
+			<div class="state-message state-loading">
+				<span class="loading loading-spinner loading-xs"></span>
+				Loading…
+			</div>
 		{:else if error}
 			<div class="state-message state-error">
 				<p>Failed to load tasks: {error}</p>
@@ -1229,6 +1237,10 @@
 
 	.filter-row-chips {
 		gap: 0.4rem 1rem;
+	}
+
+	.filter-row-secondary {
+		gap: 0.4rem 0.75rem;
 	}
 
 	.filter-row-search {
@@ -1503,6 +1515,13 @@
 		opacity: 0.75;
 	}
 
+	.state-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+
 	.state-message.state-muted {
 		opacity: 0.5;
 	}
@@ -1518,6 +1537,7 @@
 	/* ---- Undo toast ---- */
 
 	.undo-toast {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -1526,6 +1546,26 @@
 		border-top: 1px solid oklch(0.75 0.15 85 / 0.25);
 		font-size: 0.72rem;
 		gap: 0.75rem;
+		overflow: hidden;
+	}
+
+	.undo-toast::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 2px;
+		background: oklch(0.75 0.15 85 / 0.7);
+		animation: undo-countdown 4s linear forwards;
+	}
+
+	@keyframes undo-countdown {
+		from { width: 100%; }
+		to   { width: 0%; }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.undo-toast::before { animation: none; width: 100%; }
 	}
 
 	.undo-message {

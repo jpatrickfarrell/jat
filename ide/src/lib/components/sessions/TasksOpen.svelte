@@ -27,7 +27,7 @@
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 	import HarnessTray from '$lib/components/sessions/HarnessTray.svelte';
 	import { STATUS_OPTIONS, TERMINAL_STATUSES } from '$lib/config/task-statuses';
-	import { jkFocusedOpenTaskId } from '$lib/stores/drawerStore';
+	import { jkFocusedOpenTaskId, openMobileSessionName } from '$lib/stores/drawerStore';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -1322,6 +1322,28 @@
 		return task.depends_on.some(dep => !TERMINAL_STATUSES.has(dep.status as any));
 	}
 
+	// Route a blocked-by dep click: if the dep is actively being worked on, jump into the
+	// agent's MobileSessionDrawer; otherwise open the task detail drawer.
+	async function handleBlockedDepClick(dep: Dependency) {
+		if (dep.status === 'in_progress') {
+			try {
+				const resp = await fetch(`/api/tasks/${encodeURIComponent(dep.id)}`);
+				if (resp.ok) {
+					const data = await resp.json();
+					const assignee = data?.task?.assignee || data?.[0]?.assignee;
+					console.log('[blocked-dep-click]', { depId: dep.id, status: dep.status, assignee });
+					if (assignee) {
+						openMobileSessionName.set(`jat-${assignee}`);
+						return;
+					}
+				}
+			} catch (e) {
+				console.warn('[blocked-dep-click] fetch failed', e);
+			}
+		}
+		onTaskClick(dep.id);
+	}
+
 	function getBlockingReason(task: Task): string {
 		if (!task.depends_on) return '';
 		const unresolvedDeps = task.depends_on.filter(dep => !TERMINAL_STATUSES.has(dep.status as any));
@@ -2007,19 +2029,21 @@
 											type="button"
 											class="mobile-task-blocked-by"
 											title={unresolvedDeps[0].title ? `Blocked by ${unresolvedDeps[0].id}: ${unresolvedDeps[0].title}` : `Blocked by ${unresolvedDeps[0].id}`}
-											onclick={(e) => { e.stopPropagation(); onTaskClick(unresolvedDeps[0].id); }}
+											onclick={(e) => { e.stopPropagation(); handleBlockedDepClick(unresolvedDeps[0]); }}
 										>
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="9" height="9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
 											<span>{unresolvedDeps[0].id}</span>
 										</button>
 									{:else}
-										<span
+										<button
+											type="button"
 											class="mobile-task-blocked-by"
 											title={`Blocked by: ${unresolvedDeps.map(d => d.id).join(', ')}`}
+											onclick={(e) => { e.stopPropagation(); onTaskClick(task.id); }}
 										>
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="9" height="9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
 											<span>{unresolvedDeps.length} blockers</span>
-										</span>
+										</button>
 									{/if}
 								{/if}
 								{#if !isHumanTask(task)}

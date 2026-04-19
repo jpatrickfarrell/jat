@@ -23,6 +23,7 @@ PERSISTENT_STATE_FILE="$CLAUDE_DIR/.agent-workflow-state-${WINDOW_KEY}.json"
 # Read session ID from stdin JSON (provided by Claude Code)
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+SOURCE=$(echo "$INPUT" | jq -r '.source // ""' 2>/dev/null)
 
 if [[ -z "$SESSION_ID" ]]; then
     # No session ID - can't do anything
@@ -137,7 +138,8 @@ if [[ -f "$PERSISTENT_STATE_FILE" ]]; then
 fi
 
 # Fallback: If no state file but agent has in_progress task, still output working marker
-if [[ -z "$TASK_ID" ]] && [[ -n "$AGENT_NAME" ]] && command -v jt &>/dev/null; then
+# Skip on fresh startup — /jat:start handles context setup for new sessions.
+if [[ -z "$TASK_ID" ]] && [[ -n "$AGENT_NAME" ]] && command -v jt &>/dev/null && [[ "$SOURCE" != "startup" ]]; then
     TASK_ID=$(jt list --json 2>/dev/null | jq -r --arg a "$AGENT_NAME" '.[] | select(.assignee == $a and .status == "in_progress") | .id' 2>/dev/null | head -1)
     if [[ -n "$TASK_ID" ]]; then
         TASK_TITLE=$(jt show "$TASK_ID" --json 2>/dev/null | jq -r '.[0].title // ""' 2>/dev/null)

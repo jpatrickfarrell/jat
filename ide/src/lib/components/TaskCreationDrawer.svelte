@@ -305,7 +305,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		type: string;
 		project: string;
 		labels: string;
-		requester: string;
+		onBehalfOf: string;
 		command: string;
 		due_date: string;
 		schedule_type: 'none' | 'one-shot' | 'recurring';
@@ -321,7 +321,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		type: 'task',
 		project: '',
 		labels: '',
-		requester: '',
+		onBehalfOf: '',
 		command: '/jat:start',
 		due_date: '',
 		schedule_type: 'none',
@@ -1131,6 +1131,17 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				nextRunAt = new Date(formData.next_run_at).toISOString();
 			}
 
+			// "On behalf of" — when set, route task to that person as both
+			// requester and approver. creator stays as the current auth user
+			// (resolved server-side when not provided).
+			const onBehalfOfValue = formData.onBehalfOf.trim();
+			let onBehalfOfActor: { source: 'ide'; email?: string; name?: string } | undefined;
+			if (onBehalfOfValue) {
+				onBehalfOfActor = onBehalfOfValue.includes('@')
+					? { email: onBehalfOfValue, source: 'ide' }
+					: { name: onBehalfOfValue, source: 'ide' };
+			}
+
 			// Prepare request body
 			const requestBody = {
 				title: formData.title.trim(),
@@ -1141,7 +1152,8 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				project: formData.project.trim() || undefined,
 				labels: labels.length > 0 ? labels : undefined,
 				deps: dependencies.length > 0 ? dependencies : undefined,
-				requester: formData.requester.trim() || undefined,
+				requester: onBehalfOfActor,
+				approver: onBehalfOfActor,
 				review_override: reviewOverride || undefined,
 				command: resolvedCommand !== '/jat:start' ? resolvedCommand : undefined,
 				agent_program: agentProgram,
@@ -1315,7 +1327,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 			type: 'task',
 			project: '',
 			labels: '',
-			requester: '',
+			onBehalfOf: '',
 			command: '/jat:start',
 			due_date: '',
 			schedule_type: 'none',
@@ -1975,22 +1987,40 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
 					{/if}
 
-					<!-- Requester -->
-					<div class="form-control">
-						<label class="label py-0.5" for="task-requester">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Requester
-							</span>
-						</label>
-						<input
-							id="task-requester"
-							type="text"
-							placeholder="e.g. mike, j@chimaro.ai"
-							class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
-							bind:value={formData.requester}
-							disabled={formDisabled || isSubmitting}
-						/>
-					</div>
+					<!-- Advanced (Optional) — collapsed disclosure: On behalf of -->
+					<details class="group">
+						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+							<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Advanced
+							{#if formData.onBehalfOf.trim()}
+								<span class="badge badge-xs bg-primary/30 text-base-content ml-1 normal-case tracking-normal font-normal">on behalf of</span>
+							{/if}
+						</summary>
+						<div class="mt-2">
+							<div class="form-control">
+								<label class="label py-0.5" for="task-on-behalf-of">
+									<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+										On behalf of (optional)
+									</span>
+								</label>
+								<input
+									id="task-on-behalf-of"
+									type="text"
+									placeholder="Email or name of person who needs this done"
+									class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+									bind:value={formData.onBehalfOf}
+									disabled={formDisabled || isSubmitting}
+								/>
+								{#if formData.onBehalfOf.trim()}
+									<div class="mt-1 text-xs text-info/80 font-mono">
+										Creating on behalf of {formData.onBehalfOf.trim()}
+									</div>
+								{/if}
+							</div>
+						</div>
+					</details>
 
 					<!-- Context (Knowledge Bases + Data Tables) -->
 					<div class="form-control">

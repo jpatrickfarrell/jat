@@ -23,6 +23,12 @@
 		getTypeBadge,
 	} from "$lib/utils/badgeHelpers";
 	import { formatRelativeTime } from "$lib/utils/dateFormatters";
+	import type { TaskActor } from "$lib/types/api.types";
+	import {
+		resolveRoutingTarget,
+		getActorDisplayName,
+		getActorHandle,
+	} from "$lib/utils/taskRouting";
 
 	interface Task {
 		id: string;
@@ -32,7 +38,12 @@
 		priority: number;
 		issue_type?: string;
 		assignee?: string | null;
-		requester?: string | null;
+		requester?: TaskActor | null;
+		requester_id?: string | null;
+		approver?: TaskActor | null;
+		approver_id?: string | null;
+		creator?: TaskActor | null;
+		creator_id?: string | null;
 		labels?: string[];
 		project?: string;
 		created_at?: string;
@@ -79,6 +90,17 @@
 	let reloadKey = $state(0);
 
 	marked.setOptions({ gfm: true, breaks: true });
+
+	const routingTarget = $derived(resolveRoutingTarget(task as any));
+	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
+	const showSplitRoles = $derived(
+		!!(
+			task.approver &&
+			task.requester &&
+			task.approver !== task.requester &&
+			getActorHandle(task.approver) !== getActorHandle(task.requester)
+		),
+	);
 
 	const renderedDescription = $derived.by(() => {
 		if (!task.description) return "";
@@ -181,9 +203,25 @@
 			{task.assignee || "—"}
 		</span>
 		<span>
-			<strong>Requester:</strong>
-			{task.requester || "—"}
+			<strong>Reply to:</strong>
+			{#if routingTarget}
+				{routingName}
+				<span class="badge badge-xs badge-outline role-badge">
+					{routingTarget.role}
+				</span>
+			{:else}
+				<span class="reply-unknown">Unknown</span>
+			{/if}
 		</span>
+		{#if showSplitRoles && task.requester && task.approver}
+			<span class="detail-meta-split">
+				<strong>Requester:</strong>
+				{getActorDisplayName(task.requester)}
+				<span class="detail-meta-divider">·</span>
+				<strong>Approver:</strong>
+				{getActorDisplayName(task.approver)}
+			</span>
+		{/if}
 		{#if task.created_at}
 			<span>
 				<strong>Created:</strong>
@@ -242,6 +280,7 @@
 	<TaskFastCompose
 		bind:this={composeRef}
 		taskId={task.id}
+		{task}
 		onSent={handleSent}
 		onSendAndRoute={handleSendAndRoute}
 		onEscape={() => onEscapeCompose?.()}

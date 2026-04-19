@@ -11,8 +11,15 @@
 	 * Parent can call focus() to jump focus here (r/c from detail mode).
 	 */
 
+	import type { Task } from "$lib/types/api.types";
+	import {
+		resolveRoutingTarget,
+		getActorDisplayName,
+	} from "$lib/utils/taskRouting";
+
 	interface Props {
 		taskId: string;
+		task?: Task | null;
 		onSent?: (comment: any) => void;
 		// Called after the comment (if any) is successfully posted. Parent handles
 		// reassignment + advance. Returning a promise keeps the compose in its
@@ -22,7 +29,17 @@
 		onFocus?: () => void;
 	}
 
-	let { taskId, onSent, onSendAndRoute, onEscape, onFocus }: Props = $props();
+	let {
+		taskId,
+		task = null,
+		onSent,
+		onSendAndRoute,
+		onEscape,
+		onFocus,
+	}: Props = $props();
+
+	const routingTarget = $derived(task ? resolveRoutingTarget(task) : null);
+	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
 
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	let draft = $state("");
@@ -169,6 +186,36 @@
 </script>
 
 <div class="compose">
+	<div class="reply-to" aria-live="polite">
+		<span class="reply-to-label">Reply to</span>
+		<span class="reply-to-name" class:reply-to-unknown={!routingTarget}>
+			{routingName}
+		</span>
+		{#if routingTarget}
+			<span class="reply-to-role badge badge-xs badge-outline">
+				{routingTarget.role}
+			</span>
+		{:else}
+			<span
+				class="reply-to-warn"
+				title="No approver, requester, or creator is set on this task — Ctrl+↵ will fail until one is set."
+				aria-label="No routing target set"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 20 20"
+					fill="currentColor"
+					aria-hidden="true"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M8.485 2.495c.673-1.166 2.357-1.166 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z"
+						clip-rule="evenodd"
+					/>
+				</svg>
+			</span>
+		{/if}
+	</div>
 	{#if error}
 		<p class="compose-error">{error}</p>
 	{/if}
@@ -223,6 +270,48 @@
 		padding: 0.75rem 1.25rem 1rem;
 		border-top: 1px solid oklch(var(--b3, 0.22 0.02 250));
 		background: oklch(0.12 0.01 250 / 0.5);
+	}
+
+	.reply-to {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+		line-height: 1;
+		padding: 0.125rem 0.125rem 0.25rem;
+	}
+
+	.reply-to-label {
+		opacity: 0.55;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-size: 0.6875rem;
+	}
+
+	.reply-to-name {
+		font-weight: 500;
+		color: oklch(var(--bc, 0.95 0.02 250));
+	}
+
+	.reply-to-unknown {
+		opacity: 0.7;
+		font-style: italic;
+	}
+
+	.reply-to-role {
+		text-transform: capitalize;
+		opacity: 0.75;
+	}
+
+	.reply-to-warn {
+		display: inline-flex;
+		align-items: center;
+		color: oklch(0.75 0.15 65);
+	}
+
+	.reply-to-warn svg {
+		width: 0.875rem;
+		height: 0.875rem;
 	}
 
 	.compose-input {

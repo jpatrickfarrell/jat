@@ -1258,6 +1258,26 @@
 	/>
 {/if}
 
+<!-- Keyboard Shortcuts Overlay (press ?) -->
+<KeyboardShortcutsOverlay title="Files Keyboard Shortcuts" shortcuts={[
+	{ key: 'j / ↓', description: 'Move focus down in tree' },
+	{ key: 'k / ↑', description: 'Move focus up in tree' },
+	{ key: '→', description: 'Expand folder / open file' },
+	{ key: '←', description: 'Collapse folder / go to parent' },
+	{ key: 'Enter', description: 'Open file or toggle folder' },
+	{ key: 'Esc', description: 'Clear tree focus' },
+	{ key: 'Ctrl+S', description: 'Save current file' },
+	{ key: 'Alt+W', description: 'Close current tab' },
+	{ key: 'Alt+[', description: 'Previous tab' },
+	{ key: 'Alt+]', description: 'Next tab' },
+	{ key: 'Alt+P', description: 'Quick file finder' },
+	{ key: 'Ctrl+\\', description: 'Toggle file tree' },
+	{ key: 'F2 / R', description: 'Rename selected file (tree)' },
+	{ key: 'D / Del', description: 'Delete selected file (tree)' },
+	{ key: 'F', description: 'New file in current folder' },
+	{ key: 'O', description: 'New folder in current folder' },
+]} />
+
 <style>
 	.files-page {
 		flex: 1;

@@ -28,6 +28,7 @@
 	import { setGitChangesCount, setGitAheadCount } from '$lib/stores/drawerStore';
 	import { successToast, errorToast, warningToast, infoToast } from '$lib/stores/toasts.svelte';
 	import { swipe } from '$lib/actions/swipe';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// Types
 	interface Project {

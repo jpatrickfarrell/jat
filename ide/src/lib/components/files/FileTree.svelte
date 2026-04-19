@@ -17,6 +17,7 @@
 	import type { GitFileStatus } from './types';
 	import { setFileChangesCount } from '$lib/stores/drawerStore';
 	import { JAT_DEFAULTS } from '$lib/config/constants';
+	import { createListNav } from '$lib/actions/listNav';
 
 	interface DirectoryEntry {
 		name: string;
@@ -1166,11 +1167,84 @@
 		}
 	}
 
+	// Tree keyboard navigation (j/k/arrows/enter)
+	const treeNav = createListNav({
+		getItems: () => treeContentRef
+			? Array.from(treeContentRef.querySelectorAll<HTMLElement>('[data-nav-id]'))
+			: [],
+		onSelect: (el) => {
+			const path = el.dataset.navId!;
+			if (el.dataset.type === 'folder') {
+				handleToggleFolder(path);
+			} else {
+				onFileSelect(path);
+			}
+		},
+		onEscape: () => treeNav.clear(),
+		wraparound: false,
+	});
+
+	function getFocusedNavEl(): HTMLElement | null {
+		if (!treeContentRef) return null;
+		const items = Array.from(treeContentRef.querySelectorAll<HTMLElement>('[data-nav-id]'));
+		const idx = treeNav.focusedIndex();
+		return idx >= 0 ? items[idx] : null;
+	}
+
 	// Handle keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
 		// Don't handle if we're in an input field or contenteditable element (e.g. Monaco editor)
 		const target = e.target as HTMLElement;
 		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable || target.closest?.('.monaco-editor')) {
+			return;
+		}
+		// Skip if modifier keys are held (except for Escape which has no modifier)
+		if ((e.ctrlKey || e.metaKey || e.altKey) && e.key !== 'Escape') {
+			return;
+		}
+
+		// j/k/↓/↑/Enter/Escape — delegate to tree nav controller
+		if (treeNav.handleKeydown(e)) return;
+
+		// ArrowRight — expand folder or open file
+		if (e.key === 'ArrowRight') {
+			const el = getFocusedNavEl();
+			if (!el) return;
+			e.preventDefault();
+			const path = el.dataset.navId!;
+			if (el.dataset.type === 'folder') {
+				if (!expandedFolders.has(path)) {
+					handleToggleFolder(path);
+				} else {
+					// Already expanded: move focus to first child
+					treeNav.handleKeydown(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+				}
+			} else {
+				onFileSelect(path);
+			}
+			return;
+		}
+
+		// ArrowLeft — collapse folder or jump to parent
+		if (e.key === 'ArrowLeft') {
+			const el = getFocusedNavEl();
+			if (!el) return;
+			e.preventDefault();
+			const path = el.dataset.navId!;
+			if (el.dataset.type === 'folder' && expandedFolders.has(path)) {
+				handleToggleFolder(path);
+			} else {
+				// Move focus to parent directory
+				const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+				if (parentPath && treeContentRef) {
+					const parentEl = treeContentRef.querySelector<HTMLElement>(`[data-nav-id="${CSS.escape(parentPath)}"]`);
+					if (parentEl) {
+						const items = Array.from(treeContentRef.querySelectorAll<HTMLElement>('[data-nav-id]'));
+						const idx = items.indexOf(parentEl);
+						if (idx >= 0) treeNav.focus(idx);
+					}
+				}
+			}
 			return;
 		}
 

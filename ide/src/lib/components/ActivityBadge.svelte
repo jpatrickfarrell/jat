@@ -551,6 +551,7 @@
 		class:badge-pop={justIncremented}
 		class:badge-milestone={hitMilestone}
 		class:badge-escalate={borderEscalated}
+		title="{fetchFailCount >= 2 ? 'Task data unavailable — retrying automatically' : 'Activity (Alt+H)'}"
 		tabindex="0"
 		role="button"
 		aria-expanded={showDropdown}
@@ -606,7 +607,7 @@
 		{/if}
 
 		<!-- Tasks completed (star) -->
-		<div class="flex items-center gap-1" class:star-glow={completedCount > 0}>
+		<div class="flex items-center gap-1" class:star-glow={justIncremented}>
 			<span class="relative flex items-center justify-center">
 				{#if completedCount > 0 && (justIncremented || hitMilestone)}
 					<span class="absolute inset-0 animate-ping-once opacity-75">
@@ -615,14 +616,20 @@
 						</svg>
 					</span>
 				{/if}
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 relative z-10" style="color: {fetchFailCount >= 2 ? 'oklch(0.55 0.15 30)' : completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};">
-					<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-				</svg>
+				{#if fetchFailCount >= 2}
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 relative z-10" style="color: oklch(0.65 0.18 50);">
+						<path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+					</svg>
+				{:else}
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 relative z-10" style="color: {completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};">
+						<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+					</svg>
+				{/if}
 			</span>
-			{#if loading}
+			{#if loading || fetchFailCount >= 2}
 				<span class="opacity-50">-</span>
 			{:else}
-				<AnimatedDigits value={completedCount.toString()} class="font-medium" style="color: {fetchFailCount >= 2 ? 'oklch(0.55 0.15 30)' : completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};" />
+				<AnimatedDigits value={completedCount.toString()} class="font-medium" style="color: {completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};" />
 			{/if}
 		</div>
 
@@ -732,16 +739,33 @@
 						{completedCount} task{completedCount === 1 ? '' : 's'} completed today
 					{/if}
 				</span>
-				{#if streak > 1 && !searchQuery}
-					<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.10 30); color: oklch(0.80 0.15 30);">
-						{streak} day streak
-					</span>
-				{/if}
+				<div class="flex items-center gap-2">
+					{#if streak > 1 && !searchQuery}
+						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.10 30); color: oklch(0.80 0.15 30);">
+							{streak} day streak
+						</span>
+					{/if}
+					<button class="history-link" onclick={openHistory}>History →</button>
+				</div>
 			</div>
 
 			<!-- Task list -->
 			<div class="max-h-[300px] overflow-y-auto">
-				{#if filteredTasks.length === 0 && searchQuery}
+				{#if fetchFailCount >= 2}
+					<div class="px-3 py-4 text-center">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mx-auto mb-2" style="color: oklch(0.65 0.18 50);">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+						</svg>
+						<p class="text-xs mb-2" style="color: oklch(0.65 0.18 50);">Task data unavailable</p>
+						<button
+							class="text-[10px] font-mono px-2 py-1 rounded cursor-pointer transition-all duration-150"
+							style="background: oklch(0.22 0.04 200 / 0.5); color: oklch(0.70 0.10 200); border: 1px solid oklch(0.35 0.06 200 / 0.4);"
+							onmouseenter={(e) => { (e.target as HTMLElement).style.background = 'oklch(0.28 0.06 200 / 0.7)'; }}
+							onmouseleave={(e) => { (e.target as HTMLElement).style.background = 'oklch(0.22 0.04 200 / 0.5)'; }}
+							onclick={() => { fetchFailCount = 0; fetchCompletedToday(); }}
+						>⟳ Retry</button>
+					</div>
+				{:else if filteredTasks.length === 0 && searchQuery}
 					<div class="px-3 py-4 text-center text-xs" style="color: oklch(0.50 0.02 250);">
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 mx-auto mb-2 opacity-50">
 							<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -1116,6 +1140,24 @@
 	.view-history-btn:hover {
 		background: oklch(0.28 0.06 200 / 0.6);
 		color: oklch(0.85 0.12 200);
+	}
+
+	/* Inline history link in header row */
+	.history-link {
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		font-weight: 500;
+		color: oklch(0.55 0.08 200);
+		background: none;
+		border: none;
+		cursor: pointer;
+		transition: color 0.15s ease;
+		padding: 0;
+		letter-spacing: 0.03em;
+	}
+
+	.history-link:hover {
+		color: oklch(0.80 0.12 200);
 	}
 
 	/* Search bar */

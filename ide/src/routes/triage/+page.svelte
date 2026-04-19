@@ -19,6 +19,9 @@
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
+	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 
 	interface Task {
 		id: string;
@@ -136,8 +139,18 @@
 	// Epics for assignment
 	let epics = $state<Task[]>([]);
 
-	// Keyboard help
-	let showHelp = $state(false);
+	// listNav composable for j/k navigation with wraparound
+	const nav = createListNav({
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		onSelect: (_el, idx) => {
+			selectedIdx = idx;
+			if (filteredTasks[idx]) openTaskDetailDrawer(filteredTasks[idx].id);
+		},
+		onFocusChange: (_el, idx) => {
+			if (idx >= 0) selectedIdx = idx;
+		},
+		wraparound: true
+	});
 
 	onMount(() => {
 		load();
@@ -406,22 +419,13 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape when not editing
+		if (!editing && nav.handleKeydown(e)) return;
+
 		// Don't capture when typing in inputs
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
 		switch (e.key) {
-			case 'j':
-			case 'ArrowDown':
-				e.preventDefault();
-				if (selectedIdx < filteredTasks.length - 1) selectedIdx++;
-				scrollSelectedIntoView();
-				break;
-			case 'k':
-			case 'ArrowUp':
-				e.preventDefault();
-				if (selectedIdx > 0) selectedIdx--;
-				scrollSelectedIntoView();
-				break;
 			case 's':
 				if (!editing) { e.preventDefault(); spawnTask(); }
 				break;
@@ -439,7 +443,6 @@
 				break;
 			case 'Escape':
 				if (editing) cancelEdit();
-				else if (showHelp) showHelp = false;
 				break;
 			case '/':
 				if (!editing) {
@@ -447,17 +450,7 @@
 					document.getElementById('triage-search')?.focus();
 				}
 				break;
-			case '?':
-				if (!editing) { e.preventDefault(); showHelp = !showHelp; }
-				break;
 		}
-	}
-
-	function scrollSelectedIntoView() {
-		requestAnimationFrame(() => {
-			const el = document.querySelector(`[data-triage-idx="${selectedIdx}"]`);
-			el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-		});
 	}
 
 	function getPriorityLabel(p: number): string {
@@ -510,7 +503,7 @@
 			<button class="btn-action btn-dismiss-all" onclick={dismissAll} disabled={filteredTasks.length === 0} title="Reject all visible">
 				Dismiss All
 			</button>
-			<button class="btn-action btn-help" onclick={() => showHelp = !showHelp} title="Keyboard shortcuts (?)">
+			<button class="btn-action btn-help" onclick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))} title="Keyboard shortcuts (?)">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
 			</button>
 		</div>
@@ -578,8 +571,9 @@
 					<button
 						class="queue-item"
 						class:queue-item-selected={isSelected}
+						data-nav-id={task.id}
 						data-triage-idx={idx}
-						onclick={() => { selectedIdx = idx; editing = false; }}
+						onclick={() => { selectedIdx = idx; editing = false; nav.focus(idx); }}
 					>
 						<div class="qi-accent" style="background: {projColor};"></div>
 						<div class="qi-body">
@@ -818,27 +812,21 @@
 	{/if}
 </div>
 
-<!-- Keyboard shortcuts help modal -->
-{#if showHelp}
-	<div class="help-overlay" onclick={() => showHelp = false} role="presentation">
-		<div class="help-modal" onclick={(e) => e.stopPropagation()} role="dialog">
-			<h3>Keyboard Shortcuts</h3>
-			<div class="help-grid">
-				<div class="help-row"><kbd>J</kbd> / <kbd>↓</kbd><span>Next item</span></div>
-				<div class="help-row"><kbd>K</kbd> / <kbd>↑</kbd><span>Previous item</span></div>
-				<div class="help-row"><kbd>S</kbd><span>Spawn agent (solve)</span></div>
-				<div class="help-row"><kbd>P</kbd><span>Promote to open</span></div>
-				<div class="help-row"><kbd>E</kbd><span>Edit task</span></div>
-				<div class="help-row"><kbd>R</kbd><span>Close task</span></div>
-				<div class="help-row"><kbd>D</kbd><span>Delete task</span></div>
-				<div class="help-row"><kbd>/</kbd><span>Focus search</span></div>
-				<div class="help-row"><kbd>Esc</kbd><span>Cancel edit / Close</span></div>
-				<div class="help-row"><kbd>?</kbd><span>Toggle this help</span></div>
-			</div>
-			<button class="help-close" onclick={() => showHelp = false}>Close</button>
-		</div>
-	</div>
-{/if}
+<KeyboardShortcutsOverlay
+	title="Triage Shortcuts"
+	shortcuts={[
+		{ key: 'j / ↓', description: 'Next item (wraps)' },
+		{ key: 'k / ↑', description: 'Previous item (wraps)' },
+		{ key: 'Enter', description: 'Open detail drawer' },
+		{ key: 's', description: 'Spawn agent (solve)' },
+		{ key: 'p', description: 'Promote to open' },
+		{ key: 'e', description: 'Edit task' },
+		{ key: 'r', description: 'Close task' },
+		{ key: 'd', description: 'Delete task' },
+		{ key: '/', description: 'Focus search' },
+		{ key: 'Esc', description: 'Cancel edit' },
+	]}
+/>
 
 <style>
 	/* ========== Layout ========== */
@@ -1343,67 +1331,6 @@
 		font-family: inherit;
 		line-height: 1.5;
 	}
-
-	/* ========== Help modal ========== */
-	.help-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 50;
-		background: oklch(0 0 0 / 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.help-modal {
-		background: oklch(0.16 0.01 250);
-		border: 1px solid oklch(0.25 0.03 250);
-		border-radius: 12px;
-		padding: 1.25rem;
-		min-width: 320px;
-		box-shadow: 0 20px 60px oklch(0 0 0 / 0.5);
-	}
-	.help-modal h3 {
-		font-size: 0.85rem;
-		font-weight: 700;
-		color: oklch(0.80 0.04 250);
-		margin: 0 0 1rem;
-	}
-	.help-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-	}
-	.help-row {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		font-size: 0.78rem;
-		color: oklch(0.65 0.03 250);
-	}
-	.help-row kbd {
-		font-size: 0.65rem;
-		padding: 0.15rem 0.4rem;
-		border-radius: 4px;
-		background: oklch(0.22 0.02 250);
-		color: oklch(0.60 0.04 250);
-		font-family: ui-monospace, monospace;
-		border: 1px solid oklch(0.28 0.02 250);
-		min-width: 22px;
-		text-align: center;
-	}
-	.help-close {
-		margin-top: 1rem;
-		width: 100%;
-		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.4rem;
-		border-radius: 6px;
-		border: 1px solid oklch(0.25 0.03 250);
-		background: oklch(0.20 0.02 250);
-		color: oklch(0.60 0.04 250);
-		cursor: pointer;
-	}
-	.help-close:hover { background: oklch(0.24 0.03 250); }
 
 	/* ========== Responsive ========== */
 	@media (max-width: 768px) {

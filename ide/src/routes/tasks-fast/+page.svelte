@@ -10,6 +10,7 @@
 	} from "$lib/utils/badgeHelpers";
 	import { formatRelativeTime } from "$lib/utils/dateFormatters";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
+	import { createListNav, type ListNavController } from "$lib/actions/listNav";
 	import TaskFastDetail from "$lib/components/tasks-fast/TaskFastDetail.svelte";
 
 	interface Task {
@@ -165,11 +166,14 @@
 		);
 	});
 
-	// Keep selection in bounds when the filtered set shrinks.
+	// Keep selection in bounds when the filtered set shrinks. Also re-home
+	// listNav's internal focus so j/k after a filter change starts from a
+	// valid row instead of the (now-removed) previously focused one.
 	$effect(() => {
 		if (selectedIdx >= filteredTasks.length) {
 			selectedIdx = Math.max(0, filteredTasks.length - 1);
 		}
+		navController.refresh();
 	});
 
 	function jumpToCompose() {
@@ -185,6 +189,29 @@
 		return false;
 	}
 
+	// j/k list navigation (jat-nm0nq.2) — driven by the shared listNav
+	// composable so we don't reinvent keyboard handling. We use the imperative
+	// form (not the Svelte action) so we can run the detail-zone shortcuts
+	// FIRST and only fall through to nav for j/k/Arrow/Enter/Escape (and Space
+	// when panel is closed). This keeps Space=spawn working in detail zone.
+	const navController: ListNavController = createListNav({
+		getItems: () =>
+			listEl ? Array.from(listEl.querySelectorAll<HTMLElement>("[data-nav-id]")) : [],
+		onSelect: (_el, idx) => selectTask(idx),
+		onEscape: () => {
+			if (panelOpen) {
+				panelOpen = false;
+				focusZone = "list";
+			}
+		},
+		// Bridge listNav's internal focus → page-level selectedIdx so the
+		// existing `.selected` styling and selectedTask derivation track j/k
+		// navigation even when the panel is closed.
+		onFocusChange: (_el, idx) => {
+			if (idx >= 0 && idx !== selectedIdx) selectedIdx = idx;
+		},
+	});
+
 	function handleWindowKeydown(e: KeyboardEvent) {
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
@@ -195,47 +222,51 @@
 			return;
 		}
 
-		// All remaining shortcuts live in the detail focus zone. j/k list
-		// navigation is out of scope (jat-nm0nq.2).
-		if (focusZone !== "detail") return;
 		if (isTypingTarget(e.target)) return;
-		if (!panelOpen || !selectedTask) return;
 
-		// r/c → jump to compose box.
-		if (e.key === "r" || e.key === "c") {
-			e.preventDefault();
-			jumpToCompose();
-			return;
+		// Detail-zone shortcuts run BEFORE list navigation so Space spawns
+		// the agent (jat-nm0nq.6) instead of re-firing selectTask.
+		if (focusZone === "detail" && panelOpen && selectedTask) {
+			// r/c → jump to compose box.
+			if (e.key === "r" || e.key === "c") {
+				e.preventDefault();
+				jumpToCompose();
+				return;
+			}
+
+			// Action-bar shortcuts (jat-nm0nq.6).
+			if (detailRef) {
+				switch (e.key) {
+					case "a":
+						e.preventDefault();
+						detailRef.openAssign();
+						return;
+					case "s":
+						e.preventDefault();
+						detailRef.openStatus();
+						return;
+					case "p":
+						e.preventDefault();
+						detailRef.openPriority();
+						return;
+					case "o":
+						e.preventDefault();
+						detailRef.openFullDrawer();
+						return;
+					case "d":
+						e.preventDefault();
+						detailRef.dismissTask();
+						return;
+					case " ":
+						e.preventDefault();
+						detailRef.spawnAgent();
+						return;
+				}
+			}
 		}
 
-		// Action-bar shortcuts (jat-nm0nq.6).
-		if (!detailRef) return;
-		switch (e.key) {
-			case "a":
-				e.preventDefault();
-				detailRef.openAssign();
-				return;
-			case "s":
-				e.preventDefault();
-				detailRef.openStatus();
-				return;
-			case "p":
-				e.preventDefault();
-				detailRef.openPriority();
-				return;
-			case "o":
-				e.preventDefault();
-				detailRef.openFullDrawer();
-				return;
-			case "d":
-				e.preventDefault();
-				detailRef.dismissTask();
-				return;
-			case " ":
-				e.preventDefault();
-				detailRef.spawnAgent();
-				return;
-		}
+		// j/k/Arrow/Enter/Escape (and Space when not consumed above).
+		navController.handleKeydown(e);
 	}
 
 	function handleEscapeCompose() {
@@ -429,6 +460,9 @@
 		selectedIdx = idx;
 		panelOpen = true;
 		focusZone = "detail";
+		// Sync listNav's internal focus index so subsequent j/k starts from
+		// the clicked row instead of the previously focused one.
+		navController.focus(idx);
 	}
 
 	// ---- URL <-> filter state sync ----
@@ -737,6 +771,7 @@
 							class:route-flash={isFlashing}
 							role="option"
 							aria-selected={isSelected}
+							data-nav-id={task.id}
 							onclick={() => selectTask(idx)}
 						>
 							<span

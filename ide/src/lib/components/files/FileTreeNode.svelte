@@ -342,6 +342,8 @@
 		title={entry.path}
 		aria-expanded={isFolder ? isExpanded : undefined}
 		data-path={entry.path}
+		data-nav-id={entry.path}
+		data-type={entry.type}
 	>
 		<!-- Indentation -->
 		<span class="indent" style="width: {depth * 16}px"></span>

@@ -18,7 +18,6 @@
 		start as startServer,
 		stop as stopServer,
 		restart as restartServer,
-		getSessions,
 		serverSessionsState,
 	} from "$lib/stores/serverSessions.svelte";
 	import { addSession } from "$lib/stores/workSessions.svelte";
@@ -756,6 +755,11 @@
 		color: oklch(0.85 0.02 250);
 	}
 
+	.action-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.70 0.18 240 / 0.8);
+	}
+
 	.action-btn-success {
 		border-color: oklch(0.45 0.12 145 / 0.5);
 		color: oklch(0.65 0.12 145);
@@ -764,6 +768,10 @@
 	.action-btn-success:hover {
 		background: oklch(0.3 0.1 145 / 0.3);
 		color: oklch(0.85 0.15 145);
+	}
+
+	.action-btn-success:focus-visible {
+		box-shadow: 0 0 0 2px oklch(0.65 0.18 145 / 0.8);
 	}
 
 	.action-btn-danger {
@@ -776,6 +784,10 @@
 		color: oklch(0.85 0.15 30);
 	}
 
+	.action-btn-danger:focus-visible {
+		box-shadow: 0 0 0 2px oklch(0.65 0.18 25 / 0.8);
+	}
+
 	.action-btn-spawn {
 		border-color: oklch(0.45 0.12 270 / 0.5);
 		color: oklch(0.65 0.12 270);
@@ -784,6 +796,10 @@
 	.action-btn-spawn:hover {
 		background: oklch(0.3 0.1 270 / 0.3);
 		color: oklch(0.85 0.15 270);
+	}
+
+	.action-btn-spawn:focus-visible {
+		box-shadow: 0 0 0 2px oklch(0.65 0.15 270 / 0.8);
 	}
 
 	.action-btn-spawn:disabled {
@@ -878,11 +894,16 @@
 		color: oklch(0.85 0.12 200);
 	}
 
+	.view-all-btn:focus-visible {
+		outline: none;
+		box-shadow: inset 0 0 0 2px oklch(0.70 0.18 200 / 0.6);
+	}
+
 	/* Action column layout stability */
 	.action-separator {
 		width: 1px;
 		height: 12px;
-		background: oklch(0.30 0.02 250);
+		background: oklch(0.38 0.02 250);
 		margin: 0 3px;
 		flex-shrink: 0;
 	}

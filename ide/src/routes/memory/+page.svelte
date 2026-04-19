@@ -9,13 +9,15 @@
 	 * - Index status and rebuild controls
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { reveal } from '$lib/actions/reveal';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { addToast } from '$lib/stores/toasts.svelte';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// --- State ---
 	let activeTab = $state<'search' | 'browse' | 'status'>('search');
@@ -60,6 +62,86 @@
 	let viewingFile = $state<{ content: string; frontmatter: any; filename: string; project: string } | null>(null);
 	let fileLoading = $state(false);
 	let viewFileError = $state('');
+
+	// Keyboard nav DOM refs
+	let browseListEl = $state<HTMLElement | null>(null);
+	let searchResultsEl = $state<HTMLElement | null>(null);
+	let searchInputEl = $state<HTMLInputElement | null>(null);
+
+	const browseNav = createListNav({
+		getItems: () =>
+			browseListEl ? Array.from(browseListEl.querySelectorAll<HTMLElement>('[data-nav-id]')) : [],
+		onSelect: (el) => {
+			const filename = el.dataset.navId;
+			if (filename && browseProject) viewFile(browseProject, filename);
+		},
+		onEscape: () => browseNav.clear(),
+	});
+
+	const searchNav = createListNav({
+		getItems: () =>
+			searchResultsEl ? Array.from(searchResultsEl.querySelectorAll<HTMLElement>('[data-nav-id]')) : [],
+		onSelect: (el) => {
+			const idx = parseInt(el.dataset.navId ?? '', 10);
+			const result = searchResults[idx];
+			if (!result) return;
+			const filename = result.path?.split('/').pop();
+			if (filename && result.project) viewFile(result.project, filename);
+		},
+		onEscape: () => searchNav.clear(),
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Let the existing Escape handler manage the file viewer
+		if (viewingFile || fileLoading || viewFileError) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// / → focus search input, switch to search tab
+		if (e.key === '/' && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			activeTab = 'search';
+			tick().then(() => searchInputEl?.focus());
+			return;
+		}
+
+		// Tab → switch between search/browse tabs
+		if (e.key === 'Tab' && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			if (activeTab === 'search') {
+				activeTab = 'browse';
+				tick().then(() => browseNav.refresh());
+			} else if (activeTab === 'browse') {
+				activeTab = 'search';
+				tick().then(() => searchNav.refresh());
+			}
+			return;
+		}
+
+		if (isTypingTarget(e.target)) return;
+
+		if (activeTab === 'browse') browseNav.handleKeydown(e);
+		else if (activeTab === 'search') searchNav.handleKeydown(e);
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	// Refresh nav controllers when lists change
+	$effect(() => {
+		if (browseFiles.length >= 0) tick().then(() => browseNav.refresh());
+	});
+	$effect(() => {
+		if (searchResults.length >= 0) tick().then(() => searchNav.refresh());
+	});
 
 	// Reindex state
 	let reindexing = $state(false);
@@ -350,6 +432,7 @@
 					<div class="flex gap-3 mb-4">
 						<div class="flex-1 relative">
 							<input
+								bind:this={searchInputEl}
 								type="text"
 								bind:value={searchQuery}
 								onkeydown={handleSearchKeydown}
@@ -389,12 +472,13 @@
 					{/if}
 
 					{#if searchResults.length > 0}
-						<div class="mt-4 space-y-3">
+						<div class="mt-4 space-y-3" bind:this={searchResultsEl}>
 							<div class="text-xs" style="color: oklch(0.55 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
 								<span style="font-family: ui-monospace, monospace;">{searchResults.length}</span> result{searchResults.length !== 1 ? 's' : ''} for "<span style="font-family: ui-monospace, monospace;">{lastSearchQuery}</span>"
 							</div>
 							{#each searchResults as result, i}
 								<button use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
+									data-nav-id={String(i)}
 									class="w-full text-left p-4 rounded-lg transition-all"
 									style="
 										background: oklch(0.18 0.01 250);
@@ -479,9 +563,10 @@
 						</p>
 					</div>
 				{:else}
-					<div class="space-y-2">
+					<div class="space-y-2" bind:this={browseListEl}>
 						{#each browseFiles as file, i}
 							<button
+								data-nav-id={file.filename}
 								class="w-full text-left p-4 rounded-lg transition-all"
 								use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
 								style="
@@ -640,6 +725,15 @@
 			</div>
 		{/if}
 	</div>
+
+	<KeyboardShortcutsOverlay shortcuts={[
+		{ key: 'j / ↓', description: 'Focus next item' },
+		{ key: 'k / ↑', description: 'Focus previous item' },
+		{ key: 'Enter', description: 'Open file preview' },
+		{ key: 'Tab', description: 'Switch between Search / Browse tabs' },
+		{ key: '/', description: 'Focus search input' },
+		{ key: 'Esc', description: 'Clear focus' },
+	]} />
 
 	<!-- File Viewer Drawer -->
 	{#if viewingFile || fileLoading || viewFileError}

@@ -53,10 +53,7 @@
 	// Helper to check if nav item is active
 	function isActive(href: string): boolean {
 		const currentPath = $page.url.pathname;
-		if (currentPath.startsWith(href)) {
-			return true;
-		}
-		return false;
+		return currentPath === href || currentPath.startsWith(href + '/');
 	}
 
 	// Group items by category for rendering (hides labs routes outside of debug mode)

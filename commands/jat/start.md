@@ -33,6 +33,8 @@ argument-hint: [agent-name | task-id | agent-name task-id]
 
 ## Implementation Steps
 
+> ⚡ **BEGIN WITH TOOL CALLS — NO TEXT PREAMBLE.** Do NOT write any explanatory text before your first tool call. On Sonnet 4.6, generating text before tools causes Claude Code to pause and wait for user input ("continue"), breaking autonomous operation. Jump directly to ROUND 1 tool calls.
+
 **IMPORTANT: Minimize LLM round-trips by issuing independent tool calls in parallel.**
 
 The startup sequence is organized into 3 parallel rounds. Each round issues all its calls simultaneously in a single message, then processes the results before moving to the next round. This cuts startup from ~7 sequential turns to ~3.

@@ -524,8 +524,9 @@
 		loading = true;
 		error = null;
 		try {
+			const projectParam = filterProject ? `&project=${encodeURIComponent(filterProject)}` : "";
 			const responses = await Promise.all(
-				FETCH_STATUSES.map((s) => fetch(`/api/tasks?status=${s}`)),
+				FETCH_STATUSES.map((s) => fetch(`/api/tasks?status=${s}${projectParam}`)),
 			);
 			const failed = responses.find((r) => !r.ok);
 			if (failed) {
@@ -791,20 +792,6 @@
 			</div>
 
 			<div class="filter-row filter-row-secondary">
-				<label class="filter-field">
-					<span class="filter-label">Project</span>
-					<select
-						bind:value={filterProject}
-						onkeydown={handleFilterKey}
-						class="select select-xs select-bordered"
-					>
-						<option value="">All</option>
-						{#each projectOptions as project}
-							<option value={project}>{project}</option>
-						{/each}
-					</select>
-				</label>
-
 				<div class="chip-group chip-group-types" aria-label="Type">
 					{#each TYPE_OPTIONS as type}
 						{@const active = filterTypes.has(type)}

@@ -690,6 +690,7 @@
 											class="action-btn action-btn-success"
 											onclick={() => handleStart(project.key)}
 											title="Start server"
+											data-action-label="Start server"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -714,8 +715,13 @@
 				{/if}
 			</div>
 
+			<!-- Keyboard focus label — shows which button is focused -->
+			{#if focusedTooltip}
+				<div class="focus-tooltip-bar" aria-live="polite" aria-atomic="true">{focusedTooltip}</div>
+			{/if}
+
 			<!-- Footer -->
-			<button class="view-all-btn" onclick={goToServers}>
+			<button class="view-all-btn" onclick={goToServers} data-action-label="View all servers">
 				<span>View All Servers</span>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -860,6 +866,14 @@
 	.action-btn-spawn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* Status dot (replaces verbose text status badge) */
+	.status-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		flex-shrink: 0;
 	}
 
 	.action-btn-pending {

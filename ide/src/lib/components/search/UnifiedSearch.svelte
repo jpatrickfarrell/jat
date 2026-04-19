@@ -671,6 +671,7 @@
 			const isDown = e.key === 'j' || e.key === 'ArrowDown';
 			if (isDown) {
 				e.preventDefault();
+				e.stopPropagation();
 				const maxIndex = activeTabResultCount();
 				if (maxIndex > 0) {
 					nav.focus(selectedResultIndex < 0 ? 0 : selectedResultIndex + 1);
@@ -684,6 +685,7 @@
 				}
 			} else {
 				e.preventDefault();
+				e.stopPropagation();
 				if (selectedResultIndex > 0) {
 					nav.focus(selectedResultIndex - 1);
 					scrollSelectedIntoView();

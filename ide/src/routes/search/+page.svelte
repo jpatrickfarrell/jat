@@ -13,7 +13,7 @@
 	import { goto } from '$app/navigation';
 	import UnifiedSearch from '$lib/components/search/UnifiedSearch.svelte';
 
-	type SourceTab = 'all' | 'tasks' | 'memory' | 'filenames' | 'content';
+	type SourceTab = 'routes' | 'tasks' | 'memory' | 'filenames' | 'content';
 
 	// Projects
 	let projects = $state<string[]>([]);
@@ -21,7 +21,7 @@
 
 	// Initial values from URL (read once on mount)
 	let initialQuery = $state('');
-	let initialTab = $state<SourceTab>('all');
+	let initialTab = $state<SourceTab>('routes');
 	let mounted = $state(false);
 
 	function handleProjectChange(project: string) {
@@ -49,7 +49,7 @@
 		const project = params.get('project');
 
 		if (q) initialQuery = q;
-		if (tab && ['all', 'tasks', 'memory', 'filenames', 'content'].includes(tab)) {
+		if (tab && ['routes', 'tasks', 'memory', 'filenames', 'content'].includes(tab)) {
 			initialTab = tab as SourceTab;
 		}
 		if (project) selectedProject = project;

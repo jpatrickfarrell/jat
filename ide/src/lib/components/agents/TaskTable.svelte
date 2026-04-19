@@ -3441,6 +3441,7 @@
 											{@const titleSource = getTaskSourceOrigin(task)}
 											<tr
 												class="industrial-row hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
+												data-nav-id={task.id}
 												onclick={() => handleRowClick(task.id)}
 												style="
 												background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : taskIsActive ? 'linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent)' : ''};
@@ -3946,6 +3947,7 @@
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
+										data-nav-id={task.id}
 										style="
 											background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : ''};
 											border-bottom: 1px solid oklch(0.25 0.01 250);

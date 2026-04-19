@@ -27,6 +27,7 @@
 	import { FilesSkeleton } from '$lib/components/skeleton';
 	import type { OpenFile } from '$lib/components/files/types';
 	import { swipe } from '$lib/actions/swipe';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// Types
 	interface Project {
@@ -142,8 +143,16 @@
 		isCollapsed = false;
 	}
 
-	// Ctrl+\ toggles panel; Alt+G/U/C switches mode tabs (capture phase — fires before layout handler)
+	// Ctrl+\ toggles panel; Alt+G/U/C switches mode tabs; Tab cycles modes; Escape clears selection
+	// (capture phase — fires before layout handler)
 	onMount(() => {
+		function isTypingTarget(target: EventTarget | null): boolean {
+			if (!(target instanceof HTMLElement)) return false;
+			const tag = target.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+			return target.isContentEditable;
+		}
+
 		function handlePanelToggle(e: KeyboardEvent) {
 			if (e.ctrlKey && e.key === '\\') {
 				e.preventDefault();
@@ -153,6 +162,34 @@
 				if (e.key === 'g' || e.key === 'G') { e.preventDefault(); switchMode('git'); }
 				if ((e.key === 'u' || e.key === 'U') && hasSupabase) { e.preventDefault(); switchMode('supabase'); }
 				if ((e.key === 'c' || e.key === 'C') && hasCloudflare) { e.preventDefault(); switchMode('cloudflare'); }
+			}
+			// Tab cycles through available modes
+			if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+				if (isTypingTarget(e.target)) return;
+				e.preventDefault();
+				const modes: SourceMode[] = ['git'];
+				if (hasSupabase) modes.push('supabase');
+				if (hasCloudflare) modes.push('cloudflare');
+				if (modes.length <= 1) return;
+				const currentIdx = modes.indexOf(activeMode);
+				const nextIdx = e.shiftKey
+					? (currentIdx - 1 + modes.length) % modes.length
+					: (currentIdx + 1) % modes.length;
+				switchMode(modes[nextIdx]);
+			}
+			// Escape clears file/migration/deployment selection
+			if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+				if (isTypingTarget(e.target)) return;
+				if (activeMode === 'git' && selectedFilePath) {
+					e.preventDefault();
+					handleClearSelection();
+				} else if (activeMode === 'supabase' && selectedMigrationFilename) {
+					e.preventDefault();
+					handleClearMigration();
+				} else if (activeMode === 'cloudflare' && selectedDeployment) {
+					e.preventDefault();
+					handleClearDeployment();
+				}
 			}
 		}
 		window.addEventListener('keydown', handlePanelToggle, true);
@@ -552,6 +589,7 @@
 								onCommitSelect={handleCommitSelect}
 								onCommitFileClick={(path) => { activeCommitFilePath = path; }}
 								onRebaseComplete={handleRebaseComplete}
+								onClear={handleClearSelection}
 								{selectedFilePath}
 							/>
 						{:else if activeMode === 'supabase'}
@@ -758,6 +796,22 @@
 		</div>
 	{/if}
 </div>
+
+<KeyboardShortcutsOverlay shortcuts={[
+	{ key: 'j / ↓', description: 'Focus next file / migration' },
+	{ key: 'k / ↑', description: 'Focus previous file / migration' },
+	{ key: 'Enter', description: 'Load diff / preview migration SQL' },
+	{ key: 'Escape', description: 'Clear selection' },
+	{ key: 'Tab', description: 'Cycle tabs (Git → Supabase → Cloudflare)' },
+	{ key: 'Alt+G', description: 'Switch to Git tab' },
+	{ key: 'Alt+U', description: 'Switch to Supabase tab' },
+	{ key: 'Alt+C', description: 'Switch to Cloudflare tab' },
+	{ key: 'Ctrl+\\', description: 'Toggle left panel' },
+	{ key: 'Space', description: 'Stage / unstage selected file (Git)' },
+	{ key: 'S', description: 'Stage selected file (Git)' },
+	{ key: 'U', description: 'Unstage selected file (Git)' },
+	{ key: 'D', description: 'Discard changes to selected file (Git)' },
+]} title="Source Control Shortcuts" />
 
 <style>
 	.git-page {

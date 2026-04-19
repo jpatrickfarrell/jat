@@ -25,6 +25,8 @@
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// --- Types ---
 	interface TaskResult {
@@ -219,6 +221,44 @@
 	let searchInputEl: HTMLInputElement | undefined;
 	let resultsContainerEl: HTMLDivElement | undefined;
 	let columnsContainerEl: HTMLDivElement | undefined;
+
+	// Keyboard nav via listNav composable
+	const nav = createListNav({
+		getItems: () => resultsContainerEl
+			? Array.from(resultsContainerEl.querySelectorAll<HTMLElement>('[data-nav-id]'))
+			: [],
+		onFocusChange: (_el, idx) => { selectedResultIndex = idx; },
+		onSelect: (el) => openResultByNavId(el.dataset.navId ?? ''),
+		onEscape: () => { nav.clear(); selectedResultIndex = -1; },
+		focusedClass: 'result-selected',
+	});
+
+	function openResultByNavId(navId: string) {
+		if (!navId) return;
+		if (activeTab === 'routes') {
+			const action = routeResults.find(r => r.id === navId);
+			if (action?.execute) { action.execute(); closeModal(); }
+			else if (action?.path) { goto(action.path); closeModal(); }
+		} else if (activeTab === 'tasks') {
+			const task = taskResults.find(t => t.id === navId);
+			if (task) openTask(task.id);
+		} else if (activeTab === 'memory') {
+			const mem = memoryResults.find(m => m.file === navId);
+			if (mem) navigateToMemory(mem.file);
+		} else if (activeTab === 'filenames') {
+			const file = filenameResults.find(f => f.path === navId);
+			if (file) openFilename(file);
+		} else if (activeTab === 'content') {
+			const result = contentResults.find(r => `${r.file}:${r.line}` === navId);
+			if (result) openContentResult(result);
+		}
+	}
+
+	// Refresh nav index when results change
+	$effect(() => {
+		taskResults; memoryResults; filenameResults; contentResults; routeResults;
+		nav.refresh();
+	});
 
 	// --- Sync props ---
 	$effect(() => {
@@ -453,6 +493,7 @@
 	}
 
 	function doSearchForActiveTab() {
+		nav.clear();
 		selectedResultIndex = -1;
 		focusedColumn = null;
 		if (activeTab === 'routes') {
@@ -484,7 +525,9 @@
 		filterRoutes(query); // instant, client-side
 		// Auto-select first result when filtering routes with a query
 		if (activeTab === 'routes') {
-			selectedResultIndex = query.trim() && routeResults.length > 0 ? 0 : -1;
+			const autoIdx = query.trim() && routeResults.length > 0 ? 0 : -1;
+			if (autoIdx >= 0) nav.focus(autoIdx); else nav.clear();
+			selectedResultIndex = autoIdx;
 		}
 		if (debounceTimer) clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(() => {
@@ -533,6 +576,7 @@
 
 	// --- Tab cycling helpers ---
 	function cycleTab(direction: number): SourceTab {
+		nav.clear();
 		const currentIndex = TABS.findIndex(t => t.id === activeTab);
 		const nextIndex = (currentIndex + direction + TABS.length) % TABS.length;
 		const newTab = TABS[nextIndex].id;
@@ -561,10 +605,17 @@
 		const isInput = target === searchInputEl;
 		const isTabButton = !!target.getAttribute?.('data-tab');
 
+		// '/' focuses search input from outside
+		if (e.key === '/' && !isInput && !isTabButton && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			e.preventDefault();
+			searchInputEl?.focus();
+			return;
+		}
+
 		// Tab key cycles tabs (Shift+Tab goes backward)
 		if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
-			const newTab = cycleTab(e.shiftKey ? -1 : 1);
+			const newTab = cycleTab(e.shiftKey ? -1 : 1); // cycleTab calls nav.clear()
 			searchInputEl?.focus();
 			return;
 		}
@@ -592,6 +643,7 @@
 		}
 
 		if (e.key === 'Escape') {
+			nav.clear();
 			if (mode === 'modal') {
 				if (query) {
 					query = '';
@@ -612,49 +664,34 @@
 			}
 		}
 
-		// j/k vim navigation (only when a result is already selected)
-		if ((e.key === 'j' || e.key === 'k') && isInput && !e.ctrlKey && !e.metaKey && !e.altKey && selectedResultIndex >= 0) {
-			e.preventDefault();
-			const maxIndex = activeTabResultCount();
-			if (e.key === 'j') {
-				if (selectedResultIndex < maxIndex - 1) { selectedResultIndex += 1; scrollSelectedIntoView(); }
+		// j/k and ArrowDown/Up: result list navigation from input or tab bar
+		if ((e.key === 'j' || e.key === 'ArrowDown' || e.key === 'k' || e.key === 'ArrowUp')
+				&& (isInput || isTabButton)
+				&& !e.ctrlKey && !e.metaKey && !e.altKey) {
+			const isDown = e.key === 'j' || e.key === 'ArrowDown';
+			if (isDown) {
+				e.preventDefault();
+				const maxIndex = activeTabResultCount();
+				if (maxIndex > 0) {
+					nav.focus(selectedResultIndex < 0 ? 0 : selectedResultIndex + 1);
+					scrollSelectedIntoView();
+					if (isTabButton) searchInputEl?.focus();
+				} else if (e.key === 'ArrowDown' && query && activeTab !== 'routes' && debounceTimer) {
+					// ArrowDown-only: trigger pending search immediately
+					clearTimeout(debounceTimer);
+					debounceTimer = null;
+					doSearchForActiveTab();
+				}
 			} else {
-				if (selectedResultIndex > 0) { selectedResultIndex -= 1; scrollSelectedIntoView(); }
-				else { selectedResultIndex = -1; }
+				e.preventDefault();
+				if (selectedResultIndex > 0) {
+					nav.focus(selectedResultIndex - 1);
+					scrollSelectedIntoView();
+				} else {
+					nav.clear();
+				}
 			}
 			return;
-		}
-
-		// Arrow down/up: navigate directly into results (skip tab-bar step)
-		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-			if (e.key === 'ArrowDown') {
-				if (isInput || isTabButton) {
-					e.preventDefault();
-					const maxIndex = activeTabResultCount();
-					if (maxIndex > 0) {
-						if (selectedResultIndex < maxIndex - 1) {
-							selectedResultIndex = selectedResultIndex < 0 ? 0 : selectedResultIndex + 1;
-						}
-						scrollSelectedIntoView();
-						searchInputEl?.focus();
-					} else if (query && activeTab !== 'routes' && debounceTimer) {
-						// Search not fired yet — run it immediately so results appear
-						clearTimeout(debounceTimer);
-						debounceTimer = null;
-						doSearchForActiveTab();
-					}
-				}
-			} else { // ArrowUp
-				if (isInput || isTabButton) {
-					e.preventDefault();
-					if (selectedResultIndex > 0) {
-						selectedResultIndex -= 1;
-						scrollSelectedIntoView();
-					} else if (selectedResultIndex === 0) {
-						selectedResultIndex = -1;
-					}
-				}
-			}
 		}
 
 		// Arrow left/right: tab cycling from tab bar or input boundary
@@ -710,7 +747,7 @@
 	});
 
 	function switchTab(tab: SourceTab) {
-		// Normal tab switching
+		nav.clear();
 		focusedColumn = null;
 		activeTab = tab;
 		selectedResultIndex = -1;
@@ -841,6 +878,14 @@
 	<div class="flex flex-col h-full overflow-hidden" style="background: oklch(0.16 0.01 250);" onkeydown={handleKeydown} role="search">
 		{@render searchUI(false)}
 	</div>
+	<KeyboardShortcutsOverlay title="Search Shortcuts" shortcuts={[
+		{ key: 'j / ↓', description: 'Focus next result' },
+		{ key: 'k / ↑', description: 'Focus previous result' },
+		{ key: 'Enter', description: 'Open selected result' },
+		{ key: 'Tab / ←→', description: 'Switch tabs' },
+		{ key: '/', description: 'Focus search input' },
+		{ key: 'Esc', description: 'Clear selection' },
+	]} />
 {:else if isOpen}
 	<div class="us-overlay" onclick={onClose} role="presentation">
 		<div class="us-modal" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={handleKeydown}>
@@ -1061,6 +1106,7 @@
 				{#each routeResults as action, i}
 					{@const isSelected = selectedResultIndex === i}
 					<button
+						data-nav-id={action.id}
 						class="result-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors duration-75"
 						class:result-selected={isSelected}
 						style="
@@ -1072,7 +1118,7 @@
 							if (action.execute) { action.execute(); closeModal(); }
 							else if (action.path) { goto(action.path); closeModal(); }
 						}}
-						onmouseenter={() => selectedResultIndex = i}
+						onmouseenter={() => nav.focus(i)}
 					>
 						<span class="font-mono text-[10px] w-4 text-center flex-shrink-0" style="color: {isSelected ? 'oklch(0.65 0.12 200)' : 'oklch(0.40 0.02 250)'};">/</span>
 						<span class="flex-1 min-w-0">
@@ -1115,8 +1161,9 @@
 			</svg>
 			<p class="text-sm" style="color: oklch(0.45 0.02 250);">Search across tasks, memory, and files</p>
 			<p class="text-xs mt-2" style="color: oklch(0.35 0.02 250);">
-				<kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">Ctrl+K</kbd>
-				to open search from anywhere
+				<kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">j/k</kbd> navigate ·
+				<kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">/</kbd> focus ·
+				<kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">?</kbd> shortcuts
 			</p>
 		</div>
 	{/if}
@@ -1366,8 +1413,9 @@
 	<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1">
 		{#each taskResults as task, index}
 			<button
+				data-nav-id={task.id}
 				onclick={() => openTask(task.id)}
-				onmouseenter={() => { selectedResultIndex = index; }}
+				onmouseenter={() => nav.focus(index)}
 				class="us-result-card w-full"
 				class:result-selected={index === selectedResultIndex}
 			>
@@ -1389,8 +1437,9 @@
 	<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1">
 		{#each memoryResults as mem, index}
 			<button
+				data-nav-id={mem.file}
 				onclick={() => navigateToMemory(mem.file)}
-				onmouseenter={() => { selectedResultIndex = index; }}
+				onmouseenter={() => nav.focus(index)}
 				class="us-result-card w-full"
 				class:result-selected={index === selectedResultIndex}
 			>
@@ -1420,10 +1469,11 @@
 	<div class="{isModal ? 'px-1' : 'max-w-3xl mx-auto'}">
 		{#each filenameResults as file, index}
 			<button
+				data-nav-id={file.path}
 				class="us-filename-result"
 				class:result-selected={index === selectedResultIndex}
 				onclick={() => openFilename(file)}
-				onmouseenter={() => { selectedResultIndex = index; }}
+				onmouseenter={() => nav.focus(index)}
 			>
 				<span class="flex-none text-sm">{getFileIcon(file.name)}</span>
 				<div class="min-w-0 flex-1">
@@ -1448,10 +1498,11 @@
 	<div class="{isModal ? 'px-1' : 'max-w-3xl mx-auto'}">
 		{#each contentResults as result, index}
 			<button
+				data-nav-id="{result.file}:{result.line}"
 				class="us-content-result"
 				class:result-selected={index === selectedResultIndex}
 				onclick={() => openContentResult(result)}
-				onmouseenter={() => { selectedResultIndex = index; }}
+				onmouseenter={() => nav.focus(index)}
 			>
 				<div class="flex items-center gap-1.5 min-w-0">
 					<span class="flex-none text-sm">{getFileIcon(result.file)}</span>

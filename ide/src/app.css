@@ -1289,6 +1289,13 @@
 	background: oklch(0.22 0.03 240 / 0.35);
 }
 
+/* Table rows can't use outline reliably; use inset box-shadow instead */
+tr.jk-focused {
+	outline: none;
+	box-shadow: inset 0 0 0 2px oklch(0.65 0.15 240 / 0.7), inset 0 0 12px oklch(0.65 0.15 240 / 0.12);
+	background: oklch(0.22 0.03 240 / 0.35) !important;
+}
+
 /* ==========================================================================
    STANDARDIZED ANIMATION UTILITY CLASSES
    Reusable animations for consistent UI interactions across the IDE.

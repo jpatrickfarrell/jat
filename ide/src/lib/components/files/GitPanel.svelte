@@ -41,6 +41,7 @@
 		onCommitFileClick?: (path: string) => void;
 		selectedFilePath?: string | null;
 		onRebaseComplete?: () => void;
+		onClear?: () => void;
 	}
 
 	interface Commit {
@@ -57,7 +58,7 @@
 		isIncoming?: boolean;
 	}
 
-	let { project, onFileClick, onCommitSelect, onCommitFileClick, selectedFilePath = null, onRebaseComplete }: Props = $props();
+	let { project, onFileClick, onCommitSelect, onCommitFileClick, selectedFilePath = null, onRebaseComplete, onClear }: Props = $props();
 
 	// Branch switcher modal state
 	let showBranchModal = $state(false);
@@ -153,7 +154,6 @@
 	});
 
 	function handleGlobalKeyNavigation(e: KeyboardEvent) {
-		if (!selectedFilePath) return;
 		// Don't intercept when typing in inputs or contenteditable elements
 		const target = e.target as HTMLElement;
 		const tag = target?.tagName;
@@ -162,17 +162,41 @@
 		// Don't intercept when modifier keys are held (let other shortcuts work)
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-		const isStaged = stagedFiles.includes(selectedFilePath);
+		// Navigation keys work even without a selection (start from first/last)
+		const isNavKey = e.key === 'j' || e.key === 'k' || e.key === 'ArrowDown' || e.key === 'ArrowUp';
+		if (!selectedFilePath && !isNavKey) return;
+
+		const isStaged = selectedFilePath ? stagedFiles.includes(selectedFilePath) : false;
 
 		switch (e.key) {
-			case 'ArrowUp':
+			case 'j':
 			case 'ArrowDown': {
 				if (navigableFiles.length === 0) return;
 				e.preventDefault();
-				const currentIndex = navigableFiles.findIndex(f => f.path === selectedFilePath);
-				if (currentIndex === -1) return;
-				const nextIndex = e.key === 'ArrowDown'
-					? (currentIndex < navigableFiles.length - 1 ? currentIndex + 1 : 0)
+				const currentIndex = selectedFilePath
+					? navigableFiles.findIndex(f => f.path === selectedFilePath)
+					: -1;
+				const nextIndex = currentIndex < 0
+					? 0
+					: (currentIndex < navigableFiles.length - 1 ? currentIndex + 1 : 0);
+				const next = navigableFiles[nextIndex];
+				if (next && onFileClick) {
+					onFileClick(next.path, next.isStaged);
+					requestAnimationFrame(() => {
+						document.querySelector('.file-item.active')?.scrollIntoView({ block: 'nearest' });
+					});
+				}
+				break;
+			}
+			case 'k':
+			case 'ArrowUp': {
+				if (navigableFiles.length === 0) return;
+				e.preventDefault();
+				const currentIndex = selectedFilePath
+					? navigableFiles.findIndex(f => f.path === selectedFilePath)
+					: -1;
+				const nextIndex = currentIndex < 0
+					? navigableFiles.length - 1
 					: (currentIndex > 0 ? currentIndex - 1 : navigableFiles.length - 1);
 				const next = navigableFiles[nextIndex];
 				if (next && onFileClick) {
@@ -186,26 +210,32 @@
 			case ' ': // Space = toggle stage/unstage
 				e.preventDefault();
 				if (isStaged) {
-					unstageFile(selectedFilePath);
+					unstageFile(selectedFilePath!);
 				} else {
-					stageFile(selectedFilePath);
+					stageFile(selectedFilePath!);
 				}
 				break;
 			case 's': // S = stage
 				e.preventDefault();
-				if (!isStaged) stageFile(selectedFilePath);
+				if (!isStaged) stageFile(selectedFilePath!);
 				break;
 			case 'u': // U = unstage
 				e.preventDefault();
-				if (isStaged) unstageFile(selectedFilePath);
+				if (isStaged) unstageFile(selectedFilePath!);
 				break;
 			case 'd': // D = discard changes
 				e.preventDefault();
-				if (!isStaged) startDiscardConfirm(selectedFilePath);
+				if (!isStaged) startDiscardConfirm(selectedFilePath!);
 				break;
-			case 'Enter': // Enter = open in file editor
+			case 'Enter': // Enter = load diff in right panel
+				if (!selectedFilePath) return;
 				e.preventDefault();
-				goto(`/files?project=${encodeURIComponent(project)}&file=${encodeURIComponent(selectedFilePath)}`);
+				onFileClick?.(selectedFilePath, isStaged);
+				break;
+			case 'Escape': // Escape = clear file selection
+				if (!selectedFilePath) return;
+				e.preventDefault();
+				onClear?.();
 				break;
 		}
 	}

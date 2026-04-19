@@ -18,6 +18,9 @@
 	import { quintOut, cubicOut } from 'svelte/easing';
 	import { browser } from '$app/environment';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import { createListNav, type ListNavController } from '$lib/actions/listNav';
+	import { jumpToSession } from '$lib/stores/hoveredSession';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
@@ -314,6 +317,38 @@
 
 	// Keyboard navigation state
 	let focusedProjectIndex = $state<number>(-1);
+
+	// Item-level navigation within the focused project (sessions + task rows)
+	const itemNav: ListNavController = createListNav({
+		getItems: () => {
+			if (focusedProjectIndex < 0) return [];
+			const project = sortedProjects[focusedProjectIndex];
+			if (!project) return [];
+			const container = document.querySelector<HTMLElement>(`[data-project="${project}"]`);
+			if (!container) return [];
+			return Array.from(container.querySelectorAll<HTMLElement>('[data-nav-id]'));
+		},
+		onSelect: (el) => {
+			const navId = el.dataset.navId ?? '';
+			if (navId.startsWith('sess-')) {
+				const sessionName = navId.slice(5);
+				const agentName = el.dataset.agentName;
+				jumpToSession(sessionName, agentName);
+			} else {
+				handleTaskClick(navId);
+			}
+		},
+	});
+
+	const dashShortcuts = [
+		{ key: 'Tab / Shift+Tab', description: 'Next / previous project section' },
+		{ key: 'j / ↓', description: 'Focus next session or task row' },
+		{ key: 'k / ↑', description: 'Focus previous session or task row' },
+		{ key: 'Enter', description: 'Jump to session / open task detail' },
+		{ key: '1', description: 'Toggle sessions section' },
+		{ key: '2', description: 'Toggle tasks section' },
+		{ key: 'Esc', description: 'Clear item focus / exit keyboard mode' },
+	];
 
 	// Project removal confirmation state
 	let projectToHide = $state<string | null>(null);
@@ -1292,45 +1327,51 @@
 
 	// Keyboard navigation handler
 	function handleKeydown(e: KeyboardEvent) {
-		// Don't handle if user is typing in an input
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-		// Don't handle if drawer is open
 		if (drawerOpen) return;
 
-		switch (e.key) {
-			case 'j': // Next project
-				e.preventDefault();
-				if (sortedProjects.length > 0) {
-					focusedProjectIndex = Math.min(focusedProjectIndex + 1, sortedProjects.length - 1);
-					scrollToFocusedProject();
-				}
-				break;
-			case 'k': // Previous project
-				e.preventDefault();
-				if (sortedProjects.length > 0) {
-					focusedProjectIndex = Math.max(focusedProjectIndex - 1, 0);
-					scrollToFocusedProject();
-				}
-				break;
-			case 'Enter': // Toggle expand/collapse focused project
-				e.preventDefault();
-				if (focusedProject) {
-					toggleProjectCollapse(focusedProject);
-				}
-				break;
-			case '1': // Toggle sessions section
-				e.preventDefault();
-				if (focusedProject && !projectCollapseState.get(focusedProject)) {
-					toggleSectionCollapse(focusedProject, 'sessions');
-				}
-				break;
-			case '2': // Toggle tasks section
-				e.preventDefault();
-				if (focusedProject && !projectCollapseState.get(focusedProject)) {
-					toggleSectionCollapse(focusedProject, 'tasks');
-				}
-				break;
+		// Tab / Shift+Tab: cycle project sections
+		if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+			if (sortedProjects.length === 0) return;
+			e.preventDefault();
+			itemNav.clear();
+			if (e.shiftKey) {
+				focusedProjectIndex = focusedProjectIndex <= 0
+					? sortedProjects.length - 1
+					: focusedProjectIndex - 1;
+			} else {
+				focusedProjectIndex = focusedProjectIndex >= sortedProjects.length - 1
+					? 0
+					: focusedProjectIndex + 1;
 			}
+			scrollToFocusedProject();
+			return;
+		}
+
+		// All remaining shortcuts: no modifier keys
+		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+		// Section-collapse toggles (project-level)
+		if (e.key === '1' && focusedProject && !projectCollapseState.get(focusedProject)) {
+			e.preventDefault();
+			toggleSectionCollapse(focusedProject, 'sessions');
+			return;
+		}
+		if (e.key === '2' && focusedProject && !projectCollapseState.get(focusedProject)) {
+			e.preventDefault();
+			toggleSectionCollapse(focusedProject, 'tasks');
+			return;
+		}
+
+		// j/k/Enter/Escape: delegate to item nav within focused project
+		if (focusedProjectIndex >= 0) {
+			const handled = itemNav.handleKeydown(e);
+			// Escape with no item focused → exit keyboard mode
+			if (!handled && e.key === 'Escape') {
+				e.preventDefault();
+				focusedProjectIndex = -1;
+			}
+		}
 	}
 
 	function scrollToFocusedProject() {
@@ -1752,6 +1793,8 @@
 																class:ring-2={isSessionDragOver}
 																class:ring-primary={isSessionDragOver}
 																class:cursor-grab={isManualSort}
+																data-nav-id="sess-{session.sessionName}"
+																data-agent-name={session.agentName}
 																draggable={isManualSort}
 																ondragstart={(e) => handleSessionDragStart(e, project, session.sessionName)}
 																ondragend={handleSessionDragEnd}
@@ -1873,6 +1916,8 @@
 																class:ring-2={isSessionDragOver}
 																class:ring-primary={isSessionDragOver}
 																class:cursor-grab={isManualSort}
+																data-nav-id="sess-{session.sessionName}"
+																data-agent-name={session.agentName}
 																draggable={isManualSort}
 																ondragstart={(e) => handleSessionDragStart(e, project, session.sessionName)}
 																ondragend={handleSessionDragEnd}
@@ -2002,6 +2047,9 @@
 		bind:taskId={selectedTaskId}
 		bind:isOpen={drawerOpen}
 	/>
+
+	<!-- Keyboard shortcuts overlay (press ? to toggle) -->
+	<KeyboardShortcutsOverlay shortcuts={dashShortcuts} title="Dashboard Shortcuts" />
 
 	<!-- Hide Project Confirmation Modal -->
 	{#if projectToHide}

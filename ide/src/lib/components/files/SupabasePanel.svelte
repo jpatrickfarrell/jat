@@ -90,6 +90,9 @@
 	let showSyncHelp = $state(false);
 	let sqlCollapsed = $state(false);
 
+	// Keyboard navigation state for migration list
+	let focusedMigrationIdx = $state(-1);
+
 	// SQL execution state
 	let sqlQuery = $state('');
 	let sqlPassword = $state(''); // Database password (session-only, not persisted)
@@ -646,8 +649,50 @@
 	// Fetch status on mount and when project changes
 	$effect(() => {
 		if (project) {
+			focusedMigrationIdx = -1;
 			fetchStatus();
 		}
+	});
+
+	// Reset focus when migrations list changes
+	$effect(() => {
+		if (status?.migrations) focusedMigrationIdx = -1;
+	});
+
+	// j/k keyboard navigation for migration list
+	$effect(() => {
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+			const target = e.target as HTMLElement;
+			const tag = target?.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+			if (target?.isContentEditable) return;
+
+			const migrations = status?.migrations ?? [];
+			if (migrations.length === 0) return;
+
+			if (e.key === 'j' || e.key === 'ArrowDown') {
+				e.preventDefault();
+				const next = focusedMigrationIdx < migrations.length - 1 ? focusedMigrationIdx + 1 : 0;
+				focusedMigrationIdx = next;
+				requestAnimationFrame(() => {
+					document.querySelector('.migration-item.jk-focused')?.scrollIntoView({ block: 'nearest' });
+				});
+			} else if (e.key === 'k' || e.key === 'ArrowUp') {
+				e.preventDefault();
+				const prev = focusedMigrationIdx > 0 ? focusedMigrationIdx - 1 : migrations.length - 1;
+				focusedMigrationIdx = prev;
+				requestAnimationFrame(() => {
+					document.querySelector('.migration-item.jk-focused')?.scrollIntoView({ block: 'nearest' });
+				});
+			} else if (e.key === 'Enter' && focusedMigrationIdx >= 0) {
+				e.preventDefault();
+				const m = migrations[focusedMigrationIdx];
+				if (m) handleMigrationClick(m);
+			}
+		}
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 </script>
 
@@ -1213,7 +1258,8 @@
 									class="migration-item"
 									class:clickable={migration.local && onMigrationSelect}
 									class:deleting={isDeleting}
-									onclick={() => handleMigrationClick(migration)}
+									class:jk-focused={focusedMigrationIdx === index}
+									onclick={() => { focusedMigrationIdx = index; handleMigrationClick(migration); }}
 									role={migration.local ? 'button' : undefined}
 								>
 									<span
@@ -1777,6 +1823,12 @@
 
 	.migration-item.clickable:hover {
 		background: oklch(0.20 0.01 250);
+	}
+
+	.migration-item.jk-focused {
+		background: oklch(0.20 0.01 250);
+		outline: 1px solid oklch(0.65 0.15 200 / 0.4);
+		outline-offset: -1px;
 	}
 
 	.migration-status {

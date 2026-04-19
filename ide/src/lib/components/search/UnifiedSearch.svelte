@@ -2,8 +2,8 @@
 	/**
 	 * UnifiedSearch - Single search component for both /search route and Ctrl+K modal.
 	 *
-	 * 5 tabs: All | Tasks | Memory | Filenames | Content
-	 * - All: trinity layout (tasks + memory + files columns) with AI synthesis
+	 * 5 tabs: Cmd | Tasks | Files | Content | Memory
+	 * - Cmd: route/command launcher with fuzzy filter
 	 * - Tasks/Memory: focused results via /api/search?sources=...
 	 * - Filenames: fuzzy filename matching via /api/files/search
 	 * - Content: ripgrep content search via /api/files/grep (with regex/case/glob options)
@@ -82,19 +82,10 @@
 		limit: number;
 	}
 
-	interface SynthesisResult {
-		summary: string;
-		recommendedAction: string | null;
-		keyFiles: string[];
-		relatedTasks: string[];
-		provider?: string;
-		model?: string;
-	}
-
 	type SourceTab = 'routes' | 'tasks' | 'filenames' | 'content' | 'memory';
 
 	const TABS: { id: SourceTab; label: string; icon: string }[] = [
-		{ id: 'routes', label: 'Go', icon: 'M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z' },
+		{ id: 'routes', label: 'Cmd', icon: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z' },
 		{ id: 'tasks', label: 'Tasks', icon: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' },
 		{ id: 'filenames', label: 'Files', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' },
 		{ id: 'content', label: 'Content', icon: 'M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5' },
@@ -201,12 +192,6 @@
 	let error = $state('');
 	let routeResults = $state<RouteAction[]>([...ROUTE_ACTIONS]);
 
-	// Synthesis
-	let synthesis = $state<SynthesisResult | null>(null);
-	let synthesisLoading = $state(false);
-	let synthesisError = $state('');
-	let synthesisOpen = $state(false);
-
 	// Keyboard navigation for filenames/content results
 	let selectedResultIndex = $state(-1);
 
@@ -275,7 +260,6 @@
 			filenameResults = [];
 			contentResults = [];
 			meta = null;
-			synthesis = null;
 			activeTab = 'routes';
 			untrack(() => filterRoutes(''));
 			selectedResultIndex = -1;
@@ -315,14 +299,11 @@
 			memoryResults = [];
 			fileResults = [];
 			meta = null;
-			synthesis = null;
-			synthesisOpen = false;
 			return;
 		}
 
 		loading = true;
 		error = '';
-		synthesis = null;
 
 		try {
 			const params = new URLSearchParams({ q: query.trim(), limit: '10' });
@@ -350,18 +331,6 @@
 			memoryResults = data.memory || [];
 			fileResults = data.files || [];
 			meta = data.meta || null;
-
-			// Auto-synthesize on All tab when results are available
-			if (activeTab === 'all') {
-				const total = taskResults.length + memoryResults.length + fileResults.length;
-				if (total > 0) {
-					synthesisOpen = true;
-					synthesisLoading = true;
-					doSynthesis();
-				} else {
-					synthesisOpen = false;
-				}
-			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Search failed';
 			taskResults = [];
@@ -433,36 +402,6 @@
 			contentTruncated = false;
 		} finally {
 			contentLoading = false;
-		}
-	}
-
-	async function doSynthesis() {
-		if (!meta || meta.totalResults === 0) return;
-
-		synthesisLoading = true;
-		synthesisError = '';
-		synthesisOpen = true;
-
-		try {
-			const res = await fetch('/api/search/synthesize', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					query: query.trim(),
-					results: { tasks: taskResults, memory: memoryResults, files: fileResults }
-				})
-			});
-
-			if (!res.ok) {
-				const data = await res.json();
-				throw new Error(data.error || 'Synthesis failed');
-			}
-
-			synthesis = await res.json();
-		} catch (err) {
-			synthesisError = err instanceof Error ? err.message : 'Synthesis failed';
-		} finally {
-			synthesisLoading = false;
 		}
 	}
 
@@ -649,7 +588,7 @@
 					query = '';
 					taskResults = []; memoryResults = []; fileResults = [];
 					filenameResults = []; contentResults = [];
-					meta = null; synthesis = null;
+					meta = null;
 					filterRoutes('');
 				} else {
 					onClose?.();
@@ -659,7 +598,7 @@
 			} else {
 				query = ''; taskResults = []; memoryResults = []; fileResults = [];
 				filenameResults = []; contentResults = [];
-				meta = null; synthesis = null;
+				meta = null;
 				updateUrl();
 			}
 		}
@@ -916,7 +855,7 @@
 					onkeydown={handleKeydown}
 					type="text"
 					placeholder="Search tasks, memory, and files...{isModal ? '' : ' (Ctrl+K)'}"
-					class="w-full pl-11 pr-4 py-3 rounded-lg text-sm font-mono outline-none transition-all duration-200"
+					class="w-full pl-11 pr-4 py-3 rounded-lg text-sm outline-none transition-all duration-200"
 					style="
 						background: oklch(0.14 0.01 250);
 						border: 1px solid oklch(0.30 0.02 250);
@@ -929,7 +868,7 @@
 					<button
 						tabindex={-1}
 						aria-label="Clear search"
-						onclick={() => { query = ''; taskResults = []; memoryResults = []; fileResults = []; filenameResults = []; contentResults = []; meta = null; synthesis = null; if (mode === 'route') updateUrl(); searchInputEl?.focus(); }}
+						onclick={() => { query = ''; taskResults = []; memoryResults = []; fileResults = []; filenameResults = []; contentResults = []; meta = null; if (mode === 'route') updateUrl(); searchInputEl?.focus(); }}
 						class="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors hover:bg-base-300/30"
 						style="color: oklch(0.50 0.02 250);"
 					>
@@ -994,19 +933,19 @@
 		<!-- Content tab options (regex, case, glob) -->
 		{#if activeTab === 'content'}
 			<div class="flex items-center gap-2 {isModal ? 'px-4' : 'max-w-4xl mx-auto'} pb-2 flex-wrap">
-				<label class="flex items-center gap-1 px-2 py-1 rounded text-[11px] cursor-pointer transition-colors" style="background: {useRegex ? 'oklch(0.55 0.12 220 / 0.3)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {useRegex ? 'oklch(0.55 0.12 220 / 0.5)' : 'transparent'}; color: {useRegex ? 'oklch(0.85 0.12 220)' : 'oklch(0.65 0.02 250)'};">
+				<label class="flex items-center gap-1 px-2 py-1 rounded text-xs cursor-pointer transition-colors" style="background: {useRegex ? 'oklch(0.55 0.12 220 / 0.3)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {useRegex ? 'oklch(0.55 0.12 220 / 0.5)' : 'oklch(0.28 0.02 250)'}; color: {useRegex ? 'oklch(0.88 0.12 220)' : 'oklch(0.70 0.02 250)'};">
 					<input type="checkbox" bind:checked={useRegex} class="hidden" />
 					<span class="font-mono font-semibold">.*</span> Regex
 				</label>
-				<label class="flex items-center gap-1 px-2 py-1 rounded text-[11px] cursor-pointer transition-colors" style="background: {caseSensitive ? 'oklch(0.55 0.12 220 / 0.3)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {caseSensitive ? 'oklch(0.55 0.12 220 / 0.5)' : 'transparent'}; color: {caseSensitive ? 'oklch(0.85 0.12 220)' : 'oklch(0.65 0.02 250)'};">
+				<label class="flex items-center gap-1 px-2 py-1 rounded text-xs cursor-pointer transition-colors" style="background: {caseSensitive ? 'oklch(0.55 0.12 220 / 0.3)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {caseSensitive ? 'oklch(0.55 0.12 220 / 0.5)' : 'oklch(0.28 0.02 250)'}; color: {caseSensitive ? 'oklch(0.88 0.12 220)' : 'oklch(0.70 0.02 250)'};">
 					<input type="checkbox" bind:checked={caseSensitive} class="hidden" />
 					<span class="font-mono font-semibold">Aa</span> Case
 				</label>
 				<div class="flex items-center gap-1">
 					{#each GLOB_PRESETS as preset}
 						<button
-							class="px-1.5 py-0.5 rounded text-[10px] transition-colors"
-							style="background: {globFilter === preset.glob ? 'oklch(0.50 0.15 145 / 0.2)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {globFilter === preset.glob ? 'oklch(0.50 0.15 145 / 0.4)' : 'transparent'}; color: {globFilter === preset.glob ? 'oklch(0.80 0.12 145)' : 'oklch(0.60 0.02 250)'};"
+							class="px-2 py-0.5 rounded text-[11px] transition-colors"
+							style="background: {globFilter === preset.glob ? 'oklch(0.50 0.15 145 / 0.25)' : 'oklch(0.22 0.02 250)'}; border: 1px solid {globFilter === preset.glob ? 'oklch(0.50 0.15 145 / 0.5)' : 'oklch(0.28 0.02 250)'}; color: {globFilter === preset.glob ? 'oklch(0.85 0.14 145)' : 'oklch(0.68 0.02 250)'};"
 							onclick={() => { globFilter = preset.glob; if (query.trim()) doContentSearch(); }}
 						>{preset.label}</button>
 					{/each}
@@ -1025,7 +964,11 @@
 
 	<!-- Results area -->
 	<div bind:this={resultsContainerEl} class="{isModal ? 'us-results-modal' : 'flex-1 overflow-y-auto px-4 py-4'}">
-		{#if loading || filenameLoading || contentLoading}
+		{#if (activeTab === 'filenames' || activeTab === 'content') && !selectedProject}
+			<div class="text-center py-8">
+				<p class="text-sm" style="color: oklch(0.65 0.10 85);">Select a project to search {activeTab === 'filenames' ? 'filenames' : 'file contents'}</p>
+			</div>
+		{:else if loading || filenameLoading || contentLoading}
 			{@render loadingSkeleton()}
 		{:else if error}
 			<div class="max-w-2xl mx-auto rounded-lg p-4" style="background: oklch(0.22 0.08 25 / 0.15); border: 1px solid oklch(0.50 0.15 25 / 0.3);">
@@ -1169,162 +1112,6 @@
 			</p>
 		</div>
 	{/if}
-{/snippet}
-
-{#snippet synthesisPanel()}
-	{#if synthesisOpen}
-		<div class="rounded-lg overflow-hidden" style="background: oklch(0.20 0.03 280 / 0.3); border: 1px solid oklch(0.35 0.06 280 / 0.4);">
-			<button
-				onclick={() => synthesisOpen = false}
-				class="w-full flex items-center justify-between px-4 py-2 text-xs font-medium"
-				style="color: oklch(0.80 0.10 280);"
-			>
-				<span class="flex items-center gap-2">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-					</svg>
-					AI Synthesis
-				</span>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
-			</button>
-			<div class="px-4 pb-3">
-				{#if synthesisLoading}
-					<div class="flex items-center gap-2 py-2">
-						<span class="loading loading-dots loading-sm" style="color: oklch(0.70 0.10 280);"></span>
-						<span class="text-xs" style="color: oklch(0.60 0.06 280);">Synthesizing...</span>
-					</div>
-				{:else if synthesisError}
-					<p class="text-xs py-1" style="color: oklch(0.70 0.15 25);">{synthesisError}</p>
-				{:else if synthesis}
-					<div class="space-y-2">
-						<p class="text-sm leading-relaxed" style="color: oklch(0.85 0.04 280);">{synthesis.summary}</p>
-						{#if synthesis.recommendedAction}
-							<div class="rounded-md px-3 py-2" style="background: oklch(0.22 0.04 280 / 0.4); border: 1px solid oklch(0.35 0.06 280 / 0.3);">
-								<p class="text-[11px] font-medium mb-0.5" style="color: oklch(0.70 0.10 280);">Recommended</p>
-								<p class="text-xs" style="color: oklch(0.80 0.04 250);">{synthesis.recommendedAction}</p>
-							</div>
-						{/if}
-						{#if synthesis.keyFiles.length > 0}
-							<div class="flex flex-wrap gap-1">
-								{#each synthesis.keyFiles as file}
-									<button
-										onclick={() => navigateToFile(file)}
-										class="text-[10px] font-mono px-1.5 py-0.5 rounded"
-										style="background: oklch(0.22 0.02 250); color: oklch(0.70 0.10 200); border: 1px solid oklch(0.30 0.04 200 / 0.3);"
-									>{file}</button>
-								{/each}
-							</div>
-						{/if}
-						{#if synthesis.relatedTasks.length > 0}
-							<div class="flex flex-wrap gap-1">
-								{#each synthesis.relatedTasks as taskId}
-									<button onclick={() => openTask(taskId)}>
-										<TaskIdBadge task={{ id: taskId, status: 'open' }} size="xs" minimal />
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		</div>
-	{/if}
-{/snippet}
-
-{#snippet trinityLayout()}
-	<div bind:this={columnsContainerEl} class="us-columns-scroll">
-		<!-- TASKS Column -->
-		<div class="us-column" data-column="tasks">
-			<h3 class="us-column-header">
-				<span class="us-column-dot" style="background: oklch(0.65 0.15 220);"></span>
-				Tasks <span class="text-[10px] font-normal" style="color: oklch(0.45 0.02 250);">({taskCount})</span>
-			</h3>
-			{#if taskResults.length > 0}
-				<div class="space-y-1">
-					{#each taskResults as task}
-						{@render taskCard(task)}
-					{/each}
-				</div>
-			{:else if !loading}
-				<p class="text-[11px] px-1" style="color: oklch(0.40 0.02 250);">No matches</p>
-			{/if}
-		</div>
-
-		<!-- MEMORY Column -->
-		<div class="us-column" data-column="memory">
-			<h3 class="us-column-header">
-				<span class="us-column-dot" style="background: oklch(0.65 0.15 145);"></span>
-				Memory <span class="text-[10px] font-normal" style="color: oklch(0.45 0.02 250);">({memoryCount})</span>
-			</h3>
-			{#if memoryResults.length > 0}
-				<div class="space-y-1">
-					{#each memoryResults as mem}
-						{@render memoryCard(mem)}
-					{/each}
-				</div>
-			{:else if !loading}
-				<p class="text-[11px] px-1" style="color: oklch(0.40 0.02 250);">No matches</p>
-			{/if}
-		</div>
-
-		<!-- FILENAMES Column -->
-		<div class="us-column" data-column="filenames">
-			<h3 class="us-column-header">
-				<span class="us-column-dot" style="background: oklch(0.65 0.15 85);"></span>
-				Filenames <span class="text-[10px] font-normal" style="color: oklch(0.45 0.02 250);">({filenameCount})</span>
-			</h3>
-			{#if filenameLoading}
-				<div class="space-y-1.5">
-					{#each [1, 2, 3] as _}
-						<div class="skeleton h-6 w-full rounded" style="background: oklch(0.25 0.02 250);"></div>
-					{/each}
-				</div>
-			{:else if filenameResults.length > 0}
-				<div class="space-y-0.5">
-					{#each filenameResults.slice(0, 15) as file}
-						{@render filenameCard(file)}
-					{/each}
-					{#if filenameResults.length > 15}
-						<button onclick={() => switchTab('filenames')} class="text-[10px] px-1 mt-1 transition-colors" style="color: oklch(0.60 0.12 220);">
-							+{filenameResults.length - 15} more...
-						</button>
-					{/if}
-				</div>
-			{:else}
-				<p class="text-[11px] px-1" style="color: oklch(0.40 0.02 250);">No matches</p>
-			{/if}
-		</div>
-
-		<!-- CONTENT Column -->
-		<div class="us-column" data-column="content">
-			<h3 class="us-column-header">
-				<span class="us-column-dot" style="background: oklch(0.65 0.15 310);"></span>
-				Content <span class="text-[10px] font-normal" style="color: oklch(0.45 0.02 250);">({contentCount})</span>
-			</h3>
-			{#if contentLoading}
-				<div class="space-y-1.5">
-					{#each [1, 2, 3] as _}
-						<div class="skeleton h-10 w-full rounded" style="background: oklch(0.25 0.02 250);"></div>
-					{/each}
-				</div>
-			{:else if contentResults.length > 0}
-				<div class="space-y-1">
-					{#each contentResults.slice(0, 10) as result}
-						{@render contentCard(result)}
-					{/each}
-					{#if contentResults.length > 10}
-						<button onclick={() => switchTab('content')} class="text-[10px] px-1 mt-1 transition-colors" style="color: oklch(0.60 0.12 220);">
-							+{contentResults.length - 10} more...
-						</button>
-					{/if}
-				</div>
-			{:else}
-				<p class="text-[11px] px-1" style="color: oklch(0.40 0.02 250);">No matches</p>
-			{/if}
-		</div>
-	</div>
 {/snippet}
 
 {#snippet taskCard(task: TaskResult)}

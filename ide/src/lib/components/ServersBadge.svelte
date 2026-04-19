@@ -349,7 +349,6 @@
 			if (!response.ok) {
 				throw new Error(data.message || "Failed to spawn session");
 			}
-			console.log("New session spawned for", projectKey, ":", data);
 			// Add the session to workSessions store so it appears in project views
 			if (data.session) {
 				addSession(data.session);
@@ -860,6 +859,11 @@
 		color: oklch(0.95 0.18 30);
 	}
 
+	.error-action-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.65 0.15 30 / 0.8);
+	}
+
 	.error-action-dismiss {
 		border-color: oklch(0.35 0.02 250 / 0.5);
 		background: transparent;
@@ -869,6 +873,11 @@
 	.error-action-dismiss:hover {
 		background: oklch(0.25 0.02 250);
 		color: oklch(0.75 0.02 250);
+	}
+
+	.error-action-dismiss:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.55 0.05 250 / 0.8);
 	}
 
 	/* View All Button */

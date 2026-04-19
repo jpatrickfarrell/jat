@@ -662,7 +662,15 @@
 					bind:value={searchQuery}
 					bind:this={searchInputRef}
 					onclick={(e) => e.stopPropagation()}
-					onkeydown={(e) => e.stopPropagation()}
+					onkeydown={(e) => {
+						if (e.key === 'Escape') {
+							showDropdown = false;
+							searchQuery = '';
+							debouncedSearchQuery = '';
+						} else {
+							e.stopPropagation();
+						}
+					}}
 				/>
 				{#if searchQuery}
 					<button
@@ -758,10 +766,7 @@
 						</svg>
 						<p class="text-xs mb-2" style="color: oklch(0.65 0.18 50);">Task data unavailable</p>
 						<button
-							class="text-[10px] font-mono px-2 py-1 rounded cursor-pointer transition-all duration-150"
-							style="background: oklch(0.22 0.04 200 / 0.5); color: oklch(0.70 0.10 200); border: 1px solid oklch(0.35 0.06 200 / 0.4);"
-							onmouseenter={(e) => { (e.target as HTMLElement).style.background = 'oklch(0.28 0.06 200 / 0.7)'; }}
-							onmouseleave={(e) => { (e.target as HTMLElement).style.background = 'oklch(0.22 0.04 200 / 0.5)'; }}
+							class="retry-btn"
 							onclick={() => { fetchFailCount = 0; fetchCompletedToday(); }}
 						>⟳ Retry</button>
 					</div>
@@ -856,20 +861,6 @@
 					<AnimatedCost value={costToday} format={formatCostCompact} class="text-[11px] font-mono font-medium" style="color: oklch(0.75 0.12 145);" />
 				</div>
 			</div>
-
-			<!-- View History Button -->
-			<button
-				class="view-history-btn"
-				onclick={openHistory}
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-				</svg>
-				Full History
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-				</svg>
-			</button>
 
 			<!-- Milestone overlay — cinematic full-panel flash, cockpit-appropriate -->
 			{#if hitMilestone}
@@ -1095,7 +1086,7 @@
 		color: oklch(0.50 0.02 250);
 		padding: 0.125rem 0.375rem;
 		background: oklch(0.22 0.02 250);
-		border-radius: 8px;
+		border-radius: 0.5rem;
 	}
 
 	/* Task row */
@@ -1118,28 +1109,21 @@
 		background: oklch(0.25 0.02 250);
 	}
 
-	/* View History Button */
-	.view-history-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		width: 100%;
-		padding: 0.625rem 0.75rem;
-		background: oklch(0.22 0.04 200 / 0.5);
-		border: none;
-		border-top: 1px solid oklch(0.30 0.02 250);
-		color: oklch(0.70 0.10 200);
-		font-size: 0.7rem;
-		font-weight: 500;
+	/* Retry button in error state */
+	.retry-btn {
+		font-size: 0.625rem;
 		font-family: ui-monospace, monospace;
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: background 0.15s ease;
+		background: oklch(0.22 0.04 200 / 0.5);
+		color: oklch(0.70 0.10 200);
+		border: 1px solid oklch(0.35 0.06 200 / 0.4);
 	}
 
-	.view-history-btn:hover {
-		background: oklch(0.28 0.06 200 / 0.6);
-		color: oklch(0.85 0.12 200);
+	.retry-btn:hover {
+		background: oklch(0.28 0.06 200 / 0.7);
 	}
 
 	/* Inline history link in header row */

@@ -506,7 +506,7 @@
 										{/if}
 										{#if result.section}
 											<span class="text-xs" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
-												{result.section}
+												§ <span style="font-family: ui-monospace, monospace;">{result.section}</span>
 											</span>
 										{/if}
 										<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">

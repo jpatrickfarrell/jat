@@ -60,6 +60,18 @@ export interface TaskDependency {
 }
 
 /**
+ * Stakeholder identity snapshot stored in JSONB.
+ * See ide/docs/prd-task-identity-routing.md (jat-9e5tc).
+ */
+export interface TaskActor {
+	email?: string;
+	name?: string;
+	role?: string;     // "patient" | "practitioner" | "admin" | "agent" | "dev" | "system"
+	source?: string;   // "widget" | "ide" | "jat" | "slack" | "email" | "api" | "voice"
+	agent?: string;    // JAT agent name when source=jat
+}
+
+/**
  * JAT task
  */
 export interface Task {
@@ -82,6 +94,18 @@ export interface Task {
 	due_date?: string | null;
 	created_ts?: string;
 	updated_ts?: string;
+	// Task identity (jat-9e5tc refactor):
+	//   creator   — who made it (immutable snapshot)
+	//   requester — who needs it (mutable, "on behalf of")
+	//   approver  — who signs off (mutable, escalate to owner)
+	// Postgres backend populates these from JSONB + UUID columns; SQLite
+	// backend surfaces only string-based approver/creator aliases.
+	creator?: TaskActor | null;
+	creator_id?: string | null;
+	requester?: TaskActor | null;
+	requester_id?: string | null;
+	approver?: TaskActor | null;
+	approver_id?: string | null;
 }
 
 /**

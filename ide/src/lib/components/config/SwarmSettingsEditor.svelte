@@ -41,7 +41,6 @@
 	let saving = $state(false);
 
 	// Form state - spawn settings
-	let model = $state(JAT_DEFAULTS.model);
 	let maxSessions = $state(JAT_DEFAULTS.max_sessions);
 	let defaultAgentCount = $state(JAT_DEFAULTS.default_agent_count);
 	let agentStagger = $state(JAT_DEFAULTS.agent_stagger);
@@ -71,13 +70,6 @@
 	let vpsProjectPath = $state(JAT_DEFAULTS.vps_project_path as string);
 	let vpsTesting = $state(false);
 	let vpsTestResult = $state<{ ok: boolean; latencyMs?: number; error?: string } | null>(null);
-
-	// Model options
-	const modelOptions = [
-		{ value: 'opus', label: 'Claude Opus', description: 'Most capable, higher cost' },
-		{ value: 'sonnet', label: 'Claude Sonnet', description: 'Balanced performance' },
-		{ value: 'haiku', label: 'Claude Haiku', description: 'Fast and efficient' }
-	];
 
 	// Validation
 	const VALIDATION_RULES = {
@@ -111,7 +103,6 @@
 			const defaults = data.defaults || {};
 
 			// Update form state
-			model = defaults.model ?? JAT_DEFAULTS.model;
 			maxSessions = defaults.max_sessions ?? JAT_DEFAULTS.max_sessions;
 			defaultAgentCount = defaults.default_agent_count ?? JAT_DEFAULTS.default_agent_count;
 			agentStagger = defaults.agent_stagger ?? JAT_DEFAULTS.agent_stagger;
@@ -152,7 +143,6 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					defaults: {
-						model,
 						max_sessions: maxSessions,
 						default_agent_count: defaultAgentCount,
 						agent_stagger: agentStagger,
@@ -239,7 +229,6 @@
 
 	// Reset spawn settings to factory defaults and auto-save
 	function resetSpawnToFactory() {
-		model = JAT_DEFAULTS.model;
 		maxSessions = JAT_DEFAULTS.max_sessions;
 		defaultAgentCount = JAT_DEFAULTS.default_agent_count;
 		agentStagger = JAT_DEFAULTS.agent_stagger;
@@ -320,20 +309,7 @@
 				</button>
 			</div>
 
-			<!-- Default Model: primary, full-width -->
-			<div class="spawn-primary-field">
-				<div class="spawn-primary-label">
-					<span>Default Model</span>
-					<span class="spawn-primary-hint">{modelOptions.find((o) => o.value === model)?.description}</span>
-				</div>
-				<select class="select select-bordered spawn-model-select" bind:value={model} onchange={() => autoSave()}>
-					{#each modelOptions as option}
-						<option value={option.value}>{option.label}</option>
-					{/each}
-				</select>
-			</div>
-
-			<!-- Secondary numeric fields: compact 4-column strip -->
+			<!-- Compact numeric fields -->
 			<div class="spawn-secondary-grid">
 				<div class="compact-field">
 					<span class="compact-label">Max Sessions</span>

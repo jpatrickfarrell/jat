@@ -319,7 +319,31 @@ export async function POST({ request }) {
 			}
 		}
 
-		const requester = body.requester && typeof body.requester === 'string' ? body.requester.trim() : null;
+		// Task identity (jat-9e5tc): accept creator/requester/approver as either
+		// a string (legacy — email or agent name) or a structured TaskActor
+		// object. Postgres backend stores JSONB; SQLite backend collapses to
+		// string aliases (creator/approver on SQLite; requester is legacy-only).
+		/** @param {unknown} v */
+		const toActor = (v) => {
+			if (v == null) return null;
+			if (typeof v === 'string') return v.trim() || null;
+			if (typeof v === 'object') return v;
+			return null;
+		};
+		const creator   = toActor(body.creator);
+		const requester = toActor(body.requester);
+		const approver  = toActor(body.approver);
+		// SQLite backend accepts string-only for requester; derive a routing
+		// email from whichever actor is most "authoritative" for legacy paths.
+		/** @param {unknown} a */
+		const actorToString = (a) => {
+			if (!a) return null;
+			if (typeof a === 'string') return a;
+			/** @type {any} */
+			const o = a;
+			return o.email || o.agent || o.name || null;
+		};
+		const sqliteRequester = actorToString(approver) || actorToString(requester) || actorToString(creator);
 
 		/** @type {any} */
 		const createdTask = pgBackendForCreate
@@ -332,7 +356,12 @@ export async function POST({ request }) {
 				labels,
 				deps,
 				assignee: null,
+				creator,
+				creator_id: body.creator_id || null,
 				requester,
+				requester_id: body.requester_id || null,
+				approver,
+				approver_id: body.approver_id || null,
 				notes,
 				...schedulingFields
 			})
@@ -345,7 +374,7 @@ export async function POST({ request }) {
 				labels,
 				deps,
 				assignee: null,
-				requester,
+				requester: sqliteRequester,
 				notes,
 				...schedulingFields
 			});

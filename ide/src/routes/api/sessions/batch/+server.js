@@ -194,7 +194,6 @@ function registerAgentInDb(agentName, projectPath, model) {
 function loadJatDefaults() {
 	const configPath = join(homedir(), '.config/jat/projects.json');
 	const defaults = {
-		model: 'opus',
 		skip_permissions: false,
 		agent_stagger: 30,
 		claude_startup_timeout: 20
@@ -204,7 +203,6 @@ function loadJatDefaults() {
 		try {
 			const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 			if (config.defaults) {
-				if (config.defaults.model) defaults.model = config.defaults.model;
 				if (typeof config.defaults.skip_permissions === 'boolean') defaults.skip_permissions = config.defaults.skip_permissions;
 				if (config.defaults.agent_stagger) defaults.agent_stagger = config.defaults.agent_stagger;
 				if (typeof config.defaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = config.defaults.claude_startup_timeout;
@@ -215,6 +213,19 @@ function loadJatDefaults() {
 	}
 
 	return defaults;
+}
+
+function loadAgentsFallbackModel() {
+	const configPath = join(homedir(), '.config/jat/agents.json');
+	try {
+		if (existsSync(configPath)) {
+			const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+			return config.defaults?.fallbackModel || 'opus';
+		}
+	} catch (err) {
+		console.error('Failed to load agents config:', err);
+	}
+	return 'opus';
 }
 
 /**
@@ -235,7 +246,7 @@ export async function POST({ request }) {
 		const {
 			count = 1,
 			project,
-			model = jatDefaults.model,
+			model = loadAgentsFallbackModel(),
 			stagger = jatDefaults.agent_stagger * 1000,
 			autoStart = true,
 			skipPermissions = jatDefaults.skip_permissions

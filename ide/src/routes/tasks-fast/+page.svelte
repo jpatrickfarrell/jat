@@ -71,10 +71,12 @@
 	let flashTaskId = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// Filter state — hydrated from URL on mount.
+	// Filter + sort state — hydrated from URL on mount.
 	let filterStatuses = $state<Set<string>>(new Set(DEFAULT_STATUSES));
 	let filterPriorities = $state<Set<number>>(new Set());
 	let filterProject = $state<string>("");
+	type SortBy = "priority" | "age" | "updated" | "status";
+	let sortBy = $state<SortBy>("priority");
 	let filterTypes = $state<Set<string>>(new Set());
 	let filterAssignee = $state<string>("");
 	let filterSearch = $state<string>("");
@@ -123,7 +125,7 @@
 		const assigneeMatch =
 			assigneeRaw === "@me" && meName ? meName : assigneeRaw;
 
-		return tasks.filter((t) => {
+		const filtered = tasks.filter((t) => {
 			if (filterStatuses.size > 0 && !filterStatuses.has(t.status)) {
 				return false;
 			}
@@ -155,6 +157,31 @@
 			}
 			return true;
 		});
+
+		const STATUS_ORDER: Record<string, number> = {
+			submitted: 0, open: 1, in_progress: 2, waiting: 3,
+		};
+
+		filtered.sort((a, b) => {
+			if (sortBy === "age") {
+				return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+			}
+			if (sortBy === "updated") {
+				return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+			}
+			if (sortBy === "status") {
+				const sa = STATUS_ORDER[a.status] ?? 9;
+				const sb = STATUS_ORDER[b.status] ?? 9;
+				if (sa !== sb) return sa - sb;
+				return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+			}
+			// default: priority → age
+			const pa = a.priority ?? 99, pb = b.priority ?? 99;
+			if (pa !== pb) return pa - pb;
+			return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+		});
+
+		return filtered;
 	});
 
 	const selectedTask = $derived<Task | null>(
@@ -171,7 +198,8 @@
 			filterProject !== "" ||
 			filterTypes.size > 0 ||
 			filterAssignee.trim() !== "" ||
-			filterSearch.trim() !== ""
+			filterSearch.trim() !== "" ||
+			sortBy !== "priority"
 		);
 	});
 
@@ -535,15 +563,6 @@
 			const payloads = await Promise.all(responses.map((r) => r.json()));
 			const combined: Task[] = payloads.flatMap((p) => p.tasks ?? []);
 
-			combined.sort((a, b) => {
-				const pa = a.priority ?? 99;
-				const pb = b.priority ?? 99;
-				if (pa !== pb) return pa - pb;
-				const ca = a.created_at ?? "";
-				const cb = b.created_at ?? "";
-				return ca.localeCompare(cb);
-			});
-
 			tasks = combined;
 
 			// Refresh the global Inbox badge with the freshest count we have —
@@ -607,6 +626,8 @@
 		filterProject = searchParams.get("project") ?? "";
 		filterTypes = parseSet(searchParams.get("type"), TYPE_OPTIONS);
 		filterAssignee = searchParams.get("assignee") ?? "";
+		const rawSort = searchParams.get("sort");
+		sortBy = (["priority", "age", "updated", "status"].includes(rawSort ?? "") ? rawSort : "priority") as SortBy;
 		filterSearch = searchParams.get("q") ?? "";
 	}
 
@@ -628,6 +649,7 @@
 			);
 		}
 		if (filterProject) sp.set("project", filterProject);
+		if (sortBy !== "priority") sp.set("sort", sortBy);
 		if (filterTypes.size > 0) {
 			sp.set("type", [...filterTypes].sort().join(","));
 		}
@@ -676,6 +698,7 @@
 		filterTypes = new Set();
 		filterAssignee = "";
 		filterSearch = "";
+		sortBy = "priority";
 	}
 
 	async function focusFilter() {
@@ -805,6 +828,19 @@
 						>
 							{type}
 						</button>
+					{/each}
+				</div>
+
+				<div class="chip-group chip-group-sort" aria-label="Sort by">
+					<span class="filter-label">Sort</span>
+					{#each ([["priority","Priority"],["age","Age ↑"],["updated","Updated"],["status","Status"]] as const) as [val, label]}
+						<button
+							type="button"
+							class="chip chip-sort"
+							class:active={sortBy === val}
+							onclick={() => sortBy = val}
+							aria-pressed={sortBy === val}
+						>{label}</button>
 					{/each}
 				</div>
 
@@ -1093,6 +1129,18 @@
 		background: oklch(0.65 0.15 145 / 0.18);
 		border-color: oklch(0.65 0.15 145 / 0.7);
 		color: oklch(0.90 0.10 145);
+	}
+
+	.chip-sort.active {
+		background: oklch(0.65 0.18 280 / 0.20);
+		border-color: oklch(0.65 0.18 280 / 0.7);
+		color: oklch(0.90 0.10 280);
+	}
+
+	.chip-group-sort {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 
 	.filter-field {

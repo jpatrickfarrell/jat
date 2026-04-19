@@ -47,6 +47,9 @@
 	let lastRun = $state<WorkflowRun | null>(null);
 	let logExpanded = $state(false);
 
+	// Load error
+	let loadError = $state<{ name: string; id: string } | null>(null);
+
 	// Run history
 	let bottomTab = $state<'log' | 'history'>('log');
 	let selectedRun = $state<WorkflowRun | null>(null);
@@ -182,6 +185,7 @@
 		edges = [];
 		dirty = false;
 		lastRun = null;
+		loadError = null;
 		configPanelOpen = false;
 		clearRunSelection();
 	}
@@ -288,6 +292,9 @@
 
 	async function loadWorkflow(id: string) {
 		loadingWorkflow = true;
+		loadError = null;
+		// Navigate into the editor shell immediately so the user sees the loading state
+		currentId = id;
 		try {
 			const res = await fetch(`/api/workflows/${id}`);
 			if (!res.ok) throw new Error('Not found');
@@ -311,7 +318,8 @@
 			// Fit view after load
 			setTimeout(() => canvasRef?.fitView(80), 100);
 		} catch (err) {
-			showToast('Failed to load workflow', 'error');
+			const wf = workflows.find((w) => w.id === id);
+			loadError = { name: wf?.name ?? 'Workflow', id };
 			console.error('Failed to load workflow:', err);
 		} finally {
 			loadingWorkflow = false;
@@ -1009,6 +1017,28 @@
 					<span class="loading loading-spinner loading-lg" style="color: oklch(0.55 0.15 200)"
 					></span>
 				</div>
+			{:else if loadError}
+				<div class="absolute inset-0 flex items-center justify-center">
+					<div class="flex flex-col items-start gap-3 max-w-xs">
+						<div class="flex items-center gap-2">
+							<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 25)" stroke-width="2">
+								<path d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+							</svg>
+							<span class="text-sm font-medium" style="color: oklch(0.75 0.02 250)">Failed to load "{loadError.name}"</span>
+						</div>
+						<p class="text-xs" style="color: oklch(0.45 0.02 250)">The workflow could not be fetched. Check your connection and try again.</p>
+						<button
+							class="btn btn-sm gap-1.5"
+							style="background: oklch(0.22 0.02 250); color: oklch(0.75 0.02 250); border: 1px solid oklch(0.30 0.02 250)"
+							onclick={() => loadWorkflow(loadError!.id)}
+						>
+							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.015 4.356v4.992" />
+							</svg>
+							Retry
+						</button>
+					</div>
+				</div>
 			{:else}
 				<WorkflowCanvas
 					bind:this={canvasRef}
@@ -1203,18 +1233,24 @@
 		</div>
 
 		{#if loadingList}
-			<!-- Loading skeleton rows -->
-			<div>
-				{#each Array(4) as _}
-					<div class="flex items-center gap-4 px-4 py-2.5" style="border-bottom: 1px solid oklch(0.18 0.01 250)">
-						<div class="skeleton h-3 w-2 rounded" style="background: oklch(0.22 0.02 250)"></div>
-						<div class="skeleton h-3 flex-1 max-w-[200px] rounded" style="background: oklch(0.22 0.02 250)"></div>
-						<div class="skeleton h-3 w-12 rounded" style="background: oklch(0.20 0.02 250)"></div>
-						<div class="skeleton h-3 w-10 rounded" style="background: oklch(0.20 0.02 250)"></div>
-						<div class="skeleton h-3 w-16 rounded ml-auto" style="background: oklch(0.20 0.02 250)"></div>
+			<!-- Loading skeleton — matches wf-list-grid columns -->
+			{#each Array(4) as _}
+				<div class="grid wf-list-grid items-center px-4 py-2" style="border-bottom: 1px solid oklch(0.18 0.01 250); min-height: 48px">
+					<!-- Name col: two lines -->
+					<div class="flex flex-col gap-1">
+						<div class="skeleton h-3 rounded" style="background: oklch(0.22 0.02 250); max-width: 160px"></div>
+						<div class="skeleton h-2.5 rounded" style="background: oklch(0.19 0.01 250); max-width: 100px"></div>
 					</div>
-				{/each}
-			</div>
+					<!-- Status col -->
+					<div class="skeleton h-4 w-10 rounded" style="background: oklch(0.20 0.02 250)"></div>
+					<!-- Nodes col -->
+					<div class="skeleton h-3 w-5 rounded" style="background: oklch(0.20 0.02 250)"></div>
+					<!-- Last run col -->
+					<div class="skeleton h-3 rounded" style="background: oklch(0.20 0.02 250); max-width: 96px"></div>
+					<!-- Hint col (empty) -->
+					<div></div>
+				</div>
+			{/each}
 		{:else if workflows.length === 0}
 			<!-- Empty state — inline, no centering theater -->
 			<div class="px-4 py-8 flex items-center gap-3" style="border-bottom: 1px solid oklch(0.18 0.01 250)">
@@ -1251,12 +1287,10 @@
 					role="button"
 					tabindex="0"
 				>
-					<!-- Name -->
+					<!-- Name — always two lines to keep row heights uniform -->
 					<div class="flex flex-col min-w-0 gap-0.5">
 						<span class="text-sm font-medium truncate" style="color: oklch(0.88 0.02 250)">{wf.name}</span>
-						{#if wf.description}
-							<span class="text-xs truncate" style="color: oklch(0.42 0.02 250)">{wf.description}</span>
-						{/if}
+						<span class="text-xs truncate" style="color: oklch(0.42 0.02 250); min-height: 1rem">{wf.description ?? ''}</span>
 					</div>
 
 					<!-- Status -->
@@ -1403,6 +1437,8 @@
 	.wf-list-row {
 		border-bottom: 1px solid oklch(0.18 0.01 250);
 		transition: background 0.1s;
+		min-height: 48px;
+		align-items: center;
 	}
 
 	.wf-list-row:hover {

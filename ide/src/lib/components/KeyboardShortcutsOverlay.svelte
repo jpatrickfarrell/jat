@@ -15,9 +15,16 @@
 	 */
 	import type { KeyboardShortcut } from '$lib/actions/listNav';
 
+	export interface SectionEntry {
+		key: string;
+		description: string;
+		/** Optional oklch color to tint the key badge — used for legend entries */
+		color?: string;
+	}
+
 	export interface ShortcutSection {
 		title: string;
-		shortcuts: KeyboardShortcut[];
+		shortcuts: SectionEntry[];
 	}
 
 	let {
@@ -102,9 +109,11 @@
 				{#if sections && sections.length > 0}
 					{#each sections as section, sIdx (section.title + '::' + sIdx)}
 						<div class="kso-section-title">{section.title}</div>
-						{#each section.shortcuts as { key, description }, i (section.title + '::' + key + '::' + i)}
+						{#each section.shortcuts as { key, description, color }, i (section.title + '::' + key + '::' + i)}
 							<div class="kso-row">
-								<kbd class="kso-key">{key}</kbd>
+								<kbd class="kso-key" style={color ? `color:${color};border-color:color-mix(in oklch,${color} 50%,oklch(0.35 0.02 250));background:color-mix(in oklch,${color} 12%,oklch(0.25 0.02 250))` : ''}>
+									{key}
+								</kbd>
 								<span class="kso-description">{description}</span>
 							</div>
 						{/each}

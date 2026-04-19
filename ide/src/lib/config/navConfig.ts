@@ -103,27 +103,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'work'
 		},
 		{
-			id: 'open-tasks',
-			label: 'Open Tasks',
-			href: '/open-tasks',
-			icon: 'data',
-			category: 'labs'
-		},
-		{
-			id: 'triage',
-			label: 'Triage',
-			href: '/triage',
-			icon: 'radar',
-			category: 'labs'
-		},
-		{
-			id: 'monitor',
-			label: 'Monitor',
-			href: '/monitor',
-			icon: 'tmux',
-			category: 'labs'
-		},
-		{
 			id: 'sessions',
 			label: 'Sessions',
 			href: '/sessions',
@@ -218,13 +197,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'configure'
 		},
 		{
-			id: 'clients',
-			label: 'Clients',
-			href: '/clients',
-			icon: 'clients',
-			category: 'labs'
-		},
-		{
 			id: 'config',
 			label: 'Config',
 			href: '/config',
@@ -260,7 +232,35 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			icon: 'columns',
 			category: 'views'
 		},
-		// LABS: Experimental features
+		// LABS: Experimental — debug mode only (hidden unless debug mode enabled in account settings)
+		{
+			id: 'open-tasks',
+			label: 'Open Tasks',
+			href: '/open-tasks',
+			icon: 'list',
+			category: 'labs'
+		},
+		{
+			id: 'triage',
+			label: 'Triage',
+			href: '/triage',
+			icon: 'radar',
+			category: 'labs'
+		},
+		{
+			id: 'monitor',
+			label: 'Monitor',
+			href: '/monitor',
+			icon: 'pulse',
+			category: 'labs'
+		},
+		{
+			id: 'clients',
+			label: 'Clients',
+			href: '/clients',
+			icon: 'clients',
+			category: 'labs'
+		},
 		{
 			id: 'quick-commands',
 			label: 'Commands',

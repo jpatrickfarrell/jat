@@ -1250,23 +1250,56 @@
 {/if}
 
 <!-- Keyboard Shortcuts Overlay (press ?) -->
-<KeyboardShortcutsOverlay title="Files Keyboard Shortcuts" bind:open={shortcutsOpen} shortcuts={[
-	{ key: 'j / ↓', description: 'Move focus down in tree' },
-	{ key: 'k / ↑', description: 'Move focus up in tree' },
-	{ key: '→', description: 'Expand folder / open file' },
-	{ key: '←', description: 'Collapse folder / go to parent' },
-	{ key: 'Enter', description: 'Open file or toggle folder' },
-	{ key: 'Esc', description: 'Clear tree focus' },
-	{ key: 'Ctrl+S', description: 'Save current file' },
-	{ key: 'Alt+W', description: 'Close current tab' },
-	{ key: 'Alt+[', description: 'Previous tab' },
-	{ key: 'Alt+]', description: 'Next tab' },
-	{ key: 'Alt+P', description: 'Quick file finder' },
-	{ key: 'Ctrl+\\', description: 'Toggle file tree' },
-	{ key: 'F2 / R', description: 'Rename selected file (tree)' },
-	{ key: 'D / Del', description: 'Delete selected file (tree)' },
-	{ key: 'F', description: 'New file in current folder' },
-	{ key: 'O', description: 'New folder in current folder' },
+<KeyboardShortcutsOverlay title="Files Keyboard Shortcuts" bind:open={shortcutsOpen} sections={[
+	{
+		title: 'Navigation',
+		shortcuts: [
+			{ key: 'j / ↓', description: 'Move focus down in tree' },
+			{ key: 'k / ↑', description: 'Move focus up in tree' },
+			{ key: '→', description: 'Expand folder / open file' },
+			{ key: '←', description: 'Collapse folder / go to parent' },
+			{ key: 'Enter', description: 'Open file or toggle folder' },
+			{ key: 'Esc', description: 'Clear tree focus' },
+		]
+	},
+	{
+		title: 'Editor',
+		shortcuts: [
+			{ key: 'Ctrl+S', description: 'Save current file' },
+			{ key: 'Alt+W', description: 'Close current tab' },
+			{ key: 'Alt+[', description: 'Previous tab' },
+			{ key: 'Alt+]', description: 'Next tab' },
+			{ key: 'Alt+P', description: 'Quick file finder' },
+			{ key: 'Ctrl+K', description: 'Search in files' },
+			{ key: 'Ctrl+\\', description: 'Toggle file tree' },
+		]
+	},
+	{
+		title: 'File Operations',
+		shortcuts: [
+			{ key: 'F2 / R', description: 'Rename selected file' },
+			{ key: 'D / Del', description: 'Delete selected file' },
+			{ key: 'F', description: 'New file in current folder' },
+			{ key: 'O', description: 'New folder in current folder' },
+			{ key: 'C', description: 'Copy path to clipboard' },
+			{ key: 'Ctrl+Z', description: 'Undo last file operation' },
+		]
+	},
+	{
+		title: 'File Colors',
+		shortcuts: [
+			{ key: '.ts / .tsx', description: 'TypeScript',            color: 'oklch(0.65 0.16 240)' },
+			{ key: '.js / .jsx', description: 'JavaScript',            color: 'oklch(0.72 0.15 85)'  },
+			{ key: '.svelte',    description: 'Svelte',                color: 'oklch(0.65 0.15 45)'  },
+			{ key: '.vue',       description: 'Vue',                   color: 'oklch(0.65 0.15 145)' },
+			{ key: '.css/.scss', description: 'Styles',                color: 'oklch(0.65 0.14 290)' },
+			{ key: '.json/.yml', description: 'Config / Data',         color: 'oklch(0.68 0.10 200)' },
+			{ key: '.md',        description: 'Markdown / Docs',       color: 'oklch(0.65 0.08 200)' },
+			{ key: '.sh/.bash',  description: 'Shell scripts',         color: 'oklch(0.65 0.14 145)' },
+			{ key: '.env',       description: 'Secrets / Environment', color: 'oklch(0.65 0.15 25)'  },
+			{ key: '.lock',      description: 'Lockfiles',             color: 'oklch(0.62 0.10 85)'  },
+		]
+	},
 ]} />
 
 <style>

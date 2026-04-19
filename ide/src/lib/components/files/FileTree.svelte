@@ -132,6 +132,41 @@
 	let gitBehind = $state(0);
 	let gitBranch = $state<string | null>(null);
 	let isGitClean = $state(true);
+	let lastGitFetch = $state<Date | null>(null);
+
+	// Undo state
+	interface UndoOp { label: string; undo: () => Promise<void> }
+	let pendingUndo = $state<UndoOp | null>(null);
+	let undoExecuting = $state(false);
+	let undoError = $state<string | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function scheduleUndo(op: UndoOp) {
+		if (undoTimer) clearTimeout(undoTimer);
+		pendingUndo = op;
+		undoError = null;
+		undoTimer = setTimeout(() => { pendingUndo = null; undoTimer = null; }, 5000);
+	}
+
+	function clearUndo() {
+		if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+		pendingUndo = null;
+		undoError = null;
+	}
+
+	async function executeUndo() {
+		if (!pendingUndo || undoExecuting) return;
+		undoExecuting = true;
+		undoError = null;
+		try {
+			await pendingUndo.undo();
+			clearUndo();
+		} catch (err) {
+			undoError = err instanceof Error ? err.message : 'Undo failed';
+		} finally {
+			undoExecuting = false;
+		}
+	}
 
 	// Tree change detection state
 	let hasTreeChanges = $state(false);
@@ -247,6 +282,7 @@
 			}
 
 			gitStatusMap = newMap;
+			lastGitFetch = new Date();
 		} catch (err) {
 			console.debug('[FileTree] Failed to fetch git status:', err);
 		}
@@ -815,10 +851,11 @@
 				onFileRename(renameModal.path, result.newPath);
 			}
 
-			// Success notification
-			if (onSuccess) {
-				onSuccess(`Renamed "${originalName}" to "${newName}"`);
-			}
+			// Capture values for undo before modal closes
+			const undoOldPath = renameModal.path;
+			const undoOldName = originalName;
+			const undoNewPath = result.newPath as string;
+			const undoNewName = newName;
 
 			// Refresh the parent folder
 			const parentPath = renameModal.path.includes('/')
@@ -826,17 +863,45 @@
 				: '';
 
 			if (parentPath) {
-				// Reload parent folder
 				const entries = await fetchDirectory(parentPath);
 				const newLoaded = new Map(loadedFolders);
 				newLoaded.set(parentPath, entries);
 				loadedFolders = newLoaded;
 			} else {
-				// Reload root
 				await loadRoot();
 			}
 
 			closeRenameModal();
+
+			// Schedule undo AFTER modal closes (avoids state conflicts)
+			scheduleUndo({
+				label: `Renamed "${undoOldName}" → "${undoNewName}"`,
+				async undo() {
+					const params = new URLSearchParams({ project, path: undoNewPath });
+					const res = await fetch(`/api/files/content?${params}`, {
+						method: 'PATCH',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ newName: undoOldName })
+					});
+					if (!res.ok) throw new Error('Undo rename failed');
+					const data = await res.json();
+					if (onFileRename) onFileRename(undoNewPath, data.newPath);
+					if (parentPath) {
+						const entries = await fetchDirectory(parentPath);
+						const newLoaded = new Map(loadedFolders);
+						newLoaded.set(parentPath, entries);
+						loadedFolders = newLoaded;
+					} else {
+						await loadRoot();
+					}
+					if (onSuccess) onSuccess(`Restored "${undoOldName}"`);
+					await fetchGitStatus();
+				}
+			});
+
+			if (onSuccess) {
+				onSuccess(`Renamed "${undoOldName}" to "${undoNewName}"`);
+			}
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : 'Failed to rename';
 			renameError = errorMsg;
@@ -872,62 +937,95 @@
 	async function performDelete() {
 		if (!deleteModal) return;
 
-		const name = deleteModal.name;
+		const deletedName = deleteModal.name;
+		const deletedPath = deleteModal.path;
 		const isFolder = deleteModal.isFolder;
+		const parentPath = deletedPath.includes('/')
+			? deletedPath.substring(0, deletedPath.lastIndexOf('/'))
+			: '';
 
 		isDeleting = true;
 		deleteError = null;
 
-		try {
-			const params = new URLSearchParams({
-				project,
-				path: deleteModal.path
-			});
+		// For files: snapshot content before deletion so we can offer undo
+		let savedContent: string | null = null;
+		if (!isFolder) {
+			try {
+				const contentParams = new URLSearchParams({ project, path: deletedPath });
+				const contentRes = await fetch(`/api/files/content?${contentParams}`);
+				if (contentRes.ok) {
+					const contentData = await contentRes.json();
+					savedContent = contentData.content ?? null;
+				}
+			} catch { /* undo won't be available */ }
+		}
 
-			const response = await fetch(`/api/files/content?${params}`, {
-				method: 'DELETE'
-			});
+		try {
+			const params = new URLSearchParams({ project, path: deletedPath });
+			const response = await fetch(`/api/files/content?${params}`, { method: 'DELETE' });
 
 			if (!response.ok) {
 				const data = await response.json();
-				const errorMsg = getOperationErrorMessage(data.error || '', response.status, 'delete', name);
-				deleteError = errorMsg;
+				deleteError = getOperationErrorMessage(data.error || '', response.status, 'delete', deletedName);
 				return;
 			}
 
 			// Notify parent of delete
-			if (onFileDelete) {
-				onFileDelete(deleteModal.path);
-			}
-
-			// Success notification
-			if (onSuccess) {
-				onSuccess(`Deleted ${isFolder ? 'folder' : 'file'} "${name}"`);
-			}
+			if (onFileDelete) onFileDelete(deletedPath);
 
 			// Refresh the parent folder
-			const parentPath = deleteModal.path.includes('/')
-				? deleteModal.path.substring(0, deleteModal.path.lastIndexOf('/'))
-				: '';
-
 			if (parentPath) {
-				// Reload parent folder
 				const entries = await fetchDirectory(parentPath);
 				const newLoaded = new Map(loadedFolders);
 				newLoaded.set(parentPath, entries);
 				loadedFolders = newLoaded;
 			} else {
-				// Reload root
 				await loadRoot();
 			}
 
 			closeDeleteModal();
+
+			// Offer undo for files where we saved the content
+			if (!isFolder && savedContent !== null) {
+				const contentToRestore = savedContent;
+				scheduleUndo({
+					label: `Deleted "${deletedName}"`,
+					async undo() {
+						// Re-create file
+						const createParams = new URLSearchParams({
+							project, path: parentPath, name: deletedName, type: 'file'
+						});
+						const createRes = await fetch(`/api/files/content?${createParams}`, { method: 'POST' });
+						if (!createRes.ok) throw new Error('Failed to restore file');
+						// Restore content
+						const writeParams = new URLSearchParams({ project, path: deletedPath });
+						const writeRes = await fetch(`/api/files/content?${writeParams}`, {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ content: contentToRestore })
+						});
+						if (!writeRes.ok) throw new Error('Failed to restore file content');
+						// Refresh
+						if (parentPath) {
+							const entries = await fetchDirectory(parentPath);
+							const newLoaded = new Map(loadedFolders);
+							newLoaded.set(parentPath, entries);
+							loadedFolders = newLoaded;
+						} else {
+							await loadRoot();
+						}
+						if (onSuccess) onSuccess(`Restored "${deletedName}"`);
+					}
+				});
+			}
+
+			if (onSuccess) {
+				onSuccess(`Deleted ${isFolder ? 'folder' : 'file'} "${deletedName}"`);
+			}
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : 'Failed to delete';
 			deleteError = errorMsg;
-			if (onError) {
-				onError(errorMsg);
-			}
+			if (onError) onError(errorMsg);
 		} finally {
 			isDeleting = false;
 		}
@@ -1198,6 +1296,15 @@
 		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable || target.closest?.('.monaco-editor')) {
 			return;
 		}
+
+		// Ctrl+Z — undo last file operation (intercept before modifier guard)
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndo) {
+			e.preventDefault();
+			e.stopPropagation();
+			executeUndo();
+			return;
+		}
+
 		// Skip if modifier keys are held (except for Escape which has no modifier)
 		if ((e.ctrlKey || e.metaKey || e.altKey) && e.key !== 'Escape') {
 			return;
@@ -1629,6 +1736,25 @@
 						{gitStatusMap.size} changed
 					</span>
 				{/if}
+				{#if lastGitFetch}
+					<span class="git-fetch-time" title="Git status last checked">
+						· {lastGitFetch.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+					</span>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Undo Bar -->
+		{#if pendingUndo}
+			<div class="undo-bar" transition:slide={{ duration: 120 }}>
+				<span class="undo-label" title={pendingUndo.label}>{pendingUndo.label}</span>
+				<button class="undo-btn" onclick={executeUndo} disabled={undoExecuting} title="Undo (Ctrl+Z)">
+					{undoExecuting ? '…' : 'Undo'}
+				</button>
+				{#if undoError}
+					<span class="undo-error" title={undoError}>!</span>
+				{/if}
+				<button class="undo-dismiss" onclick={clearUndo} title="Dismiss" aria-label="Dismiss undo">×</button>
 			</div>
 		{/if}
 	</div>
@@ -2100,6 +2226,77 @@
 		border-radius: 0.25rem;
 		font-weight: 500;
 		margin-left: auto;
+	}
+
+	.git-fetch-time {
+		font-size: 0.65rem;
+		color: oklch(0.45 0.02 250);
+		flex-shrink: 0;
+	}
+
+	/* Undo bar */
+	.undo-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.5rem;
+		background: oklch(0.22 0.02 250);
+		border-top: 1px solid oklch(0.28 0.03 250);
+		font-size: 0.75rem;
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+	}
+
+	.undo-label {
+		flex: 1;
+		color: oklch(0.65 0.03 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.undo-btn {
+		flex-shrink: 0;
+		background: none;
+		border: 1px solid oklch(0.65 0.12 200 / 0.5);
+		border-radius: 3px;
+		color: oklch(0.70 0.12 200);
+		font-family: inherit;
+		font-size: 0.7rem;
+		padding: 0.1rem 0.5rem;
+		cursor: pointer;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.undo-btn:hover:not(:disabled) {
+		background: oklch(0.65 0.12 200 / 0.15);
+		color: oklch(0.85 0.14 200);
+	}
+
+	.undo-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.undo-error {
+		color: oklch(0.65 0.15 25);
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+
+	.undo-dismiss {
+		background: none;
+		border: none;
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		font-size: 0.85rem;
+		line-height: 1;
+		padding: 0 0.2rem;
+		flex-shrink: 0;
+		transition: color 0.12s;
+	}
+
+	.undo-dismiss:hover {
+		color: oklch(0.65 0.02 250);
 	}
 
 	/* Tree Changes Bar */

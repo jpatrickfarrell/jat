@@ -1108,7 +1108,7 @@
 						<div class="commands-panel" transition:slide={{ duration: 150 }}>
 							<!-- Handle epic-type-task case -->
 							{#if task?.issue_type === "epic"}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+								<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 									This task is already an epic
 								</div>
 								<!-- Show epic list (with or without a task) -->
@@ -1148,7 +1148,7 @@
 														epicSearchQuery = "";
 														epicSearchInput?.focus();
 													}}
-													class="text-white/40 hover:text-white/70 transition-colors"
+													class="text-base-content/40 hover:text-base-content/70 transition-colors"
 												>
 													<svg
 														class="w-3 h-3"
@@ -1170,7 +1170,7 @@
 								{/if}
 
 								{#if epicsLoading}
-									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 										<span class="loading loading-spinner loading-xs"></span>
 										<span class="ml-1">Loading epics...</span>
 									</div>
@@ -1183,11 +1183,11 @@
 										>
 									</div>
 								{:else if epics.length === 0}
-									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 										No epics in this project
 									</div>
 								{:else if filteredEpics.length === 0}
-									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 										No epics match "{epicSearchQuery}"
 									</div>
 								{:else}
@@ -1443,7 +1443,7 @@
 													commandSearchQuery = "";
 													commandSearchInput?.focus();
 												}}
-												class="text-white/40 hover:text-white/70 transition-colors"
+												class="text-base-content/40 hover:text-base-content/70 transition-colors"
 											>
 												<svg
 													class="w-3 h-3"
@@ -1465,7 +1465,7 @@
 							{/if}
 
 							{#if commandsLoading}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+								<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 									<span class="loading loading-spinner loading-xs"></span>
 									<span class="ml-1">Loading...</span>
 								</div>
@@ -1478,7 +1478,7 @@
 									>
 								</div>
 							{:else if filteredCommands.length === 0}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+								<div class="px-3 py-3 text-center text-[10px] text-base-content/50">
 									No commands match "{commandSearchQuery}"
 								</div>
 							{:else}

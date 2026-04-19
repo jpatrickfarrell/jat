@@ -1277,6 +1277,19 @@
 }
 
 /* ==========================================================================
+   LIST NAV FOCUS (baseline .jk-focused)
+   Applied automatically by the listNav action on the currently focused item.
+   Pages can override with their own class (e.g. .to-jk-focused) for richer
+   styling — this is the fallback so any list wiring up listNav has feedback.
+   ========================================================================== */
+
+.jk-focused {
+	outline: 2px solid oklch(0.65 0.15 240 / 0.55);
+	outline-offset: -2px;
+	background: oklch(0.22 0.03 240 / 0.35);
+}
+
+/* ==========================================================================
    STANDARDIZED ANIMATION UTILITY CLASSES
    Reusable animations for consistent UI interactions across the IDE.
    These replace duplicated @keyframes in component <style> blocks.

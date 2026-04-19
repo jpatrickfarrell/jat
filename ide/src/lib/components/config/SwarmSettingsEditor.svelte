@@ -777,16 +777,6 @@
 		margin-bottom: 1rem;
 	}
 
-	.section-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.9rem;
-		font-weight: 600;
-		color: oklch(0.80 0.08 200);
-		font-family: ui-monospace, monospace;
-	}
-
 	.section-header-with-actions + .settings-grid {
 		margin-top: 0;
 	}

@@ -15,15 +15,32 @@
 	 */
 	import type { KeyboardShortcut } from '$lib/actions/listNav';
 
+	export interface ShortcutSection {
+		title: string;
+		shortcuts: KeyboardShortcut[];
+	}
+
 	let {
 		shortcuts = [],
-		title = 'Keyboard Shortcuts'
+		sections,
+		title = 'Keyboard Shortcuts',
+		open = $bindable(false)
 	}: {
 		shortcuts?: KeyboardShortcut[];
+		/**
+		 * Optional grouped sections (e.g. mode-specific shortcut tables for
+		 * /tasks-fast: list / detail / compose). When provided, takes
+		 * precedence over the flat `shortcuts` prop.
+		 */
+		sections?: ShortcutSection[];
 		title?: string;
+		open?: boolean;
 	} = $props();
 
-	let isOpen = $state(false);
+	let isOpen = $state(open);
+
+	$effect(() => { isOpen = open; });
+	$effect(() => { open = isOpen; });
 
 	function isTypingTarget(target: EventTarget | null): boolean {
 		if (!(target instanceof HTMLElement)) return false;
@@ -82,12 +99,24 @@
 				</button>
 			</div>
 			<div class="kso-list">
-				{#each shortcuts as { key, description }, i (key + '::' + i)}
-					<div class="kso-row">
-						<kbd class="kso-key">{key}</kbd>
-						<span class="kso-description">{description}</span>
-					</div>
-				{/each}
+				{#if sections && sections.length > 0}
+					{#each sections as section, sIdx (section.title + '::' + sIdx)}
+						<div class="kso-section-title">{section.title}</div>
+						{#each section.shortcuts as { key, description }, i (section.title + '::' + key + '::' + i)}
+							<div class="kso-row">
+								<kbd class="kso-key">{key}</kbd>
+								<span class="kso-description">{description}</span>
+							</div>
+						{/each}
+					{/each}
+				{:else}
+					{#each shortcuts as { key, description }, i (key + '::' + i)}
+						<div class="kso-row">
+							<kbd class="kso-key">{key}</kbd>
+							<span class="kso-description">{description}</span>
+						</div>
+					{/each}
+				{/if}
 				<div class="kso-row kso-row-meta">
 					<kbd class="kso-key">?</kbd>
 					<span class="kso-description">Toggle this overlay</span>
@@ -175,6 +204,21 @@
 		align-items: center;
 		gap: 1rem;
 		padding: 0.4rem 0.25rem;
+	}
+
+	.kso-section-title {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: oklch(0.62 0.05 240);
+		padding: 0.55rem 0.25rem 0.2rem;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+		margin-top: 0.25rem;
+	}
+
+	.kso-section-title:first-of-type {
+		margin-top: 0;
+		padding-top: 0.1rem;
 	}
 
 	.kso-row-meta {

@@ -337,6 +337,19 @@ export function getFileChangesCount(): number {
 	return get(fileChangesCount);
 }
 
+// Submitted tasks count store (for /tasks-fast Inbox sidebar badge).
+// Counted from the all-tasks fetch in +layout.svelte so the badge stays
+// accurate even when the user hasn't visited /tasks-fast yet.
+export const submittedTasksCount = writable(0);
+
+export function setSubmittedTasksCount(count: number) {
+	submittedTasksCount.set(count);
+}
+
+export function getSubmittedTasksCount(): number {
+	return get(submittedTasksCount);
+}
+
 // Mobile fullscreen overlay state (hides MobileDock when open)
 export const isMobileFullscreenOpen = writable(false);
 

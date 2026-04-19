@@ -21,7 +21,7 @@
 
 	import { page } from '$app/stores';
 	import { unifiedNavConfig, NAV_GROUPS, type NavGroup } from '$lib/config/navConfig';
-	import { isSidebarCollapsed, sidebarState, sidebarHelpOpen, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount, navFlashRoute } from '$lib/stores/drawerStore';
+	import { isSidebarCollapsed, sidebarState, sidebarHelpOpen, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount, submittedTasksCount, navFlashRoute } from '$lib/stores/drawerStore';
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { getCollapsedNavGroups, toggleCollapsedNavGroup, isNavGroupCollapsed, getDebugMode } from '$lib/stores/preferences.svelte';
@@ -77,6 +77,7 @@
 	function getBadgeCount(itemId: string): number {
 		switch (itemId) {
 			case 'tasks': return $activeAgentSessionsCount;
+			case 'tasks-fast': return $submittedTasksCount;
 			case 'sessions': return $activeSessionsCount;
 			case 'source': return $gitChangesCount;
 			case 'servers': return $runningServersCount;
@@ -88,6 +89,7 @@
 	// Badge color configs per item
 	const badgeColors: Record<string, { bg: string; text: string; border: string; dot: string }> = {
 		tasks: { bg: 'oklch(0.55 0.15 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.15 85 / 0.4)', dot: 'oklch(0.75 0.15 85)' },
+		'tasks-fast': { bg: 'oklch(0.55 0.18 30 / 0.25)', text: 'oklch(0.85 0.15 40)', border: 'oklch(0.60 0.18 30 / 0.45)', dot: 'oklch(0.75 0.18 40)' },
 		sessions: { bg: 'oklch(0.55 0.15 145 / 0.25)', text: 'oklch(0.75 0.15 145)', border: 'oklch(0.55 0.15 145 / 0.4)', dot: 'oklch(0.70 0.15 145)' },
 		source: { bg: 'oklch(0.55 0.15 220 / 0.25)', text: 'oklch(0.80 0.12 220)', border: 'oklch(0.55 0.15 220 / 0.4)', dot: 'oklch(0.75 0.12 220)' },
 		servers: { bg: 'oklch(0.50 0.02 250 / 0.3)', text: 'oklch(0.75 0.02 250)', border: 'oklch(0.50 0.02 250 / 0.4)', dot: 'oklch(0.65 0.02 250)' },
@@ -98,6 +100,7 @@
 	function getBadgeTitle(itemId: string, count: number): string {
 		switch (itemId) {
 			case 'tasks': return `${count} active agent${count === 1 ? '' : 's'}`;
+			case 'tasks-fast': return `${count} submitted task${count === 1 ? '' : 's'} awaiting reply`;
 			case 'sessions': return `${count} active session${count === 1 ? '' : 's'}`;
 			case 'source': return `${count} file${count === 1 ? '' : 's'} with changes`;
 			case 'servers': return `${count} running server${count === 1 ? '' : 's'}`;
@@ -111,6 +114,7 @@
 		// WORK: Daily workflow
 		mobile: 'M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3',
 		tasks: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+		bolt: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
 		tmux: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 		history: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
 		// CODE: Development tools

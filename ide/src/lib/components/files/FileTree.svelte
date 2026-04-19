@@ -1298,13 +1298,32 @@
 			loadedFolders = new Map();
 			loadingFolders = new Set();
 			filterTerm = '';
+			gitStatusMap = new Map();
 			// Reset tree change detection state
 			hasTreeChanges = false;
 			knownFingerprints = new Map();
 			stopTreeChangePolling();
+			stopGitStatusPolling();
 			loadRoot();
+			fetchGitStatus();
+			startGitStatusPolling();
 		}
 	});
+
+	let gitStatusInterval: ReturnType<typeof setInterval> | null = null;
+
+	function startGitStatusPolling() {
+		if (gitStatusInterval) return;
+		if (document.visibilityState === 'hidden') return;
+		gitStatusInterval = setInterval(fetchGitStatus, 30_000);
+	}
+
+	function stopGitStatusPolling() {
+		if (gitStatusInterval) {
+			clearInterval(gitStatusInterval);
+			gitStatusInterval = null;
+		}
+	}
 
 	onMount(() => {
 		// Load config for ignored directories
@@ -1313,6 +1332,7 @@
 		if (project) {
 			loadRoot();
 			fetchGitStatus();
+			startGitStatusPolling();
 			// Start tree change detection polling
 			startTreeChangePolling();
 		}
@@ -1321,10 +1341,13 @@
 		function handleVisibilityChange() {
 			if (document.visibilityState === 'visible') {
 				// Resume polling and check immediately
+				fetchGitStatus();
+				startGitStatusPolling();
 				checkForTreeChanges();
 				startTreeChangePolling();
 			} else {
 				// Pause polling when tab is hidden
+				stopGitStatusPolling();
 				stopTreeChangePolling();
 			}
 		}
@@ -1333,6 +1356,7 @@
 
 		// Cleanup on unmount
 		return () => {
+			stopGitStatusPolling();
 			stopTreeChangePolling();
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		};

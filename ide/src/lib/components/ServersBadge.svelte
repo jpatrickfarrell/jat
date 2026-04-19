@@ -81,6 +81,9 @@
 	let badgeRef = $state<HTMLElement | null>(null);
 	let dropdownRef = $state<HTMLElement | null>(null);
 	let openedViaKeyboard = $state(false);
+	let recentlyStoppedProject = $state<{ key: string; displayName: string } | null>(null);
+	let recentlyStoppedTimer: ReturnType<typeof setTimeout> | null = null;
+	let focusedTooltip = $state('');
 
 	// WebSocket reconnection flash — dot pulses when connection re-establishes
 	let wsJustConnected = $state(false);
@@ -217,9 +220,21 @@
 		fetchProjects();
 		fetchServers();
 
-		// Poll servers every 15 seconds (server status rarely changes)
 		const interval = setInterval(() => fetchServers(), 15000);
-		return () => clearInterval(interval);
+
+		// Alt+` focuses the servers badge from anywhere in the app
+		function handleGlobalKeydown(e: KeyboardEvent) {
+			if (e.altKey && e.key === '`' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+				e.preventDefault();
+				badgeRef?.focus();
+			}
+		}
+		document.addEventListener('keydown', handleGlobalKeydown);
+
+		return () => {
+			clearInterval(interval);
+			document.removeEventListener('keydown', handleGlobalKeydown);
+		};
 	});
 
 	// Dropdown handlers
@@ -283,6 +298,12 @@
 		try {
 			await stopServer(session.sessionName);
 			playServerStopSound();
+			const stoppedProj = allProjects.find(p => p.key === projectKey);
+			if (stoppedProj) {
+				recentlyStoppedProject = { key: projectKey, displayName: stoppedProj.displayName };
+				if (recentlyStoppedTimer) clearTimeout(recentlyStoppedTimer);
+				recentlyStoppedTimer = setTimeout(() => { recentlyStoppedProject = null; }, 4000);
+			}
 		} catch (e) {
 			error = `Failed to stop ${projectKey}`;
 			lastFailedAction = { type: 'stop', projectKey };
@@ -321,6 +342,14 @@
 			await handleStop(projectKey);
 		}
 		else if (type === 'restart') await handleRestart(projectKey);
+	}
+
+	async function handleUndoStop() {
+		if (!recentlyStoppedProject) return;
+		const { key } = recentlyStoppedProject;
+		recentlyStoppedProject = null;
+		if (recentlyStoppedTimer) { clearTimeout(recentlyStoppedTimer); recentlyStoppedTimer = null; }
+		await handleStart(key);
 	}
 
 	function handleOpenBrowser(port: number) {
@@ -396,7 +425,7 @@
 >
 	<span
 		bind:this={badgeRef}
-		class="h-7 px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all duration-300 cursor-pointer"
+		class="badge-trigger h-7 px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all duration-300 cursor-pointer"
 		tabindex="0"
 		role="button"
 		aria-expanded={showDropdown}
@@ -460,6 +489,13 @@
 			role="region"
 			aria-label="Dev servers"
 			onkeydown={handleDropdownKeydown}
+			onfocusin={(e) => {
+				const btn = (e.target as HTMLElement).closest('[data-action-label]');
+				if (btn) focusedTooltip = btn.getAttribute('data-action-label') || '';
+			}}
+			onfocusout={(e: FocusEvent) => {
+				if (!dropdownRef?.contains(e.relatedTarget as Node)) focusedTooltip = '';
+			}}
 		>
 			<!-- Error message -->
 			{#if error}
@@ -467,19 +503,32 @@
 					<span class="error-text">{error}</span>
 					<div class="error-actions">
 						{#if lastFailedAction}
-							<button class="error-action-btn" onclick={retryLastAction} title="Retry">
+							<button class="error-action-btn" onclick={retryLastAction} title="Retry" data-action-label="Retry">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
 								</svg>
 								Retry
 							</button>
 						{/if}
-						<button class="error-action-btn error-action-dismiss" onclick={() => { error = null; lastFailedAction = null; }} title="Dismiss">
+						<button class="error-action-btn error-action-dismiss" onclick={() => { error = null; lastFailedAction = null; }} title="Dismiss" data-action-label="Dismiss error">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 							</svg>
 						</button>
 					</div>
+				</div>
+			{/if}
+
+			<!-- Undo row (4s window after server stop) -->
+			{#if recentlyStoppedProject}
+				<div class="undo-row">
+					<span class="undo-text">Stopped {recentlyStoppedProject.displayName}</span>
+					<button class="undo-btn" onclick={handleUndoStop} data-action-label="Restart stopped server">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+						</svg>
+						Restart
+					</button>
 				</div>
 			{/if}
 
@@ -509,13 +558,11 @@
 										{project.displayName}
 									</span>
 									<span
-										class="text-[10px] px-1.5 py-0.5 rounded font-mono"
-										style="background: oklch(0.22 0.02 250); color: {getStatusColor(
-											session?.status,
-										)};"
-									>
-										{getStatusLabel(session?.status)}
-									</span>
+										class="status-dot"
+										style="background: {getStatusColor(session?.status)};"
+										title={getStatusLabel(session?.status)}
+										aria-label={getStatusLabel(session?.status)}
+									></span>
 								</div>
 								<div class="flex items-center gap-2 mt-0.5">
 									<span
@@ -544,6 +591,7 @@
 									onclick={() => handleSpawnSession(project.key)}
 									disabled={spawningSession}
 									title="New session for {project.displayName}"
+									data-action-label="New session — {project.displayName}"
 								>
 									{#if spawningSession}
 										<span class="loading loading-spinner loading-xs"></span>
@@ -575,6 +623,7 @@
 											class="action-btn"
 											onclick={() => handleOpenBrowser(project.port)}
 											title="Open in browser"
+											data-action-label="Open in browser"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -596,6 +645,7 @@
 											class="action-btn"
 											onclick={() => handleRestart(project.key)}
 											title="Restart server"
+											data-action-label="Restart server"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -619,6 +669,7 @@
 											onclick={() => handleStop(project.key)}
 											onmouseleave={() => { if (pendingStopProject === project.key) { pendingStopProject = null; } }}
 											title={pendingStopProject === project.key ? 'Click again to confirm stop' : 'Stop server'}
+											data-action-label={pendingStopProject === project.key ? 'Click again to confirm stop' : 'Stop server'}
 										>
 											{#if pendingStopProject === project.key}
 												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
@@ -705,6 +756,11 @@
 	}
 
 	/* Uses global @keyframes dropdown-slide from app.css */
+
+	.badge-trigger:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.55 0.10 145 / 0.7);
+	}
 
 	/* Server row */
 	.server-row {

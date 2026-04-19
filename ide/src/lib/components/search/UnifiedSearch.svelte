@@ -205,8 +205,6 @@
 	// Refs
 	let searchInputEl: HTMLInputElement | undefined;
 	let resultsContainerEl: HTMLDivElement | undefined;
-	let columnsContainerEl: HTMLDivElement | undefined;
-
 	// Keyboard nav via listNav composable
 	const nav = createListNav({
 		getItems: () => resultsContainerEl
@@ -434,7 +432,6 @@
 	function doSearchForActiveTab() {
 		nav.clear();
 		selectedResultIndex = -1;
-		focusedColumn = null;
 		if (activeTab === 'routes') {
 			filterRoutes(query);
 			return;
@@ -519,7 +516,6 @@
 		const currentIndex = TABS.findIndex(t => t.id === activeTab);
 		const nextIndex = (currentIndex + direction + TABS.length) % TABS.length;
 		const newTab = TABS[nextIndex].id;
-		focusedColumn = null;
 		activeTab = newTab;
 		selectedResultIndex = -1;
 		if (mode === 'route') updateUrl();
@@ -603,11 +599,13 @@
 			}
 		}
 
-		// j/k and ArrowDown/Up: result list navigation from input or tab bar
-		if ((e.key === 'j' || e.key === 'ArrowDown' || e.key === 'k' || e.key === 'ArrowUp')
+		// ArrowDown/Up always navigate from input; j/k only navigate from tab bar (not input)
+		const isNavDown = e.key === 'ArrowDown' || (e.key === 'j' && !isInput);
+		const isNavUp = e.key === 'ArrowUp' || (e.key === 'k' && !isInput);
+		if ((isNavDown || isNavUp)
 				&& (isInput || isTabButton)
 				&& !e.ctrlKey && !e.metaKey && !e.altKey) {
-			const isDown = e.key === 'j' || e.key === 'ArrowDown';
+			const isDown = isNavDown;
 			if (isDown) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -661,35 +659,8 @@
 		});
 	}
 
-	// Track which column is "focused" in the All tab's cover-flow
-	let focusedColumn = $state<SourceTab | null>(null);
-
-	// Direct scrollLeft assignment — scrollTo() and rAF both silently fail from Svelte 5 reactivity
-	function scrollToFocusedColumn(col: SourceTab) {
-		const container = columnsContainerEl || document.querySelector('.us-columns-scroll') as HTMLElement | null;
-		if (!container) return;
-		const colEl = container.querySelector(`[data-column="${col}"]`) as HTMLElement | null;
-		if (!colEl) return;
-		const containerRect = container.getBoundingClientRect();
-		const colRect = colEl.getBoundingClientRect();
-		const target = Math.max(0, container.scrollLeft + (colRect.left - containerRect.left) - (containerRect.width / 2) + (colRect.width / 2));
-		container.scrollLeft = target;
-	}
-
-	$effect(() => {
-		const col = focusedColumn;
-		if (!col) return;
-		// Multiple retries to survive layout shifts from async rendering
-		const timers = [
-			setTimeout(() => scrollToFocusedColumn(col), 50),
-			setTimeout(() => scrollToFocusedColumn(col), 200),
-		];
-		return () => timers.forEach(clearTimeout);
-	});
-
 	function switchTab(tab: SourceTab) {
 		nav.clear();
-		focusedColumn = null;
 		activeTab = tab;
 		selectedResultIndex = -1;
 		if (mode === 'route') updateUrl();
@@ -838,8 +809,6 @@
 {#snippet searchUI(isModal: boolean)}
 	<!-- Header: Search bar + tabs -->
 	<div class="flex-none" style="background: {isModal ? 'oklch(0.16 0.02 250)' : 'oklch(0.18 0.01 250)'}; border-bottom: 1px solid oklch(0.25 0.02 250); {isModal ? 'border-radius: 0.75rem 0.75rem 0 0;' : 'padding: 0 1.5rem;'}">
-		<!-- AI Synthesis (above search bar) - no longer used (all tab removed) -->
-
 		<!-- Search input -->
 		<div class="{isModal ? 'px-4 pt-3' : 'pt-5 max-w-4xl mx-auto'}">
 			<div class="relative">
@@ -854,7 +823,7 @@
 					oninput={handleInput}
 					onkeydown={handleKeydown}
 					type="text"
-					placeholder="Search tasks, memory, and files...{isModal ? '' : ' (Ctrl+K)'}"
+					placeholder="Go somewhere, or search tasks, files, memory...{isModal ? '' : ' (Ctrl+K)'}"
 					class="w-full pl-11 pr-4 py-3 rounded-lg text-sm outline-none transition-all duration-200"
 					style="
 						background: oklch(0.14 0.01 250);
@@ -889,15 +858,14 @@
 			<div class="flex gap-0.5">
 				{#each TABS as tab}
 					{@const isActive = activeTab === tab.id}
-					{@const isFocused = focusedColumn === tab.id}
 					<button
 						data-tab={tab.id}
 						onclick={() => switchTab(tab.id)}
 						class="px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1"
 						style="
-							background: {isActive ? 'oklch(0.30 0.04 200)' : isFocused ? 'oklch(0.24 0.03 200)' : 'transparent'};
-							color: {isActive ? 'oklch(0.90 0.10 200)' : isFocused ? 'oklch(0.78 0.08 200)' : 'oklch(0.55 0.02 250)'};
-							border: 1px solid {isActive ? 'oklch(0.40 0.08 200)' : isFocused ? 'oklch(0.35 0.06 200)' : 'transparent'};
+							background: {isActive ? 'oklch(0.30 0.04 200)' : 'transparent'};
+							color: {isActive ? 'oklch(0.90 0.10 200)' : 'oklch(0.55 0.02 250)'};
+							border: 1px solid {isActive ? 'oklch(0.40 0.08 200)' : 'transparent'};
 						"
 						title=""
 					>
@@ -969,7 +937,7 @@
 				<p class="text-sm" style="color: oklch(0.65 0.10 85);">Select a project to search {activeTab === 'filenames' ? 'filenames' : 'file contents'}</p>
 			</div>
 		{:else if loading || filenameLoading || contentLoading}
-			{@render loadingSkeleton()}
+			{@render loadingSkeleton(isModal)}
 		{:else if error}
 			<div class="max-w-2xl mx-auto rounded-lg p-4" style="background: oklch(0.22 0.08 25 / 0.15); border: 1px solid oklch(0.50 0.15 25 / 0.3);">
 				<p class="text-sm" style="color: oklch(0.70 0.15 25);">{error}</p>
@@ -1023,23 +991,27 @@
 
 <!-- === SNIPPETS: Result Renderers === -->
 
-{#snippet loadingSkeleton()}
-	<div class="us-columns-scroll">
-		{#each ['Tasks', 'Memory', 'Filenames', 'Content'] as label}
-			<div class="us-column">
-				<div class="flex items-center gap-1.5 px-1 pb-2">
-					<div class="skeleton w-1.5 h-1.5 rounded-full" style="background: oklch(0.30 0.02 250);"></div>
-					<div class="skeleton h-2.5 w-12 rounded" style="background: oklch(0.25 0.02 250);"></div>
+{#snippet loadingSkeleton(isModal: boolean)}
+	{#if activeTab === 'tasks' || activeTab === 'memory'}
+		<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1 py-2">
+			{#each [1, 2, 3] as _}
+				<div class="rounded-md p-3" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.02 250);">
+					<div class="skeleton h-2.5 w-2/3 rounded mb-2" style="background: oklch(0.25 0.02 250);"></div>
+					<div class="skeleton h-2 w-full rounded" style="background: oklch(0.22 0.02 250);"></div>
 				</div>
-				{#each [1, 2] as __}
-					<div class="rounded-md p-2.5 mb-1" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.02 250);">
-						<div class="skeleton h-2.5 w-full rounded mb-1.5" style="background: oklch(0.25 0.02 250);"></div>
-						<div class="skeleton h-2.5 w-2/3 rounded" style="background: oklch(0.22 0.02 250);"></div>
-					</div>
-				{/each}
-			</div>
-		{/each}
-	</div>
+			{/each}
+		</div>
+	{:else}
+		<div class="{isModal ? 'px-1' : 'max-w-3xl mx-auto'} py-2">
+			{#each [1, 2, 3, 4, 5] as _}
+				<div class="flex items-center gap-2 px-2 py-1.5">
+					<div class="skeleton w-4 h-4 rounded flex-none" style="background: oklch(0.25 0.02 250);"></div>
+					<div class="skeleton h-2.5 w-48 rounded" style="background: oklch(0.25 0.02 250);"></div>
+					<div class="skeleton h-2 w-24 rounded ml-auto" style="background: oklch(0.22 0.02 250);"></div>
+				</div>
+			{/each}
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet routesList(isModal: boolean)}
@@ -1147,7 +1119,7 @@
 				<span class="text-[10px] px-1 py-0.5 rounded" style="background: oklch(0.25 0.04 145 / 0.3); color: oklch(0.65 0.12 145);">{mem.section}</span>
 			{/if}
 		</div>
-		<p class="text-[11px] font-mono truncate mt-0.5" style="color: oklch(0.55 0.02 250);">{mem.file.split('/').pop()}</p>
+		<p class="text-[11px] font-mono truncate mt-0.5" style="color: oklch(0.55 0.02 250);">{mem.file.split('/').slice(-2).join('/')}</p>
 		{#if mem.snippet}
 			<p class="text-[11px] mt-0.5 line-clamp-2" style="color: oklch(0.50 0.02 250);">
 				{@html highlightMatch(truncate(mem.snippet, 150), query)}
@@ -1413,15 +1385,17 @@
 		transition: all 0.12s ease;
 	}
 
-	.us-result-card:hover,
-	.us-result-card.result-selected {
+	.us-result-card:hover {
 		border-color: oklch(0.35 0.06 200);
 		background: oklch(0.22 0.02 250);
 	}
 
 	.us-result-card.result-selected {
 		border-color: oklch(0.45 0.10 200);
+		border-left-color: oklch(0.65 0.15 200);
+		border-left-width: 2px;
 		background: oklch(0.24 0.03 220);
+		padding-left: calc(0.625rem - 1px);
 	}
 
 	/* Filename result item */

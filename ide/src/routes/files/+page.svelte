@@ -73,6 +73,9 @@
 	// Global search state (Ctrl+K)
 	let globalSearchOpen = $state(false);
 
+	// Keyboard shortcuts overlay state
+	let shortcutsOpen = $state(false);
+
 	// FileTree component reference for scrolling
 	let fileTreeRef: { scrollToFile: (path: string) => Promise<void> } | null = $state(null);
 
@@ -586,28 +589,17 @@
 	}
 
 	// Handle content change
-	function handleContentChange(path: string, content: string, dirty: boolean) {
-		// Already updated by FileEditor, just log for now
-		console.log('[Files] Content changed:', path, 'dirty:', dirty);
+	function handleContentChange(_path: string, _content: string, _dirty: boolean) {
+		// State is already updated by FileEditor via bind:openFiles
 	}
 
 	// Handle tab reorder (drag-and-drop)
 	function handleTabReorder(fromIndex: number, toIndex: number) {
 		if (fromIndex === toIndex) return;
-
-		// Create a copy of the array
 		const reordered = [...openFiles];
-
-		// Remove the item from the original position
 		const [movedItem] = reordered.splice(fromIndex, 1);
-
-		// Insert it at the new position
 		reordered.splice(toIndex, 0, movedItem);
-
-		// Update state
 		openFiles = reordered;
-
-		console.log('[Files] Tab reordered from', fromIndex, 'to', toIndex);
 	}
 
 	// Handle file delete from tree
@@ -653,10 +645,8 @@
 	}
 
 	// Handle file create from tree
-	function handleFileCreate(path: string, type: 'file' | 'folder') {
-		// Files will be auto-selected by the FileTree component
-		// Just log for now
-		console.log('[Files] Created:', type, path);
+	function handleFileCreate(_path: string, _type: 'file' | 'folder') {
+		// FileTree auto-selects the new file
 	}
 
 	// Handle tree operation error (show as toast)
@@ -1068,7 +1058,7 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="files-page" style="background: oklch(0.14 0.01 250);">
+<div class="files-page">
 	{#if isLoading}
 		<!-- Loading State -->
 		<FilesSkeleton treeItems={12} tabs={3} />
@@ -1123,6 +1113,18 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 							</svg>
 						</button>
+						<!-- Keyboard shortcuts button -->
+						<button
+							class="search-button"
+							title="Keyboard shortcuts (?)"
+							aria-label="Show keyboard shortcuts"
+							onclick={() => { shortcutsOpen = true; }}
+						>
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<circle cx="12" cy="12" r="10" />
+								<path stroke-linecap="round" d="M12 16v.01M12 13a2 2 0 000-4 2 2 0 010-4" />
+							</svg>
+						</button>
 						<!-- Collapse button (touch-friendly; keyboard: Ctrl+\) -->
 						<button
 							class="search-button"
@@ -1138,7 +1140,7 @@
 					<div class="panel-content file-tree-content">
 						{#if !selectedProject}
 							<div class="panel-empty">
-								<p>Select a project to browse files</p>
+								<p>Select a project from the top bar to browse files</p>
 							</div>
 						{:else}
 							<FileTree
@@ -1217,15 +1219,12 @@
 							{savingFiles}
 						/>
 					{:else}
-						<div class="panel-header">
-							<span class="panel-title">Editor</span>
-						</div>
 						<div class="panel-content">
 							<div class="panel-empty">
 								<svg class="w-12 h-12 text-base-content/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 								</svg>
-								<p class="text-base-content/40 mt-3">Select a project to start</p>
+								<p class="text-base-content/40 mt-3">Select a project from the top bar to get started</p>
 							</div>
 						</div>
 					{/if}
@@ -1259,7 +1258,7 @@
 {/if}
 
 <!-- Keyboard Shortcuts Overlay (press ?) -->
-<KeyboardShortcutsOverlay title="Files Keyboard Shortcuts" shortcuts={[
+<KeyboardShortcutsOverlay title="Files Keyboard Shortcuts" bind:open={shortcutsOpen} shortcuts={[
 	{ key: 'j / ↓', description: 'Move focus down in tree' },
 	{ key: 'k / ↑', description: 'Move focus up in tree' },
 	{ key: '→', description: 'Expand folder / open file' },
@@ -1284,6 +1283,7 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+		background: oklch(0.14 0.01 250);
 	}
 
 	.files-content {
@@ -1354,8 +1354,8 @@
 	}
 
 	.expand-tab {
-		width: 16px;
-		min-width: 16px;
+		width: 20px;
+		min-width: 20px;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -1370,18 +1370,17 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 16px;
+		width: 20px;
 		height: 52px;
 		border-radius: 0 6px 6px 0;
 		background: oklch(0.22 0.02 250);
 		color: oklch(0.55 0.02 250);
-		transition: background 0.15s ease, color 0.15s ease, width 0.15s ease;
+		transition: background 0.15s ease, color 0.15s ease;
 	}
 
 	.expand-tab:hover .expand-tab-inner {
 		background: oklch(0.65 0.15 200 / 0.25);
 		color: oklch(0.75 0.15 200);
-		width: 20px;
 	}
 
 	/* Editor Panel (Right) */

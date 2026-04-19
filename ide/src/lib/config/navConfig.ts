@@ -92,6 +92,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'work'
 		},
 		{
+			id: 'tasks-fast',
+			label: 'Inbox',
+			href: '/tasks-fast',
+			icon: 'bolt',
+			category: 'work'
+		},
+		{
 			id: 'open-tasks',
 			label: 'Open Tasks',
 			href: '/open-tasks',

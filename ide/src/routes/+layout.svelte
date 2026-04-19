@@ -27,7 +27,7 @@
 	import { connect as connectWebSocket, disconnect as disconnectWebSocket, subscribe as wsSubscribe, unsubscribe as wsUnsubscribe, setMessageRelay, setSubscriptionRouter, injectMessage, setFollowerConnected, subscribeDirect, unsubscribeDirect, type Channel } from '$lib/stores/websocket.svelte';
 	import { initLeaderElection, destroyLeaderElection, setWsCallbacks, relayToFollowers, onRelayedMessage, requestSubscribe, requestUnsubscribe, onRoleChange } from '$lib/utils/wsLeaderElection';
 	import { getExtraChannelsForRoute } from '$lib/config/wsChannelMap';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, syncSidebarFromPreferences, isMobileFullscreenOpen, sidebarState, sidebarHelpOpen, cycleSidebarState, navFlashRoute } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, setSubmittedTasksCount, syncSidebarFromPreferences, isMobileFullscreenOpen, sidebarState, sidebarHelpOpen, cycleSidebarState, navFlashRoute } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession, jumpedToSessionName } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
@@ -609,12 +609,19 @@
 				totalAgentCount = data.agent_counts.totalCount || 0;
 				activeAgents = data.agent_counts.activeAgents || [];
 			}
+
+			// Update submitted-tasks badge for the /tasks-fast Inbox nav entry.
+			// Cheap O(n) over the same payload — no extra request.
+			setSubmittedTasksCount(
+				allTasks.filter((t: { status?: string }) => t.status === 'submitted').length
+			);
 		} catch (error) {
 			console.error('Failed to load tasks (fast):', error);
 			if (retries > 0) {
 				setTimeout(() => loadAllTasksFast(retries - 1), 1000);
 			} else {
 				allTasks = [];
+				setSubmittedTasksCount(0);
 			}
 		}
 	}

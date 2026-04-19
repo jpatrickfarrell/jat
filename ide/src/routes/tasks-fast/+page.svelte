@@ -12,6 +12,15 @@
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
 	import { createListNav, type ListNavController } from "$lib/actions/listNav";
 	import TaskFastDetail from "$lib/components/tasks-fast/TaskFastDetail.svelte";
+	import KeyboardShortcutsOverlay from "$lib/components/KeyboardShortcutsOverlay.svelte";
+	import { setSubmittedTasksCount } from "$lib/stores/drawerStore";
+
+	// Mirrors KeyboardShortcutsOverlay's ShortcutSection — kept local to avoid
+	// cross-component type imports from a .svelte module.
+	interface ShortcutSection {
+		title: string;
+		shortcuts: { key: string; description: string }[];
+	}
 
 	interface Task {
 		id: string;
@@ -166,6 +175,84 @@
 		);
 	});
 
+	// Compact human-readable list of which filters are non-default. Rendered as
+	// chips in the status bar so the user always knows why their list is what
+	// it is (jat-nm0nq.7 polish: "current filter summary").
+	const filterSummaryChips = $derived.by<string[]>(() => {
+		const chips: string[] = [];
+		const statusDefault =
+			filterStatuses.size === DEFAULT_STATUSES.size &&
+			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+		if (!statusDefault) {
+			chips.push(
+				filterStatuses.size === 0
+					? "status: none"
+					: `status: ${[...filterStatuses].sort().join(",")}`,
+			);
+		}
+		if (filterPriorities.size > 0) {
+			chips.push(
+				`priority: ${[...filterPriorities]
+					.sort((a, b) => a - b)
+					.map((p) => `P${p}`)
+					.join(",")}`,
+			);
+		}
+		if (filterProject) chips.push(`project: ${filterProject}`);
+		if (filterTypes.size > 0) {
+			chips.push(`type: ${[...filterTypes].sort().join(",")}`);
+		}
+		if (filterAssignee.trim()) {
+			chips.push(`assignee: ${filterAssignee.trim()}`);
+		}
+		if (filterSearch.trim()) {
+			const q = filterSearch.trim();
+			chips.push(
+				`search: "${q.length > 20 ? q.slice(0, 18) + "…" : q}"`,
+			);
+		}
+		return chips;
+	});
+
+	// Mode-aware shortcut tables for the `?` overlay (jat-nm0nq.7 polish).
+	const shortcutSections: ShortcutSection[] = [
+		{
+			title: "List",
+			shortcuts: [
+				{ key: "j / ↓", description: "Focus next task" },
+				{ key: "k / ↑", description: "Focus previous task" },
+				{ key: "Enter / Space", description: "Open detail panel" },
+				{ key: "/", description: "Focus filter search input" },
+				{ key: "Esc", description: "Close panel / exit filter" },
+			],
+		},
+		{
+			title: "Detail",
+			shortcuts: [
+				{ key: "r / c", description: "Jump to compose box" },
+				{ key: "a", description: "Open assign picker" },
+				{ key: "s", description: "Open status picker" },
+				{ key: "p", description: "Open priority picker" },
+				{ key: "Space", description: "Spawn agent on this task" },
+				{ key: "o", description: "Open full task detail drawer" },
+				{ key: "d", description: "Dismiss / close task" },
+				{ key: "j / k", description: "Move to next / previous task" },
+				{ key: "Esc", description: "Close detail panel" },
+			],
+		},
+		{
+			title: "Compose",
+			shortcuts: [
+				{ key: "Enter", description: "Send comment" },
+				{
+					key: "Ctrl+Enter",
+					description: "Send + route to requester, advance to next",
+				},
+				{ key: "Esc", description: "Return focus to detail panel" },
+			],
+		},
+	];
+
 	// Keep selection in bounds when the filtered set shrinks. Also re-home
 	// listNav's internal focus so j/k after a filter change starts from a
 	// valid row instead of the (now-removed) previously focused one.
@@ -174,6 +261,15 @@
 			selectedIdx = Math.max(0, filteredTasks.length - 1);
 		}
 		navController.refresh();
+	});
+
+	// Keep the sidebar Inbox badge in sync whenever the local task list
+	// mutates (route, dismiss, edit) so the count reacts immediately to user
+	// actions instead of waiting for the next layout poll.
+	$effect(() => {
+		setSubmittedTasksCount(
+			tasks.filter((t) => t.status === "submitted").length,
+		);
 	});
 
 	function jumpToCompose() {
@@ -448,6 +544,13 @@
 			});
 
 			tasks = combined;
+
+			// Refresh the global Inbox badge with the freshest count we have —
+			// the layout polls separately, but this keeps the sidebar accurate
+			// the instant the user routes/dismisses tasks here.
+			setSubmittedTasksCount(
+				combined.filter((t) => t.status === "submitted").length,
+			);
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -806,14 +909,25 @@
 		{/if}
 
 		<footer class="status-bar" aria-label="Status">
-			<span class="status-bar-count">
-				{filteredTasks.length} of {tasks.length}
+			{#if filteredTasks.length > 0}
+				<span class="status-bar-position" title="Currently selected task position in the filtered list">
+					[{Math.min(selectedIdx + 1, filteredTasks.length)} of {filteredTasks.length}]
+				</span>
+			{:else}
+				<span class="status-bar-position status-bar-empty">[0 of 0]</span>
+			{/if}
+			<span class="status-bar-count" title="Filtered tasks / total tasks loaded">
+				{filteredTasks.length}/{tasks.length}
 			</span>
 			{#if hasActiveFilters}
-				<span class="status-bar-filters">filtered</span>
+				<span class="status-bar-filter-chips" aria-label="Active filters">
+					{#each filterSummaryChips as chip (chip)}
+						<span class="status-bar-chip">{chip}</span>
+					{/each}
+				</span>
 			{/if}
 			<span class="status-bar-spacer"></span>
-			<span class="status-bar-hint">/ to filter · Esc to exit</span>
+			<span class="status-bar-hint">/ filter · ? shortcuts · Esc exit</span>
 		</footer>
 	</section>
 
@@ -840,6 +954,11 @@
 </div>
 
 <svelte:window onkeydown={handleWindowKeydown} />
+
+<KeyboardShortcutsOverlay
+	title="Inbox · Keyboard Shortcuts"
+	sections={shortcutSections}
+/>
 
 <style>
 	.tasks-fast-layout {
@@ -1130,16 +1249,43 @@
 
 	.status-bar-count {
 		font-variant-numeric: tabular-nums;
+		opacity: 0.65;
 	}
 
-	.status-bar-filters {
+	.status-bar-position {
+		font-variant-numeric: tabular-nums;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.7rem;
+		color: oklch(0.85 0.08 240);
+		padding: 0.05rem 0.4rem;
+		border-radius: 0.25rem;
+		background: oklch(0.70 0.18 240 / 0.10);
+		border: 1px solid oklch(0.70 0.18 240 / 0.25);
+	}
+
+	.status-bar-position.status-bar-empty {
+		color: oklch(0.65 0.02 250);
+		background: transparent;
+		border-color: oklch(0.30 0.02 250);
+	}
+
+	.status-bar-filter-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.status-bar-chip {
 		padding: 0.05rem 0.4rem;
 		border-radius: 999px;
-		background: oklch(0.70 0.18 240 / 0.18);
-		color: oklch(0.92 0.05 240);
+		background: oklch(0.70 0.18 240 / 0.15);
+		color: oklch(0.90 0.05 240);
 		font-size: 0.65rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		white-space: nowrap;
+		border: 1px solid oklch(0.70 0.18 240 / 0.3);
 	}
 
 	.status-bar-spacer {

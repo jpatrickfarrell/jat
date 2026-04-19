@@ -387,7 +387,10 @@
 			return;
 		}
 
-		// j/k or arrow keys to navigate files
+		// j/k or arrow keys to navigate files (not when typing in an input)
+		const target = e.target as HTMLElement;
+		if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+
 		if ((e.key === 'j' || e.key === 'ArrowDown') && !showRequestChangesInput) {
 			e.preventDefault();
 			selectFile(Math.min(selectedFileIndex + 1, files.length - 1));

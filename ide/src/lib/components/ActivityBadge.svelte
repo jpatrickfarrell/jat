@@ -686,6 +686,9 @@
 				{#if searchQuery && filteredTasks.length !== allClosedTasks.length}
 					<span class="match-count">{filteredTasks.length}</span>
 				{/if}
+				{#if !searchQuery}
+					<kbd class="shortcut-hint">alt+h</kbd>
+				{/if}
 			</div>
 
 			<!-- Agent State Breakdown — primary section: what needs attention NOW -->
@@ -1054,7 +1057,15 @@
 	@media (prefers-reduced-motion: reduce) {
 		.milestone-overlay,
 		.milestone-inner,
-		.milestone-number {
+		.milestone-number,
+		.badge-pop,
+		.badge-milestone,
+		.badge-escalate,
+		.animate-ping-once {
+			animation: none !important;
+		}
+		/* Tailwind animate-ping used by the active session dot */
+		:global(.animate-ping) {
 			animation: none !important;
 		}
 	}
@@ -1142,6 +1153,19 @@
 
 	.history-link:hover {
 		color: oklch(0.80 0.12 200);
+	}
+
+	.shortcut-hint {
+		font-size: 0.55rem;
+		font-family: ui-monospace, monospace;
+		padding: 0.1rem 0.3rem;
+		border-radius: 0.2rem;
+		color: oklch(0.45 0.04 250);
+		background: oklch(0.20 0.02 250 / 0.6);
+		border: 1px solid oklch(0.30 0.03 250 / 0.4);
+		letter-spacing: 0.02em;
+		pointer-events: none;
+		user-select: none;
 	}
 
 	/* Search bar */

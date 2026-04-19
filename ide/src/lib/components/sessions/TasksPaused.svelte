@@ -1,5 +1,4 @@
 <script lang="ts">
-	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { getSessionStateVisual } from '$lib/config/statusColors';
@@ -125,36 +124,27 @@
 					<!-- Content body -->
 					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 					<div class="tp-card-body" onclick={(e) => e.stopPropagation()}>
-						<div class="tp-badge-title">
-							<TaskIdBadge
-								task={{ id: session.taskId, status: 'in_progress', priority: session.taskPriority, issue_type: session.taskType }}
-								size="sm"
-								variant="agentPill"
-								agentName={session.agentName}
-								harness={session.taskAgentProgram || 'claude-code'}
-								integration={taskIntegrations[session.taskId] || null}
-								onClick={() => onViewTask?.(session.taskId)}
-							/>
+						<!-- Row 1: title + status badge (matches TasksActive ta-title-row) -->
+						<div class="tp-title-row">
 							<span class="tp-title" title={session.taskTitle}>
 								{session.taskTitle || session.taskId}
 							</span>
+							<StatusActionBadge
+								sessionState={session.resumable ? 'paused' : 'orphaned'}
+								sessionName={`jat-${session.agentName}`}
+								disabled={actionLoading === session.agentName}
+								onAction={(actionId) => handleAction(actionId, session)}
+								alignRight={true}
+								elapsed={elapsed}
+								stacked={true}
+							/>
 						</div>
-						{#if session.taskDescription}
-							<div class="tp-description">{session.taskDescription}</div>
-						{/if}
-					</div>
-					<!-- Status badge -->
-					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-					<div class="tp-badge-col" onclick={(e) => e.stopPropagation()}>
-						<StatusActionBadge
-							sessionState={session.resumable ? 'paused' : 'orphaned'}
-							sessionName={`jat-${session.agentName}`}
-							disabled={actionLoading === session.agentName}
-							onAction={(actionId) => handleAction(actionId, session)}
-							alignRight={true}
-							elapsed={elapsed}
-							stacked={true}
-						/>
+						<!-- Row 2: agent name · task ID (matches TasksActive ta-card-row2) -->
+						<div class="tp-card-row2">
+							<span class="tp-agent-name">{session.agentName}</span>
+							<span class="tp-separator">·</span>
+							<span class="tp-task-id" style="color: {stateVisual.accent};">{session.taskId}</span>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -246,19 +236,19 @@
 
 	.tp-card-body {
 		flex: 1;
-		padding: 0.875rem 0.75rem;
+		padding: 0.75rem 0.75rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
 		min-width: 0;
 	}
 
-	.tp-badge-title {
+	/* Row 1: title + StatusActionBadge side by side */
+	.tp-title-row {
 		display: flex;
-		align-items: flex-start;
-		gap: 0.625rem;
+		align-items: center;
+		gap: 0.5rem;
 		min-width: 0;
-		width: 100%;
 	}
 
 	.tp-title {
@@ -270,22 +260,30 @@
 		white-space: nowrap;
 		flex: 1;
 		min-width: 0;
-		padding-top: 0.125rem;
 	}
 
-	.tp-description {
-		font-size: 0.75rem;
-		color: oklch(0.65 0.05 200);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.tp-badge-col {
+	/* Row 2: agent name · task ID */
+	.tp-card-row2 {
 		display: flex;
 		align-items: center;
-		padding: 0 0.75rem 0 0;
-		flex-shrink: 0;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+	}
+
+	.tp-agent-name {
+		color: oklch(0.60 0.03 250);
+		font-weight: 500;
+	}
+
+	.tp-separator {
+		color: oklch(0.40 0.02 250);
+	}
+
+	.tp-task-id {
+		font-family: ui-monospace, monospace;
+		font-size: 0.7rem;
+		font-weight: 500;
+		opacity: 0.8;
 	}
 
 	/* Responsive: narrow state strip on small screens */

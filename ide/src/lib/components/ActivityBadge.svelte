@@ -116,7 +116,6 @@
 	let selectedTaskId = $state<string | null>(null);
 
 	// Completed tasks state
-	let tasks = $state<CompletedTask[]>([]);
 	let allClosedTasks = $state<CompletedTask[]>([]);
 	let completedCount = $state(0);
 	let loading = $state(true);
@@ -187,14 +186,14 @@
 		_prevUrgencyLevel = current;
 	});
 
-	// Streak calculation
+	// Streak calculation — uses getLocalDateStr (hoisted) to match tasksByDay's date bucketing
 	const streak = $derived.by(() => {
 		if (allClosedTasks.length === 0) return 0;
 
 		const tasksByDate = new Map<string, number>();
 		for (const task of allClosedTasks) {
 			if (!task.updated_at) continue;
-			const date = new Date(task.updated_at).toISOString().split('T')[0];
+			const date = getLocalDateStr(new Date(task.updated_at));
 			tasksByDate.set(date, (tasksByDate.get(date) || 0) + 1);
 		}
 
@@ -205,7 +204,7 @@
 		for (let i = 0; i < 365; i++) {
 			const checkDate = new Date(today);
 			checkDate.setDate(checkDate.getDate() - i);
-			const dateStr = checkDate.toISOString().split('T')[0];
+			const dateStr = getLocalDateStr(checkDate);
 
 			if (tasksByDate.has(dateStr)) {
 				streakCount++;
@@ -230,11 +229,11 @@
 		completedTasksInFlight = true;
 
 		try {
-			// Fetch 90 days of closed tasks — needed for streak calculation and today's badge count
-			const ninetyDaysAgo = new Date();
-			ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-			ninetyDaysAgo.setHours(0, 0, 0, 0);
-			const closedAfter = ninetyDaysAgo.toISOString();
+			// Fetch 400 days of closed tasks — covers the full 365-day streak loop plus buffer
+			const fourHundredDaysAgo = new Date();
+			fourHundredDaysAgo.setDate(fourHundredDaysAgo.getDate() - 400);
+			fourHundredDaysAgo.setHours(0, 0, 0, 0);
+			const closedAfter = fourHundredDaysAgo.toISOString();
 			const response = await fetch(`/api/tasks?status=closed&closedAfter=${encodeURIComponent(closedAfter)}`, {
 				signal: controller.signal
 			});
@@ -273,12 +272,11 @@
 					hitMilestoneTimeout = setTimeout(() => {
 						hitMilestone = false;
 						hitMilestoneTimeout = null;
-					}, 2000);
+					}, 2450);
 				}
 			}
 
 			completedCount = newCount;
-			tasks = completedToday;
 			loading = false;
 			fetchFailCount = 0; // Reset fault indicator on success
 		} catch (error) {

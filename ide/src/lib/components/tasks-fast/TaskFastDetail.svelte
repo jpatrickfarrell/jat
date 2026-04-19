@@ -16,6 +16,7 @@
 	import { marked } from "marked";
 	import CommentsThread from "$lib/components/comments/CommentsThread.svelte";
 	import TaskFastCompose from "./TaskFastCompose.svelte";
+	import TaskFastActionBar from "./TaskFastActionBar.svelte";
 	import {
 		getPriorityBadge,
 		getTaskStatusBadge,
@@ -40,19 +41,35 @@
 
 	interface Props {
 		task: Task;
+		currentUser?: string;
+		allAssignees?: string[];
 		onEscapeCompose?: () => void;
 		onComposeFocus?: () => void;
 		onSendAndRoute?: (taskId: string, text: string) => void;
+		onTaskUpdated?: (patch: Partial<Task> & { id: string }) => void;
+		onDismissed?: (taskId: string) => void;
 	}
 
 	let {
 		task,
+		currentUser = "",
+		allAssignees = [],
 		onEscapeCompose,
 		onComposeFocus,
 		onSendAndRoute,
+		onTaskUpdated,
+		onDismissed,
 	}: Props = $props();
 
 	let composeRef = $state<{ focus: () => void } | null>(null);
+	let actionBarRef = $state<{
+		openAssign: () => void;
+		openStatus: () => void;
+		openPriority: () => void;
+		spawn: () => void;
+		openFull: () => void;
+		dismiss: () => void;
+	} | null>(null);
 	let commentsScroll = $state<HTMLDivElement | null>(null);
 	let descExpanded = $state(false);
 	let descEl = $state<HTMLDivElement | null>(null);
@@ -105,6 +122,25 @@
 
 	export function focusCompose() {
 		composeRef?.focus();
+	}
+
+	export function openAssign() {
+		actionBarRef?.openAssign();
+	}
+	export function openStatus() {
+		actionBarRef?.openStatus();
+	}
+	export function openPriority() {
+		actionBarRef?.openPriority();
+	}
+	export function spawnAgent() {
+		actionBarRef?.spawn();
+	}
+	export function openFullDrawer() {
+		actionBarRef?.openFull();
+	}
+	export function dismissTask() {
+		actionBarRef?.dismiss();
 	}
 
 	function handleSent(_comment: any) {
@@ -210,6 +246,15 @@
 		onSendAndRoute={handleSendAndRoute}
 		onEscape={() => onEscapeCompose?.()}
 		onFocus={() => onComposeFocus?.()}
+	/>
+
+	<TaskFastActionBar
+		bind:this={actionBarRef}
+		{task}
+		{currentUser}
+		{allAssignees}
+		{onTaskUpdated}
+		{onDismissed}
 	/>
 </div>
 

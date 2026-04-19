@@ -79,6 +79,9 @@
 	let pendingStopProject = $state<string | null>(null);
 	let pendingStopTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastFailedAction = $state<{ type: 'start' | 'stop' | 'restart'; projectKey: string } | null>(null);
+	let badgeRef = $state<HTMLElement | null>(null);
+	let dropdownRef = $state<HTMLElement | null>(null);
+	let openedViaKeyboard = $state(false);
 
 	// WebSocket reconnection flash — dot pulses when connection re-establishes
 	let wsJustConnected = $state(false);
@@ -94,6 +97,36 @@
 		}
 		_prevConnectionState = current;
 	});
+
+	// Move focus into dropdown when opened via keyboard
+	$effect(() => {
+		if (showDropdown && openedViaKeyboard && dropdownRef) {
+			const firstBtn = dropdownRef.querySelector<HTMLElement>('button:not([disabled])');
+			if (firstBtn) setTimeout(() => firstBtn.focus(), 0);
+		}
+		if (!showDropdown) openedViaKeyboard = false;
+	});
+
+	function handleDropdownKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			showDropdown = false;
+			badgeRef?.focus();
+		} else if (e.key === 'Tab') {
+			showDropdown = false;
+		} else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			const buttons = Array.from(
+				dropdownRef?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? []
+			);
+			if (!buttons.length) return;
+			const currentIndex = buttons.indexOf(document.activeElement as HTMLElement);
+			const nextIndex = e.key === 'ArrowDown'
+				? (currentIndex + 1) % buttons.length
+				: currentIndex <= 0 ? buttons.length - 1 : currentIndex - 1;
+			buttons[nextIndex].focus();
+		}
+	}
 
 	// Get sessions reactively
 	const sessions = $derived(serverSessionsState.sessions);
@@ -197,6 +230,13 @@
 	}
 
 	function handleMouseLeave() {
+		if (pendingStopProject !== null) {
+			pendingStopProject = null;
+			if (pendingStopTimer) {
+				clearTimeout(pendingStopTimer);
+				pendingStopTimer = null;
+			}
+		}
 		dropdownTimeout = setTimeout(() => {
 			showDropdown = false;
 		}, 150);
@@ -357,15 +397,22 @@
 	onmouseleave={handleMouseLeave}
 >
 	<span
+		bind:this={badgeRef}
 		class="h-7 px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all duration-300 cursor-pointer"
 		tabindex="0"
 		role="button"
 		aria-expanded={showDropdown}
 		aria-haspopup="true"
+		aria-controls="servers-dropdown"
 		onkeydown={(e) => {
 			if (e.key === 'Enter' || e.key === ' ') {
 				e.preventDefault();
-				showDropdown = !showDropdown;
+				if (!showDropdown) {
+					openedViaKeyboard = true;
+					showDropdown = true;
+				} else {
+					showDropdown = false;
+				}
 			} else if (e.key === 'Escape' && showDropdown) {
 				showDropdown = false;
 			}
@@ -408,49 +455,14 @@
 
 	<!-- Dropdown -->
 	{#if showDropdown}
-		<div class="dropdown-panel">
-			<!-- WebSocket Status Row -->
-			<div
-				class="px-3 py-1.5 border-b flex items-center justify-between"
-				style="border-color: oklch(0.25 0.02 250); background: oklch(0.14 0.02 250);"
-			>
-				<div class="flex items-center gap-2">
-					<div
-						class="w-2 h-2 rounded-full"
-						class:animate-pulse={wsConfig.pulse}
-						style="background: {wsConfig.color}; box-shadow: 0 0 4px {wsConfig.color};"
-					></div>
-					<span
-						class="text-[10px] font-mono"
-						style="color: oklch(0.65 0.02 250);"
-					>
-						Backend
-					</span>
-				</div>
-				<span class="text-[10px] font-mono" style="color: {wsConfig.color};">
-					{wsConfig.label}
-				</span>
-			</div>
-
-			<!-- Dev Servers Header -->
-			<div
-				class="px-3 py-2 border-b flex items-center justify-between"
-				style="border-color: oklch(0.30 0.02 250); background: oklch(0.15 0.02 250);"
-			>
-				<span
-					class="text-xs font-semibold"
-					style="color: oklch(0.80 0.12 145);"
-				>
-					Dev Servers
-				</span>
-				<span
-					class="text-[10px] px-1.5 py-0.5 rounded font-mono"
-					style="background: oklch(0.25 0.08 145); color: oklch(0.80 0.12 145);"
-				>
-					{runningCount}/{totalProjects} running
-				</span>
-			</div>
-
+		<div
+			bind:this={dropdownRef}
+			class="dropdown-panel"
+			id="servers-dropdown"
+			role="region"
+			aria-label="Dev servers"
+			onkeydown={handleDropdownKeydown}
+		>
 			<!-- Error message -->
 			{#if error}
 				<div class="error-row">
@@ -527,8 +539,8 @@
 							</div>
 
 							<!-- Actions -->
-							<div class="flex items-center gap-1">
-								<!-- New Session button (always available) -->
+							<div class="flex items-center flex-shrink-0">
+								<!-- New Session (conceptually separate from server lifecycle) -->
 								<button
 									class="action-btn action-btn-spawn"
 									onclick={() => handleSpawnSession(project.key)}
@@ -554,97 +566,99 @@
 										</svg>
 									{/if}
 								</button>
-								{#if isLoading}
-									<span class="loading loading-spinner loading-xs"></span>
-								{:else if isRunning}
-									<!-- Open browser -->
-									<button
-										class="action-btn"
-										onclick={() => handleOpenBrowser(project.port)}
-										title="Open in browser"
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-3.5 h-3.5"
+								<div class="action-separator"></div>
+								<!-- Server lifecycle controls — fixed 3-slot width for layout stability -->
+								<div class="lifecycle-actions">
+									{#if isLoading}
+										<span class="loading loading-spinner loading-xs mx-auto"></span>
+									{:else if isRunning}
+										<!-- Open browser -->
+										<button
+											class="action-btn"
+											onclick={() => handleOpenBrowser(project.port)}
+											title="Open in browser"
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-											/>
-										</svg>
-									</button>
-									<!-- Restart -->
-									<button
-										class="action-btn"
-										onclick={() => handleRestart(project.key)}
-										title="Restart server"
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-3.5 h-3.5"
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="1.5"
+												stroke="currentColor"
+												class="w-3.5 h-3.5"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+												/>
+											</svg>
+										</button>
+										<!-- Restart -->
+										<button
+											class="action-btn"
+											onclick={() => handleRestart(project.key)}
+											title="Restart server"
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-											/>
-										</svg>
-									</button>
-									<!-- Stop (requires double-click confirmation) -->
-									<button
-										class="action-btn action-btn-danger"
-										class:action-btn-pending={pendingStopProject === project.key}
-										onclick={() => handleStop(project.key)}
-										onmouseleave={() => { if (pendingStopProject === project.key) { pendingStopProject = null; } }}
-										title={pendingStopProject === project.key ? 'Click again to confirm stop' : 'Stop server'}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-3.5 h-3.5"
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="1.5"
+												stroke="currentColor"
+												class="w-3.5 h-3.5"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+												/>
+											</svg>
+										</button>
+										<!-- Stop: icon swaps to checkmark on first click to signal waiting for confirm -->
+										<button
+											class="action-btn action-btn-danger"
+											class:action-btn-pending={pendingStopProject === project.key}
+											onclick={() => handleStop(project.key)}
+											onmouseleave={() => { if (pendingStopProject === project.key) { pendingStopProject = null; } }}
+											title={pendingStopProject === project.key ? 'Click again to confirm stop' : 'Stop server'}
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
-											/>
-										</svg>
-									</button>
-								{:else}
-									<!-- Start -->
-									<button
-										class="action-btn action-btn-success"
-										onclick={() => handleStart(project.key)}
-										title="Start server"
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-3.5 h-3.5"
+											{#if pendingStopProject === project.key}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+												</svg>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+												</svg>
+											{/if}
+										</button>
+									{:else}
+										<!-- Placeholders maintain column width for stopped servers -->
+										<div class="action-placeholder"></div>
+										<div class="action-placeholder"></div>
+										<!-- Start -->
+										<button
+											class="action-btn action-btn-success"
+											onclick={() => handleStart(project.key)}
+											title="Start server"
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
-											/>
-										</svg>
-									</button>
-								{/if}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="1.5"
+												stroke="currentColor"
+												class="w-3.5 h-3.5"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
+												/>
+											</svg>
+										</button>
+									{/if}
+								</div>
 							</div>
 						</div>
 					{/each}
@@ -653,21 +667,7 @@
 
 			<!-- Footer -->
 			<button class="view-all-btn" onclick={goToServers}>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke-width="1.5"
-					stroke="currentColor"
-					class="w-3.5 h-3.5"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
-					/>
-				</svg>
-				View All Servers
+				<span>View All Servers</span>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
@@ -859,8 +859,7 @@
 	.view-all-btn {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
+		justify-content: space-between;
 		width: 100%;
 		padding: 0.625rem 0.75rem;
 		background: oklch(0.22 0.04 200 / 0.5);
@@ -877,6 +876,29 @@
 	.view-all-btn:hover {
 		background: oklch(0.28 0.06 200 / 0.6);
 		color: oklch(0.85 0.12 200);
+	}
+
+	/* Action column layout stability */
+	.action-separator {
+		width: 1px;
+		height: 12px;
+		background: oklch(0.30 0.02 250);
+		margin: 0 3px;
+		flex-shrink: 0;
+	}
+
+	.lifecycle-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		width: 5rem;
+		flex-shrink: 0;
+	}
+
+	.action-placeholder {
+		width: 1.5rem;
+		height: 1.5rem;
+		flex-shrink: 0;
 	}
 
 	/* WS reconnection flash — dot scales up and glows on connection re-established */

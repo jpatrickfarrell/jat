@@ -54,6 +54,7 @@
 		playErrorSound,
 		initAudioOnInteraction
 	} from '$lib/utils/soundEffects';
+	import ActivityPulse from '$lib/components/work/ActivityPulse.svelte';
 
 	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
 	function splitAgentName(name: string): string[] {
@@ -95,6 +96,7 @@
 		onLinkToEpic = async () => {},
 		onViewEpic = (_epicId: string) => {},
 		initialPage = 'Terminal' as 'Terminal' | 'Detail' | 'Timeline',
+		activityData = [] as number[],
 	}: {
 		sessionName?: string;
 		agentName?: string;
@@ -119,6 +121,7 @@
 		onLinkToEpic?: () => Promise<void>;
 		onViewEpic?: (epicId: string) => void;
 		initialPage?: 'Terminal' | 'Detail' | 'Timeline';
+		activityData?: number[];
 	} = $props();
 
 	// === Page State ===
@@ -1606,7 +1609,16 @@
 								{elapsed}
 								copiedTaskId={copiedMobileTaskId}
 								onCopyTaskId={copyMobileTaskId}
-							/>
+							>
+								{#snippet extra()}
+									{#if effectiveState !== 'completed' && activityData.length > 0}
+										<ActivityPulse
+											data={activityData}
+											state={effectiveState}
+										/>
+									{/if}
+								{/snippet}
+							</MobileTaskBody>
 						</div>
 					</div>
 				{/if}

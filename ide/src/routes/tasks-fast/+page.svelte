@@ -55,6 +55,12 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Task ID that should briefly flash green in the list after a successful route.
+	// Send+route errors surface inside the compose box so the user sees them
+	// right where they acted — no page-level banner needed.
+	let flashTaskId = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Filter state — hydrated from URL on mount.
 	let filterStatuses = $state<Set<string>>(new Set(DEFAULT_STATUSES));
 	let filterPriorities = $state<Set<number>>(new Set());
@@ -68,7 +74,27 @@
 
 	let filterInputEl = $state<HTMLInputElement | null>(null);
 	let listEl = $state<HTMLUListElement | null>(null);
-	let detailRef = $state<{ focusCompose: () => void } | null>(null);
+	let detailRef = $state<{
+		focusCompose: () => void;
+		openAssign: () => void;
+		openStatus: () => void;
+		openPriority: () => void;
+		spawnAgent: () => void;
+		openFullDrawer: () => void;
+		dismissTask: () => void;
+	} | null>(null);
+
+	// Assignee list for the action bar's assign picker — unique human-ish names
+	// pulled from the current task list. Requesters are included separately on
+	// the task prop so "route to requester" is always available.
+	const allAssignees = $derived.by<string[]>(() => {
+		const set = new Set<string>();
+		for (const t of tasks) {
+			if (t.assignee) set.add(t.assignee);
+			if (t.requester) set.add(t.requester);
+		}
+		return [...set].sort();
+	});
 
 	// All projects detected from current task list — populates the project dropdown.
 	const projectOptions = $derived.by<string[]>(() => {
@@ -169,20 +195,203 @@
 			return;
 		}
 
-		// r/c jumps to the compose box when the user is in the detail zone.
-		// j/k list navigation is out of scope (jat-nm0nq.2).
+		// All remaining shortcuts live in the detail focus zone. j/k list
+		// navigation is out of scope (jat-nm0nq.2).
 		if (focusZone !== "detail") return;
 		if (isTypingTarget(e.target)) return;
+		if (!panelOpen || !selectedTask) return;
+
+		// r/c → jump to compose box.
 		if (e.key === "r" || e.key === "c") {
-			if (!panelOpen || !selectedTask) return;
 			e.preventDefault();
 			jumpToCompose();
+			return;
+		}
+
+		// Action-bar shortcuts (jat-nm0nq.6).
+		if (!detailRef) return;
+		switch (e.key) {
+			case "a":
+				e.preventDefault();
+				detailRef.openAssign();
+				return;
+			case "s":
+				e.preventDefault();
+				detailRef.openStatus();
+				return;
+			case "p":
+				e.preventDefault();
+				detailRef.openPriority();
+				return;
+			case "o":
+				e.preventDefault();
+				detailRef.openFullDrawer();
+				return;
+			case "d":
+				e.preventDefault();
+				detailRef.dismissTask();
+				return;
+			case " ":
+				e.preventDefault();
+				detailRef.spawnAgent();
+				return;
 		}
 	}
 
 	function handleEscapeCompose() {
 		focusZone = "detail";
 	}
+
+	// Merge a server-side edit back into the local task array so the list and
+	// detail panel reflect it instantly. If the updated task drops out of the
+	// active filter, the $effect above will clamp selectedIdx on the next tick.
+	function handleTaskUpdated(patch: Partial<Task> & { id: string }) {
+		const idx = tasks.findIndex((t) => t.id === patch.id);
+		if (idx < 0) return;
+		tasks[idx] = { ...tasks[idx], ...patch };
+	}
+
+	// When a task is dismissed (closed), drop it from the list and advance to
+	// the next task — matches the send+route flow so the user can keep burning
+	// through the queue.
+	function handleTaskDismissed(taskId: string) {
+		const filteredBefore = filteredTasks;
+		const filteredPos = filteredBefore.findIndex((t) => t.id === taskId);
+
+		// Remove from source list. "closed" isn't in FETCH_STATUSES so it will
+		// naturally be gone on the next refetch; we just don't want to wait.
+		const srcIdx = tasks.findIndex((t) => t.id === taskId);
+		if (srcIdx >= 0) tasks.splice(srcIdx, 1);
+		tasks = tasks;
+
+		triggerFlash(taskId);
+
+		tick().then(() => {
+			const filteredAfter = filteredTasks;
+			if (filteredAfter.length === 0) {
+				selectedIdx = 0;
+				panelOpen = false;
+				focusZone = "list";
+				return;
+			}
+			// Stay on the same index so the "next" task slides up into place.
+			const next = filteredPos >= 0 ? filteredPos : selectedIdx;
+			selectedIdx = Math.min(next, filteredAfter.length - 1);
+			focusZone = "detail";
+		});
+	}
+
+	// --- Send + Route -------------------------------------------------------
+	//
+	// Called by TaskFastCompose *after* it has already posted the comment (if
+	// any). Our job here is:
+	//   1. PUT /api/tasks/:id with assignee=requester (fallback: current human
+	//      assignee) and status=waiting when task was submitted/open.
+	//   2. Flash the row green for visual confirmation.
+	//   3. Advance selection to the next task, wrapping around; if the filter
+	//      now shows nothing, drop focus back to the list.
+	//
+	// Any thrown error propagates back into the compose so it can surface the
+	// message and keep the user on this task (the comment has already landed).
+	async function handleSendAndRoute(taskId: string, _text: string) {
+		const task = tasks.find((t) => t.id === taskId);
+		if (!task) {
+			throw new Error("Task not found");
+		}
+
+		// Target assignee: requester first, else current assignee if it looks
+		// human-ish. We don't have task history in this payload, so "most recent
+		// non-agent human" collapses to "current assignee if set". Agent-name
+		// detection is best-effort (Agent Registry lookup would be overkill for
+		// the compose hot path); the user can always retry with an explicit
+		// assignee via the action bar (jat-nm0nq.6).
+		const targetAssignee = (task.requester || task.assignee || "").trim();
+		if (!targetAssignee) {
+			throw new Error(
+				"No requester or assignee to route to — set one via the task detail first.",
+			);
+		}
+
+		const nextStatus =
+			task.status === "submitted" || task.status === "open"
+				? "waiting"
+				: task.status;
+
+		const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				assignee: targetAssignee,
+				status: nextStatus,
+			}),
+		});
+		if (!res.ok) {
+			const body = await res.json().catch(() => ({}));
+			throw new Error(body.error || `Route failed (HTTP ${res.status})`);
+		}
+
+		// Apply the update locally so the UI reacts immediately instead of
+		// waiting for the next poll. The derived filtered list recomputes on
+		// this mutation.
+		const idx = tasks.findIndex((t) => t.id === taskId);
+		if (idx >= 0) {
+			tasks[idx] = {
+				...tasks[idx],
+				assignee: targetAssignee,
+				status: nextStatus,
+			};
+		}
+
+		triggerFlash(taskId);
+
+		// Let Svelte recompute filteredTasks before we touch selectedIdx — the
+		// derived list may have shrunk (task fell out of the filter).
+		await tick();
+		advanceAfterRoute(taskId);
+	}
+
+	function triggerFlash(taskId: string) {
+		flashTaskId = taskId;
+		if (flashTimer) clearTimeout(flashTimer);
+		// 900ms matches the CSS animation duration (see .task-row-route-flash).
+		flashTimer = setTimeout(() => {
+			flashTaskId = null;
+			flashTimer = null;
+		}, 900);
+	}
+
+	function advanceAfterRoute(previousTaskId: string) {
+		const filtered = filteredTasks;
+
+		if (filtered.length === 0) {
+			// Inbox zero within the current filter — drop the detail panel and
+			// return focus to the list so Escape/arrow keys behave predictably.
+			selectedIdx = 0;
+			panelOpen = false;
+			focusZone = "list";
+			return;
+		}
+
+		const currentPos = filtered.findIndex((t) => t.id === previousTaskId);
+
+		let nextIdx: number;
+		if (currentPos === -1) {
+			// Task dropped out of the filtered view (e.g. submitted → waiting
+			// with the default filter). The next task already occupies the old
+			// slot, so clamp to the new length.
+			nextIdx = Math.min(selectedIdx, filtered.length - 1);
+		} else {
+			// Task is still visible (e.g. filter includes waiting). Step past
+			// it, wrapping to the top when we hit the end.
+			nextIdx = (currentPos + 1) % filtered.length;
+		}
+		selectedIdx = Math.max(0, nextIdx);
+
+		// Keep the compose hot so the user can keep tapping out replies.
+		focusZone = "compose";
+		tick().then(() => detailRef?.focusCompose());
+	}
+
 
 	async function fetchTasks() {
 		loading = true;
@@ -519,11 +728,13 @@
 			>
 				{#each filteredTasks as task, idx (task.id)}
 					{@const isSelected = idx === selectedIdx}
+					{@const isFlashing = task.id === flashTaskId}
 					<li>
 						<button
 							type="button"
 							class="task-row"
 							class:selected={isSelected}
+							class:route-flash={isFlashing}
 							role="option"
 							aria-selected={isSelected}
 							onclick={() => selectTask(idx)}
@@ -581,8 +792,13 @@
 			<TaskFastDetail
 				bind:this={detailRef}
 				task={selectedTask}
+				{currentUser}
+				{allAssignees}
 				onEscapeCompose={handleEscapeCompose}
 				onComposeFocus={() => (focusZone = "compose")}
+				onSendAndRoute={handleSendAndRoute}
+				onTaskUpdated={handleTaskUpdated}
+				onDismissed={handleTaskDismissed}
 			/>
 		{/if}
 	</section>
@@ -805,6 +1021,33 @@
 	.task-row:focus-visible {
 		outline: 2px solid oklch(0.70 0.18 240);
 		outline-offset: -2px;
+	}
+
+	/* Send+Route success flash — a brief green wash that fades back to normal.
+	   Duration matches triggerFlash() in the script (900ms). */
+	.task-row.route-flash {
+		animation: tasks-fast-route-flash 900ms ease-out forwards;
+	}
+
+	@keyframes tasks-fast-route-flash {
+		0% {
+			background: oklch(0.65 0.20 145 / 0.35);
+			border-left-color: oklch(0.70 0.22 145);
+		}
+		60% {
+			background: oklch(0.65 0.20 145 / 0.15);
+			border-left-color: oklch(0.70 0.22 145 / 0.7);
+		}
+		100% {
+			background: transparent;
+			border-left-color: transparent;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.task-row.route-flash {
+			animation: none;
+		}
 	}
 
 	.status-dot {

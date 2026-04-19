@@ -4,7 +4,7 @@
 	 *
 	 * Keys:
 	 *   Enter           → send comment (POST /api/tasks/:id/comments), stay on task
-	 *   Ctrl/Cmd+Enter  → emit onSendAndRoute (jat-nm0nq.4 implements routing)
+	 *   Ctrl/Cmd+Enter  → post comment (if any) then hand off to parent for route+advance
 	 *   Escape          → emit onEscape (page returns focusZone='detail')
 	 *   Shift+Enter     → newline (default textarea behaviour)
 	 *
@@ -14,7 +14,10 @@
 	interface Props {
 		taskId: string;
 		onSent?: (comment: any) => void;
-		onSendAndRoute?: (text: string) => void;
+		// Called after the comment (if any) is successfully posted. Parent handles
+		// reassignment + advance. Returning a promise keeps the compose in its
+		// submitting state until the route finishes.
+		onSendAndRoute?: (text: string) => void | Promise<void>;
 		onEscape?: () => void;
 		onFocus?: () => void;
 	}
@@ -82,11 +85,62 @@
 		}
 	}
 
-	function sendAndRoute() {
+	async function sendAndRoute() {
+		if (submitting) return;
 		const text = draft.trim();
-		// Send+Route is wired in jat-nm0nq.4. Here we just hand the text
-		// upstream; the page decides what to do (route + advance).
-		onSendAndRoute?.(text);
+
+		// Empty comment → confirm before routing (per jat-nm0nq.4 spec).
+		if (!text) {
+			const ok = confirm(
+				"Route without sending a comment? The task will be reassigned and marked waiting.",
+			);
+			if (!ok) return;
+		}
+
+		submitting = true;
+		error = null;
+
+		// Track whether the comment actually landed so a retry after a routing
+		// failure doesn't double-post.
+		let commentSent = false;
+
+		try {
+			// Post the comment first (skip when empty so we don't create blank notes).
+			if (text) {
+				const res = await fetch(
+					`/api/tasks/${encodeURIComponent(taskId)}/comments`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							text,
+							author: "user",
+							author_type: "user",
+							comment_type: "note",
+						}),
+					},
+				);
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({}));
+					throw new Error(body.error || `HTTP ${res.status}`);
+				}
+				const data = await res.json();
+				commentSent = true;
+				onSent?.(data.comment);
+				// Drop the now-posted draft so a retry won't duplicate the comment
+				// if the downstream route fails.
+				draft = "";
+			}
+
+			// Hand off to the page: reassign to requester + status=waiting + advance.
+			// If the parent throws we keep the (empty) draft and surface the error.
+			await onSendAndRoute?.(text);
+		} catch (e: any) {
+			const base = e?.message || "Failed to send and route";
+			error = commentSent ? `Comment sent but routing failed: ${base}` : base;
+		} finally {
+			submitting = false;
+		}
 	}
 
 	function handleKey(e: KeyboardEvent) {

@@ -310,52 +310,61 @@
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
 
-	// Activity pulse: rolling delta of output content per agent (last 10 polls)
-	// Uses tail-content comparison, not line count — works with fixed tmux scrollback
+	// Activity pulse: rolling activity state per agent (last 10 ticks)
+	// Driven by /api/sessions/activity which reads /tmp/jat-activity-*.json files
+	// updated by monitor-output.sh at 100ms intervals — much more reliable than text diff.
 	let activityHistories = $state<Map<string, number[]>>(new Map());
-	let activityLastTails = $state<Map<string, string>>(new Map());
+	const _activitySessionsRef = { sessions };
 
 	$effect(() => {
-		const currentSessions = sessions;
-		const currentOutputs = agentOutputs;
+		_activitySessionsRef.sessions = sessions;
+	});
 
-		const prevHistories = untrack(() => activityHistories);
-		const prevTails = untrack(() => activityLastTails);
+	onMount(() => {
+		const id = setInterval(async () => {
+			const cur = _activitySessionsRef.sessions;
+			if (!cur.length) return;
 
-		const newHistories = new Map(prevHistories);
-		const newTails = new Map(prevTails);
-		let changed = false;
+			const agentSessions = cur.filter(s => s.type === 'agent' || !s.type);
+			if (!agentSessions.length) return;
 
-		for (const session of currentSessions) {
-			const agentName = getAgentName(session.name);
-			const output = currentOutputs.get(agentName) || '';
-			// Last 300 raw chars as content fingerprint — changes even when line count stays constant
-			const tail = output.slice(-300);
-			const prevTail = prevTails.get(agentName);
+			const sessionNames = agentSessions.map(s => s.name).join(',');
 
-			let delta = 0;
-			if (prevTail !== undefined && tail !== prevTail) {
-				const addedLen = Math.max(0, tail.length - prevTail.length);
-				const overlapLen = Math.min(tail.length, prevTail.length);
-				let diffCount = addedLen;
-				for (let i = 0; i < overlapLen; i += 8) {
-					if (tail[tail.length - overlapLen + i] !== prevTail[prevTail.length - overlapLen + i]) {
-						diffCount++;
+			try {
+				const res = await fetch(`/api/sessions/activity?sessions=${encodeURIComponent(sessionNames)}`);
+				if (!res.ok) return;
+				const data = await res.json();
+				const activities = data.activities as Record<string, { activity: { state: string } }>;
+
+				const newHistories = new Map(activityHistories);
+
+				for (const session of agentSessions) {
+					const agentName = getAgentName(session.name);
+					const state = activities[session.name]?.activity?.state ?? 'idle';
+
+					let delta: number;
+					if (state === 'generating') {
+						// High bars with variation to look like real streaming activity
+						delta = 10 + Math.floor(Math.random() * 11);
+					} else if (state === 'thinking') {
+						// Low bars — processing but not outputting
+						delta = 1 + Math.floor(Math.random() * 4);
+					} else {
+						// idle or unknown
+						delta = 0;
 					}
+
+					const prev = newHistories.get(agentName) ?? [];
+					newHistories.set(agentName, [...prev, delta].slice(-10));
 				}
-				delta = Math.min(diffCount, 20);
+
+				activityHistories = newHistories;
+			} catch {
+				// Silent fail — non-critical
 			}
+		}, 800);
 
-			const prevHistory = newHistories.get(agentName) ?? [];
-			newHistories.set(agentName, [...prevHistory, delta].slice(-10));
-			newTails.set(agentName, tail);
-			changed = true;
-		}
-
-		if (changed) {
-			activityHistories = newHistories;
-			activityLastTails = newTails;
-		}
+		return () => clearInterval(id);
 	});
 
 	// Completion signal events per agent (for completed state card body)

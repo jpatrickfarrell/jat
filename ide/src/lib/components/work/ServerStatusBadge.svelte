@@ -211,6 +211,7 @@
 			class="server-dropdown absolute z-40 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 			role="menu"
+			onkeydown={handleMenuKeydown}
 		>
 			<!-- Server info header -->
 			{#if port}
@@ -259,7 +260,7 @@
 			{/if}
 
 			<!-- Actions list -->
-			<ul class="py-1" role="none" onkeydown={handleMenuKeydown}>
+			<ul class="py-1" role="none">
 				{#each actions as action (action.id)}
 					<li role="none">
 						<button

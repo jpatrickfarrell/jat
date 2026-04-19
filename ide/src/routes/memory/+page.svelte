@@ -15,9 +15,10 @@
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
+	import { addToast } from '$lib/stores/toasts.svelte';
 
 	// --- State ---
-	let activeTab = $state<'search' | 'browse' | 'status'>('status');
+	let activeTab = $state<'search' | 'browse' | 'status'>('search');
 
 	// Project filter from URL (set by TopBar ProjectSelector)
 	let filterProject = $state('');
@@ -58,10 +59,13 @@
 	// File viewer state
 	let viewingFile = $state<{ content: string; frontmatter: any; filename: string; project: string } | null>(null);
 	let fileLoading = $state(false);
+	let viewFileError = $state('');
 
 	// Reindex state
 	let reindexing = $state(false);
 	let reindexResults = $state<any[] | null>(null);
+	let reindexConfirming = $state(false);
+	let reindexConfirmTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Data Fetching ---
 	async function fetchStatus() {
@@ -77,7 +81,7 @@
 					: projectStatuses[0].project;
 			}
 		} catch (err) {
-			console.error('Failed to fetch memory status:', err);
+			addToast({ message: 'Failed to load memory status', type: 'error' });
 		} finally {
 			statusLoading = false;
 		}
@@ -118,7 +122,7 @@
 			const data = await res.json();
 			browseFiles = data.files || [];
 		} catch (err) {
-			console.error('Failed to browse files:', err);
+			addToast({ message: 'Failed to load memory files', type: 'error' });
 			browseFiles = [];
 		} finally {
 			browseLoading = false;
@@ -126,18 +130,19 @@
 	}
 
 	async function viewFile(project: string, filename: string) {
+		viewFileError = '';
 		fileLoading = true;
 		try {
 			const params = new URLSearchParams({ action: 'file', project, filename });
 			const res = await fetch(`/api/memory?${params}`);
 			const data = await res.json();
 			if (data.error) {
-				console.error('Failed to load file:', data.error);
+				viewFileError = data.error;
 			} else {
 				viewingFile = data;
 			}
 		} catch (err) {
-			console.error('Failed to view file:', err);
+			viewFileError = err instanceof Error ? err.message : 'Failed to load file';
 		} finally {
 			fileLoading = false;
 		}
@@ -157,7 +162,7 @@
 			// Refresh status
 			await fetchStatus();
 		} catch (err) {
-			console.error('Reindex failed:', err);
+			addToast({ message: err instanceof Error ? err.message : 'Reindex failed', type: 'error' });
 		} finally {
 			reindexing = false;
 		}
@@ -169,6 +174,7 @@
 
 	function closeFileViewer() {
 		viewingFile = null;
+		viewFileError = '';
 	}
 
 	function formatDate(dateStr: string | undefined) {
@@ -211,6 +217,14 @@
 		if (browseProject) fetchBrowseFiles();
 	});
 
+	// Escape key to close file viewer
+	$effect(() => {
+		if (!viewingFile && !fileLoading && !viewFileError) return;
+		function onEsc(e: KeyboardEvent) { if (e.key === 'Escape') closeFileViewer(); }
+		window.addEventListener('keydown', onEsc);
+		return () => window.removeEventListener('keydown', onEsc);
+	});
+
 	onMount(async () => {
 		fetchStatus();
 		projectColors = await fetchAndGetProjectColors();
@@ -222,21 +236,13 @@
 	<div
 		class="flex items-center justify-between px-6 py-4 border-b shrink-0"
 		style="
-			background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+			background: oklch(0.16 0.01 250);
 			border-color: oklch(0.25 0.02 250);
 		"
 	>
 		<div class="flex items-center gap-4">
 			<div class="flex items-center gap-2.5">
-				<div
-					class="p-1.5 rounded"
-					style="background: oklch(0.65 0.15 280 / 0.15); border: 1px solid oklch(0.65 0.15 280 / 0.3);"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color: oklch(0.75 0.15 280);">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-					</svg>
-				</div>
-				<h1 class="text-lg font-bold font-mono tracking-wide" style="color: oklch(0.85 0.05 250);">
+				<h1 style="font-size: 0.875rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: oklch(from var(--color-base-content) l c h / 60%); font-family: system-ui, -apple-system, sans-serif;">
 					MEMORY
 				</h1>
 			</div>
@@ -244,33 +250,45 @@
 			<!-- Quick stats -->
 			{#if !statusLoading}
 				<div class="flex items-center gap-3 ml-4">
-					<span class="font-mono text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250);">
-						{totalFiles} file{totalFiles !== 1 ? 's' : ''}
+					<span class="text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250); font-family: system-ui, -apple-system, sans-serif;">
+						<span style="font-family: ui-monospace, monospace;">{totalFiles}</span> file{totalFiles !== 1 ? 's' : ''}
 					</span>
-					<span class="font-mono text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250);">
-						{totalChunks} chunk{totalChunks !== 1 ? 's' : ''}
+					<span class="text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250); font-family: system-ui, -apple-system, sans-serif;">
+						<span style="font-family: ui-monospace, monospace;">{totalChunks}</span> chunk{totalChunks !== 1 ? 's' : ''}
 					</span>
-					<span class="font-mono text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250);">
-						{indexedProjects} project{indexedProjects !== 1 ? 's' : ''}
+					<span class="text-xs px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250); font-family: system-ui, -apple-system, sans-serif;">
+						<span style="font-family: ui-monospace, monospace;">{indexedProjects}</span> project{indexedProjects !== 1 ? 's' : ''}
 					</span>
 				</div>
 			{/if}
 		</div>
 
-		<!-- Reindex button -->
+		<!-- Reindex button — two-step to prevent accidental rebuild-all -->
 		<button
-			class="flex items-center gap-2 px-3 py-1.5 rounded font-mono text-xs transition-all"
+			class="flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-all"
 			style="
-				background: oklch(0.55 0.15 145 / 0.15);
-				border: 1px solid oklch(0.55 0.15 145 / 0.3);
-				color: oklch(0.75 0.12 145);
+				background: {reindexConfirming ? 'oklch(0.55 0.20 25 / 0.15)' : 'oklch(0.55 0.15 145 / 0.15)'};
+				border: 1px solid {reindexConfirming ? 'oklch(0.55 0.20 25 / 0.4)' : 'oklch(0.55 0.15 145 / 0.3)'};
+				color: {reindexConfirming ? 'oklch(0.78 0.16 25)' : 'oklch(0.75 0.12 145)'};
+				font-family: system-ui, -apple-system, sans-serif;
 			"
 			disabled={reindexing}
-			onclick={() => handleReindex()}
+			onclick={() => {
+				if (!reindexConfirming) {
+					reindexConfirming = true;
+					reindexConfirmTimer = setTimeout(() => { reindexConfirming = false; }, 2500);
+				} else {
+					if (reindexConfirmTimer) clearTimeout(reindexConfirmTimer);
+					reindexConfirming = false;
+					handleReindex();
+				}
+			}}
 		>
 			{#if reindexing}
 				<span class="loading loading-spinner loading-xs"></span>
 				Indexing...
+			{:else if reindexConfirming}
+				Confirm rebuild all?
 			{:else}
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
@@ -283,15 +301,17 @@
 	<!-- Tab bar -->
 	<div class="flex items-center gap-1 px-6 py-2 border-b shrink-0" style="border-color: oklch(0.22 0.02 250); background: oklch(0.16 0.01 250);">
 		{#each [
-			{ id: 'status', label: 'Status', icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z' },
-			{ id: 'browse', label: 'Browse', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' }
+			{ id: 'search', label: 'Search', icon: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z' },
+			{ id: 'browse', label: 'Browse', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' },
+			{ id: 'status', label: 'Status', icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z' }
 		] as tab}
 			<button
-				class="flex items-center gap-2 px-3 py-1.5 rounded font-mono text-xs transition-all"
+				class="flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-all"
 				style="
 					background: {activeTab === tab.id ? 'oklch(0.65 0.15 280 / 0.15)' : 'transparent'};
 					border: 1px solid {activeTab === tab.id ? 'oklch(0.65 0.15 280 / 0.3)' : 'transparent'};
 					color: {activeTab === tab.id ? 'oklch(0.80 0.12 280)' : 'oklch(0.55 0.02 250)'};
+					font-family: system-ui, -apple-system, sans-serif;
 				"
 				onclick={() => { activeTab = tab.id as typeof activeTab; }}
 			>
@@ -320,34 +340,141 @@
 
 	<!-- Content area -->
 	<div class="flex-1 overflow-y-auto">
+		<!-- SEARCH TAB -->
+		{#if activeTab === 'search'}
+			<div class="p-6 max-w-5xl mx-auto">
+				<div>
+					<p class="mb-3 text-xs" style="color: oklch(from var(--color-base-content) l c h / 40%); font-family: system-ui, -apple-system, sans-serif;">
+						Search across agent memory files by content, task, or concept
+					</p>
+					<div class="flex gap-3 mb-4">
+						<div class="flex-1 relative">
+							<input
+								type="text"
+								bind:value={searchQuery}
+								onkeydown={handleSearchKeydown}
+								placeholder="Search memory entries..."
+								class="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+								style="
+									background: oklch(0.20 0.01 250);
+									border: 1px solid oklch(0.30 0.02 250);
+									color: oklch(0.85 0.05 250);
+									font-family: ui-monospace, monospace;
+								"
+							/>
+							{#if searchLoading}
+								<span class="loading loading-spinner loading-sm absolute right-3 top-3" style="color: oklch(0.65 0.15 280);"></span>
+							{/if}
+						</div>
+						<button
+							class="px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+							style="
+								background: oklch(0.55 0.15 280 / 0.2);
+								border: 1px solid oklch(0.55 0.15 280 / 0.4);
+								color: oklch(0.80 0.12 280);
+								font-family: system-ui, -apple-system, sans-serif;
+							"
+							disabled={searchLoading || !searchQuery.trim()}
+							onclick={handleSearch}
+						>
+							Search
+						</button>
+					</div>
+
+					<!-- Search results -->
+					{#if searchError}
+						<div class="mt-3 px-4 py-3 rounded-lg text-sm" style="background: oklch(0.50 0.15 30 / 0.15); border: 1px solid oklch(0.50 0.15 30 / 0.3); color: oklch(0.75 0.12 30); font-family: system-ui, -apple-system, sans-serif;">
+							{searchError}
+						</div>
+					{/if}
+
+					{#if searchResults.length > 0}
+						<div class="mt-4 space-y-3">
+							<div class="text-xs" style="color: oklch(0.55 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+								<span style="font-family: ui-monospace, monospace;">{searchResults.length}</span> result{searchResults.length !== 1 ? 's' : ''} for "<span style="font-family: ui-monospace, monospace;">{lastSearchQuery}</span>"
+							</div>
+							{#each searchResults as result, i}
+								<button use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
+									class="w-full text-left p-4 rounded-lg transition-all"
+									style="
+										background: oklch(0.18 0.01 250);
+										border: 1px solid oklch(0.25 0.02 250);
+									"
+									onclick={() => {
+										const filename = result.path?.split('/').pop();
+										if (filename && result.project) viewFile(result.project, filename);
+									}}
+								>
+									<div class="flex items-center gap-2 mb-2">
+										<span class="text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 280 / 0.15); color: oklch(0.75 0.12 280); font-family: system-ui, -apple-system, sans-serif;">
+											{result.project}
+										</span>
+										{#if result.taskId}
+											<span class="text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 200 / 0.15); color: oklch(0.75 0.12 200); font-family: ui-monospace, monospace;">
+												{result.taskId}
+											</span>
+										{/if}
+										{#if result.section}
+											<span class="text-xs" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+												{result.section}
+											</span>
+										{/if}
+										<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+											score: <span style="font-family: ui-monospace, monospace;">{result.score?.toFixed(2)}</span>
+										</span>
+									</div>
+									<div class="text-sm whitespace-pre-wrap line-clamp-3" style="color: oklch(0.75 0.03 250); font-family: system-ui, -apple-system, sans-serif;">
+										{result.snippet}
+									</div>
+									{#if result.source}
+										<div class="mt-2 text-[10px]" style="color: oklch(0.45 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+											via {result.source} | lines <span style="font-family: ui-monospace, monospace;">{result.startLine}-{result.endLine}</span>
+										</div>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{:else if lastSearchQuery && !searchLoading && !searchError}
+						<div class="text-center py-8 text-sm" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+							No results found for "<span style="font-family: ui-monospace, monospace;">{lastSearchQuery}</span>"
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
 		<!-- BROWSE TAB -->
 		{#if activeTab === 'browse'}
 			<div class="p-6 max-w-5xl mx-auto space-y-4">
 				<!-- Project selector -->
 				<div class="flex items-center gap-3">
-					<span class="font-mono text-xs" style="color: oklch(0.55 0.02 250);">Project:</span>
-					<select
-						bind:value={browseProject}
-						class="px-3 py-1.5 rounded font-mono text-sm outline-none"
-						style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.05 250);"
-					>
-						{#each filteredStatuses as proj}
-							<option value={proj.project}>{proj.project} ({proj.fileCount} files)</option>
-						{/each}
-					</select>
+					<span class="text-xs" style="color: oklch(0.55 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Project:</span>
+					{#if filteredStatuses.length > 1}
+						<select
+							bind:value={browseProject}
+							class="px-3 py-1.5 rounded text-sm outline-none"
+							style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.05 250); font-family: ui-monospace, monospace;"
+						>
+							{#each filteredStatuses as proj}
+								<option value={proj.project}>{proj.project} ({proj.fileCount} files)</option>
+							{/each}
+						</select>
+					{:else}
+						<span style="font-family: ui-monospace, monospace; font-size: 0.875rem; color: oklch(0.80 0.05 250);">{browseProject}</span>
+					{/if}
 				</div>
 
 				{#if browseLoading}
 					<div class="flex items-center gap-2 py-8 justify-center">
 						<span class="loading loading-spinner loading-sm" style="color: oklch(0.65 0.15 280);"></span>
-						<span class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">Loading...</span>
+						<span class="text-sm" style="color: oklch(0.55 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Loading...</span>
 					</div>
 				{:else if browseFiles.length === 0}
 					<div class="text-center py-12 space-y-3">
-						<p class="font-mono text-sm" style="color: oklch(0.50 0.02 250);">
-							No memory files in {browseProject}
+						<p class="text-sm" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+							No memory files in <span style="font-family: ui-monospace, monospace;">{browseProject}</span>
 						</p>
-						<p class="font-mono text-xs" style="color: oklch(0.40 0.02 250);">
+						<p class="text-xs" style="color: oklch(0.40 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
 							Memory files are created when tasks complete via /jat:complete
 						</p>
 					</div>
@@ -355,7 +482,7 @@
 					<div class="space-y-2">
 						{#each browseFiles as file, i}
 							<button
-								class="w-full text-left p-4 rounded-lg transition-all hover:scale-[1.003]"
+								class="w-full text-left p-4 rounded-lg transition-all"
 								use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
 								style="
 									background: oklch(0.18 0.01 250);
@@ -364,40 +491,41 @@
 								onclick={() => viewFile(browseProject, file.filename)}
 							>
 								<div class="flex items-center gap-2 mb-1.5">
-									<span class="font-bold font-mono text-sm" style="color: oklch(0.85 0.05 250);">
+									<span class="font-bold text-sm" style="color: oklch(0.85 0.05 250); font-family: system-ui, -apple-system, sans-serif;">
 										{file.title}
 									</span>
 									{#if file.task}
-										<span class="font-mono text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 200 / 0.15); color: oklch(0.75 0.12 200);">
+										<span class="text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 200 / 0.15); color: oklch(0.75 0.12 200); font-family: ui-monospace, monospace;">
 											{file.task}
 										</span>
 									{/if}
-									<span class="ml-auto font-mono text-[10px]" style="color: oklch(0.45 0.02 250);">
+									<span class="ml-auto text-[10px]" style="color: oklch(0.45 0.02 250); font-family: ui-monospace, monospace;">
 										{formatSize(file.size)} | {formatDate(file.completed_at || file.modified)}
 									</span>
 								</div>
 								{#if file.summary}
-									<p class="font-mono text-xs line-clamp-2 mb-2" style="color: oklch(0.60 0.03 250);">
+									<p class="text-xs line-clamp-2 mb-2" style="color: oklch(0.60 0.03 250); font-family: system-ui, -apple-system, sans-serif;">
 										{file.summary}
 									</p>
 								{/if}
 								<div class="flex items-center gap-2 flex-wrap">
 									{#if file.agent}
-										<span class="font-mono text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 85 / 0.12); color: oklch(0.70 0.10 85);">
+										<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 85 / 0.12); color: oklch(0.70 0.10 85); font-family: ui-monospace, monospace;">
 											{file.agent}
 										</span>
 									{/if}
 									{#if Array.isArray(file.tags)}
 										{#each file.tags.slice(0, 5) as tag}
-											<span class="font-mono text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.30 0.02 250); color: oklch(0.60 0.03 250);">
+											<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.30 0.02 250); color: oklch(0.60 0.03 250); font-family: ui-monospace, monospace;">
 												{tag}
 											</span>
 										{/each}
 									{/if}
 									{#if file.risk}
-										<span class="font-mono text-[10px] px-1.5 py-0.5 rounded ml-auto" style="
+										<span class="text-[10px] px-1.5 py-0.5 rounded ml-auto" style="
 											background: {file.risk === 'high' ? 'oklch(0.50 0.15 30 / 0.15)' : file.risk === 'medium' ? 'oklch(0.55 0.15 85 / 0.12)' : 'oklch(0.30 0.02 250)'};
 											color: {file.risk === 'high' ? 'oklch(0.75 0.12 30)' : file.risk === 'medium' ? 'oklch(0.70 0.10 85)' : 'oklch(0.60 0.03 250)'};
+											font-family: ui-monospace, monospace;
 										">
 											risk: {file.risk}
 										</span>
@@ -416,14 +544,14 @@
 				{#if statusLoading}
 					<div class="flex items-center gap-2 py-8 justify-center">
 						<span class="loading loading-spinner loading-sm" style="color: oklch(0.65 0.15 280);"></span>
-						<span class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">Loading status...</span>
+						<span class="text-sm" style="color: oklch(0.55 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Loading status...</span>
 					</div>
 				{:else if filteredStatuses.length === 0}
 					<div class="text-center py-12 space-y-3">
-						<p class="font-mono text-sm" style="color: oklch(0.50 0.02 250);">
+						<p class="text-sm" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
 							No projects with memory directories found
 						</p>
-						<p class="font-mono text-xs" style="color: oklch(0.40 0.02 250);">
+						<p class="text-xs" style="color: oklch(0.40 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
 							Memory files are stored in .jat/memory/ within each project
 						</p>
 					</div>
@@ -431,9 +559,9 @@
 					<!-- Reindex results -->
 					{#if reindexResults}
 						<div class="p-4 rounded-lg" style="background: oklch(0.55 0.15 145 / 0.1); border: 1px solid oklch(0.55 0.15 145 / 0.25);">
-							<div class="font-mono text-xs font-bold mb-2" style="color: oklch(0.75 0.12 145);">Reindex Complete</div>
+							<div class="text-xs font-bold mb-2" style="color: oklch(0.75 0.12 145); font-family: system-ui, -apple-system, sans-serif;">Reindex Complete</div>
 							{#each reindexResults as r}
-								<div class="font-mono text-xs" style="color: oklch(0.65 0.05 250);">
+								<div class="text-xs" style="color: oklch(0.65 0.05 250); font-family: ui-monospace, monospace;">
 									{r.project}: {r.error ? `Error: ${r.error}` : `${r.indexed || 0} indexed, ${r.chunks || r.totalChunks || 0} chunks`}
 								</div>
 							{/each}
@@ -453,22 +581,22 @@
 							>
 								<div class="flex items-center justify-between mb-3">
 									<div class="flex items-center gap-2">
-										<span class="font-bold font-mono text-sm" style="color: oklch(0.85 0.05 250);">
+										<span class="font-bold text-sm" style="color: oklch(0.85 0.05 250); font-family: system-ui, -apple-system, sans-serif;">
 											{proj.project}
 										</span>
 										{#if proj.hasIndex}
-											<span class="font-mono text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.10 145);">
+											<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.10 145); font-family: system-ui, -apple-system, sans-serif;">
 												indexed
 											</span>
 										{:else}
-											<span class="font-mono text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 85 / 0.12); color: oklch(0.70 0.10 85);">
+											<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 85 / 0.12); color: oklch(0.70 0.10 85); font-family: system-ui, -apple-system, sans-serif;">
 												not indexed
 											</span>
 										{/if}
 									</div>
 									<button
-										class="font-mono text-[10px] px-2 py-1 rounded transition-all"
-										style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.05 250);"
+										class="text-[10px] px-2 py-1 rounded transition-all"
+										style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.05 250); font-family: system-ui, -apple-system, sans-serif;"
 										disabled={reindexing}
 										onclick={() => handleReindex(proj.project)}
 									>
@@ -478,21 +606,21 @@
 
 								<div class="grid grid-cols-3 gap-3">
 									<div>
-										<div class="font-mono text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250);">Files</div>
-										<div class="font-mono text-lg font-bold" style="color: oklch(0.80 0.05 250);">{proj.fileCount || 0}</div>
+										<div class="text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Files</div>
+										<div class="text-lg font-bold" style="color: oklch(0.80 0.05 250); font-family: ui-monospace, monospace;">{proj.fileCount || 0}</div>
 									</div>
 									<div>
-										<div class="font-mono text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250);">Chunks</div>
-										<div class="font-mono text-lg font-bold" style="color: oklch(0.80 0.05 250);">{proj.chunkCount || 0}</div>
+										<div class="text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Chunks</div>
+										<div class="text-lg font-bold" style="color: oklch(0.80 0.05 250); font-family: ui-monospace, monospace;">{proj.chunkCount || 0}</div>
 									</div>
 									<div>
-										<div class="font-mono text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250);">Embedded</div>
-										<div class="font-mono text-lg font-bold" style="color: oklch(0.80 0.05 250);">{proj.embeddedCount || 0}</div>
+										<div class="text-[10px] uppercase tracking-wider mb-1" style="color: oklch(0.45 0.02 250); font-family: system-ui, -apple-system, sans-serif;">Embedded</div>
+										<div class="text-lg font-bold" style="color: oklch(0.80 0.05 250); font-family: ui-monospace, monospace;">{proj.embeddedCount || 0}</div>
 									</div>
 								</div>
 
 								{#if proj.error}
-									<div class="mt-3 font-mono text-xs" style="color: oklch(0.65 0.10 30);">
+									<div class="mt-3 text-xs" style="color: oklch(0.65 0.10 30); font-family: system-ui, -apple-system, sans-serif;">
 										{proj.error}
 									</div>
 								{/if}
@@ -502,122 +630,27 @@
 
 					<!-- Info -->
 					<div class="p-4 rounded-lg" style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.22 0.02 250);">
-						<div class="font-mono text-xs space-y-1" style="color: oklch(0.50 0.02 250);">
-							<p>Memory files: <code style="color: oklch(0.65 0.10 280);">.jat/memory/*.md</code></p>
-							<p>Index database: <code style="color: oklch(0.65 0.10 280);">.jat/memory.db</code></p>
-							<p>CLI: <code style="color: oklch(0.65 0.10 280);">jat-memory index | search | status | providers</code></p>
+						<div class="text-xs space-y-1" style="color: oklch(0.50 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
+							<p>Memory files: <code style="color: oklch(0.65 0.10 280); font-family: ui-monospace, monospace;">.jat/memory/*.md</code></p>
+							<p>Index database: <code style="color: oklch(0.65 0.10 280); font-family: ui-monospace, monospace;">.jat/memory.db</code></p>
+							<p>CLI: <code style="color: oklch(0.65 0.10 280); font-family: ui-monospace, monospace;">jat-memory index | search | status | providers</code></p>
 						</div>
 					</div>
 				{/if}
-
-				<!-- Search section -->
-				<div class="pt-2">
-					<div class="font-mono text-xs font-bold uppercase tracking-wider mb-3" style="color: oklch(0.50 0.02 250);">Search Memory</div>
-					<div class="flex gap-3">
-						<div class="flex-1 relative">
-							<input
-								type="text"
-								bind:value={searchQuery}
-								onkeydown={handleSearchKeydown}
-								placeholder="Search memory entries..."
-								class="w-full px-4 py-2.5 rounded-lg font-mono text-sm outline-none transition-all"
-								style="
-									background: oklch(0.20 0.01 250);
-									border: 1px solid oklch(0.30 0.02 250);
-									color: oklch(0.85 0.05 250);
-								"
-							/>
-							{#if searchLoading}
-								<span class="loading loading-spinner loading-sm absolute right-3 top-3" style="color: oklch(0.65 0.15 280);"></span>
-							{/if}
-						</div>
-						<button
-							class="px-4 py-2.5 rounded-lg font-mono text-sm font-bold transition-all"
-							style="
-								background: oklch(0.55 0.15 280 / 0.2);
-								border: 1px solid oklch(0.55 0.15 280 / 0.4);
-								color: oklch(0.80 0.12 280);
-							"
-							disabled={searchLoading || !searchQuery.trim()}
-							onclick={handleSearch}
-						>
-							Search
-						</button>
-					</div>
-
-					<!-- Search results -->
-					{#if searchError}
-						<div class="mt-3 px-4 py-3 rounded-lg font-mono text-sm" style="background: oklch(0.50 0.15 30 / 0.15); border: 1px solid oklch(0.50 0.15 30 / 0.3); color: oklch(0.75 0.12 30);">
-							{searchError}
-						</div>
-					{/if}
-
-					{#if searchResults.length > 0}
-						<div class="mt-4 space-y-3">
-							<div class="font-mono text-xs" style="color: oklch(0.55 0.02 250);">
-								{searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{lastSearchQuery}"
-							</div>
-							{#each searchResults as result, i}
-								<button use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
-									class="w-full text-left p-4 rounded-lg transition-all hover:scale-[1.005]"
-									style="
-										background: oklch(0.18 0.01 250);
-										border: 1px solid oklch(0.25 0.02 250);
-									"
-									onclick={() => {
-										const filename = result.path?.split('/').pop();
-										if (filename && result.project) viewFile(result.project, filename);
-									}}
-								>
-									<div class="flex items-center gap-2 mb-2">
-										<span class="font-mono text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 280 / 0.15); color: oklch(0.75 0.12 280);">
-											{result.project}
-										</span>
-										{#if result.taskId}
-											<span class="font-mono text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 200 / 0.15); color: oklch(0.75 0.12 200);">
-												{result.taskId}
-											</span>
-										{/if}
-										{#if result.section}
-											<span class="font-mono text-xs" style="color: oklch(0.50 0.02 250);">
-												{result.section}
-											</span>
-										{/if}
-										<span class="ml-auto font-mono text-xs" style="color: oklch(0.50 0.02 250);">
-											score: {result.score?.toFixed(4)}
-										</span>
-									</div>
-									<div class="font-mono text-sm whitespace-pre-wrap line-clamp-3" style="color: oklch(0.75 0.03 250);">
-										{result.snippet}
-									</div>
-									{#if result.source}
-										<div class="mt-2 font-mono text-[10px]" style="color: oklch(0.45 0.02 250);">
-											via {result.source} | lines {result.startLine}-{result.endLine}
-										</div>
-									{/if}
-								</button>
-							{/each}
-						</div>
-					{:else if lastSearchQuery && !searchLoading && !searchError}
-						<div class="text-center py-8 font-mono text-sm" style="color: oklch(0.50 0.02 250);">
-							No results found for "{lastSearchQuery}"
-						</div>
-					{/if}
-				</div>
 			</div>
 		{/if}
 	</div>
 
 	<!-- File Viewer Drawer -->
-	{#if viewingFile || fileLoading}
+	{#if viewingFile || fileLoading || viewFileError}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			class="fixed inset-0 z-50 flex justify-end"
 			onclick={(e) => { if (e.target === e.currentTarget) closeFileViewer(); }}
 		>
-			<!-- Overlay -->
-			<div class="absolute inset-0" style="background: oklch(0 0 0 / 0.5);"></div>
+			<!-- Overlay — click to close -->
+			<div class="absolute inset-0" style="background: oklch(0 0 0 / 0.5);" onclick={closeFileViewer}></div>
 
 			<!-- Drawer panel -->
 			<div
@@ -628,14 +661,33 @@
 					<div class="flex items-center gap-2 p-8 justify-center">
 						<span class="loading loading-spinner loading-sm" style="color: oklch(0.65 0.15 280);"></span>
 					</div>
+				{:else if viewFileError}
+					<div class="p-6">
+						<!-- Close button -->
+						<div class="flex justify-end mb-4">
+							<button
+								class="p-1.5 rounded transition-all"
+								style="color: oklch(0.55 0.02 250);"
+								onclick={closeFileViewer}
+								aria-label="Close file viewer"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+						<div class="px-4 py-3 rounded-lg text-sm" style="background: oklch(0.50 0.15 30 / 0.15); border: 1px solid oklch(0.50 0.15 30 / 0.3); color: oklch(0.75 0.12 30); font-family: system-ui, -apple-system, sans-serif;">
+							{viewFileError}
+						</div>
+					</div>
 				{:else if viewingFile}
 					<!-- Header -->
 					<div class="sticky top-0 flex items-center justify-between px-6 py-4 border-b z-10" style="background: oklch(0.18 0.01 250); border-color: oklch(0.25 0.02 250);">
 						<div class="flex items-center gap-2">
-							<span class="font-mono text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 280 / 0.15); color: oklch(0.75 0.12 280);">
+							<span class="text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.55 0.15 280 / 0.15); color: oklch(0.75 0.12 280); font-family: system-ui, -apple-system, sans-serif;">
 								{viewingFile.project}
 							</span>
-							<span class="font-mono text-sm font-bold" style="color: oklch(0.85 0.05 250);">
+							<span class="text-sm font-bold" style="color: oklch(0.85 0.05 250); font-family: ui-monospace, monospace;">
 								{viewingFile.filename}
 							</span>
 						</div>
@@ -655,7 +707,7 @@
 					{#if viewingFile.frontmatter && Object.keys(viewingFile.frontmatter).length > 0}
 						<div class="flex flex-wrap gap-2 px-6 py-3 border-b" style="border-color: oklch(0.22 0.02 250);">
 							{#each Object.entries(viewingFile.frontmatter) as [key, value]}
-								<span class="font-mono text-[10px] px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250);">
+								<span class="text-[10px] px-2 py-0.5 rounded" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250); font-family: ui-monospace, monospace;">
 									{key}: {Array.isArray(value) ? value.join(', ') : value}
 								</span>
 							{/each}
@@ -664,7 +716,7 @@
 
 					<!-- Content -->
 					<div class="px-6 py-4">
-						<pre class="font-mono text-sm whitespace-pre-wrap leading-relaxed" style="color: oklch(0.80 0.03 250);">{viewingFile.content}</pre>
+						<pre class="text-sm whitespace-pre-wrap leading-relaxed" style="color: oklch(0.80 0.03 250); font-family: ui-monospace, monospace;">{viewingFile.content}</pre>
 					</div>
 				{/if}
 			</div>

@@ -1238,7 +1238,7 @@
 															>
 															{#if isClosed}
 																<span
-																	class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase tracking-wider"
+																	class="text-[10px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase tracking-wider"
 																	>closed</span
 																>
 															{/if}

@@ -293,8 +293,11 @@
 	async function loadWorkflow(id: string) {
 		loadingWorkflow = true;
 		loadError = null;
-		// Navigate into the editor shell immediately so the user sees the loading state
+		// Navigate into the editor shell immediately so the user sees the loading state.
+		// Pre-set the name from the list summary so the toolbar doesn't flash "Untitled Workflow".
 		currentId = id;
+		const summary = workflows.find((w) => w.id === id);
+		if (summary) workflowName = summary.name;
 		try {
 			const res = await fetch(`/api/workflows/${id}`);
 			if (!res.ok) throw new Error('Not found');
@@ -1323,9 +1326,26 @@
 						{/if}
 					</div>
 
-					<!-- Quick actions (right-click hint, row-hover only) -->
-					<div class="flex items-center justify-end">
-						<span class="wf-row-hint text-[10px]" style="color: oklch(0.40 0.02 250)">right-click</span>
+					<!-- Quick actions — appear on row hover -->
+					<div class="wf-row-actions flex items-center justify-end gap-0.5">
+						<button
+							class="wf-row-action-btn"
+							title="Run now"
+							onclick={(e) => { e.stopPropagation(); runWorkflowFromList(wf); }}
+						>
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M8 5v14l11-7L8 5z" />
+							</svg>
+						</button>
+						<button
+							class="wf-row-action-btn"
+							title="More actions"
+							onclick={(e) => { e.stopPropagation(); handleCardContextMenu(wf, e); }}
+						>
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zm0 5.25a.75.75 0 110-1.5.75.75 0 010 1.5zm0 5.25a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+							</svg>
+						</button>
 					</div>
 				</div>
 			{/each}
@@ -1445,13 +1465,32 @@
 		background: oklch(0.17 0.01 250);
 	}
 
-	.wf-row-hint {
+	.wf-row-actions {
 		opacity: 0;
 		transition: opacity 0.1s;
 	}
 
-	.wf-list-row:hover .wf-row-hint {
+	.wf-list-row:hover .wf-row-actions {
 		opacity: 1;
+	}
+
+	.wf-row-action-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 4px;
+		border: none;
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+		cursor: pointer;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.wf-row-action-btn:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.02 250);
 	}
 
 	/* ===== PALETTE ITEMS ===== */

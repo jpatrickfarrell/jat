@@ -305,140 +305,62 @@
 		</div>
 
 		<!-- Spawn Settings Section -->
-		<div class="settings-section">
+		<div class="settings-section section-spawn">
 			<div class="section-header-with-actions">
-				<div class="section-header">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="w-4 h-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="1.5"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-						/>
+				<div class="section-header section-header-spawn">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
 					</svg>
 					<span>Spawn Configuration</span>
 				</div>
-				<button
-					class="btn btn-ghost btn-sm btn-square"
-					onclick={resetSpawnToFactory}
-					disabled={saving}
-					title="Reset to defaults"
-				>
+				<button class="btn btn-ghost btn-sm btn-square" onclick={resetSpawnToFactory} disabled={saving} title="Reset to defaults">
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
 					</svg>
 				</button>
 			</div>
 
-			<div class="settings-grid">
-				<!-- Model Selection -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Default Model</span>
-					</div>
-					<select class="select select-bordered" bind:value={model} onchange={() => autoSave()}>
-						{#each modelOptions as option}
-							<option value={option.value}>{option.label}</option>
-						{/each}
-					</select>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							{modelOptions.find((o) => o.value === model)?.description}
-						</span>
-					</div>
+			<!-- Default Model: primary, full-width -->
+			<div class="spawn-primary-field">
+				<div class="spawn-primary-label">
+					<span>Default Model</span>
+					<span class="spawn-primary-hint">{modelOptions.find((o) => o.value === model)?.description}</span>
 				</div>
+				<select class="select select-bordered spawn-model-select" bind:value={model} onchange={() => autoSave()}>
+					{#each modelOptions as option}
+						<option value={option.value}>{option.label}</option>
+					{/each}
+				</select>
+			</div>
 
-				<!-- Max Sessions -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Max Concurrent Sessions</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={maxSessions}
-						oninput={scheduleAutoSave}
-						min="1"
-						max="20"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Maximum tmux sessions allowed (1-20)
-						</span>
-					</div>
+			<!-- Secondary numeric fields: compact 4-column strip -->
+			<div class="spawn-secondary-grid">
+				<div class="compact-field">
+					<span class="compact-label">Max Sessions</span>
+					<input type="number" class="input input-bordered input-sm" bind:value={maxSessions} oninput={scheduleAutoSave} min="1" max="20" />
+					<span class="compact-hint">concurrent</span>
 				</div>
-
-				<!-- Default Agent Count -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Default Agent Count</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={defaultAgentCount}
-						oninput={scheduleAutoSave}
-						min="1"
-						max={maxSessions}
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Default number of agents to spawn in swarm
-						</span>
-					</div>
+				<div class="compact-field">
+					<span class="compact-label">Default Agents</span>
+					<input type="number" class="input input-bordered input-sm" bind:value={defaultAgentCount} oninput={scheduleAutoSave} min="1" max={maxSessions} />
+					<span class="compact-hint">per swarm</span>
 				</div>
-
-				<!-- Agent Stagger -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Spawn Stagger (seconds)</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={agentStagger}
-						oninput={scheduleAutoSave}
-						min="1"
-						max="120"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Delay between spawning each agent (1-120s)
-						</span>
-					</div>
+				<div class="compact-field">
+					<span class="compact-label">Stagger</span>
+					<input type="number" class="input input-bordered input-sm" bind:value={agentStagger} oninput={scheduleAutoSave} min="1" max="120" />
+					<span class="compact-hint">sec between</span>
 				</div>
-
-				<!-- Claude Startup Timeout -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Claude Startup Timeout (seconds)</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={claudeStartupTimeout}
-						oninput={scheduleAutoSave}
-						min="5"
-						max="120"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							How long to wait for Claude Code TUI to start
-						</span>
-					</div>
+				<div class="compact-field">
+					<span class="compact-label">Startup Timeout</span>
+					<input type="number" class="input input-bordered input-sm" bind:value={claudeStartupTimeout} oninput={scheduleAutoSave} min="5" max="120" />
+					<span class="compact-hint">sec to wait</span>
 				</div>
 			</div>
 		</div>
 
 		<!-- Autonomous Mode Section -->
 		<div class="settings-section autonomous-section">
-			<div class="section-header">
+			<div class="section-header section-header-warning">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4" style="color: oklch(0.70 0.15 45);">
 					<path d="M13 10V3L4 14h7v7l9-11h-7z"/>
 				</svg>
@@ -478,7 +400,7 @@
 		<!-- Auto-Pause Section -->
 		<div class="settings-section">
 			<div class="section-header-with-actions">
-				<div class="section-header">
+				<div class="section-header section-header-secondary">
 					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
 					</svg>
@@ -539,7 +461,7 @@
 		<!-- Session Cleanup (Auto-Kill) Section -->
 		<div class="settings-section">
 			<div class="section-header-with-actions">
-				<div class="section-header">
+				<div class="section-header section-header-error">
 					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
 					</svg>
@@ -673,25 +595,10 @@
 		<!-- Review Rules Section (only shown when session cleanup is enabled) -->
 		{#if autoKillEnabled}
 			<div class="settings-section">
-				<div class="section-header">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="w-4 h-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="1.5"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z"
-						/>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-						/>
+				<div class="section-header section-header-info">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 					</svg>
 					<span>Review Rules</span>
 				</div>
@@ -704,13 +611,14 @@
 		{/if}
 
 		<!-- VPS Overflow Section -->
-		<div class="settings-section">
+		<div class="settings-section section-vps">
 			<div class="section-header-with-actions">
-				<div class="section-header">
+				<div class="section-header section-header-muted">
 					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
 					</svg>
 					<span>VPS Overflow</span>
+					<span class="advanced-badge">Advanced</span>
 				</div>
 				{#if vpsHost && vpsUser}
 					<button

@@ -135,8 +135,6 @@
 								disabled={actionLoading === session.agentName}
 								onAction={(actionId) => handleAction(actionId, session)}
 								alignRight={true}
-								elapsed={elapsed}
-								stacked={true}
 							/>
 						</div>
 						<!-- Row 2: agent name · task ID (matches TasksActive ta-card-row2) -->

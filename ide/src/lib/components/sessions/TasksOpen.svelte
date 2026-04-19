@@ -1999,6 +1999,29 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>
 								{/if}
+								{#if isBlocked}
+									{@const unresolvedDeps = (task.depends_on ?? []).filter(d => !TERMINAL_STATUSES.has(d.status as any))}
+									<span class="mobile-task-separator">·</span>
+									{#if unresolvedDeps.length === 1}
+										<button
+											type="button"
+											class="mobile-task-blocked-by"
+											title={unresolvedDeps[0].title ? `Blocked by ${unresolvedDeps[0].id}: ${unresolvedDeps[0].title}` : `Blocked by ${unresolvedDeps[0].id}`}
+											onclick={(e) => { e.stopPropagation(); onTaskClick(unresolvedDeps[0].id); }}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="9" height="9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+											<span>{unresolvedDeps[0].id}</span>
+										</button>
+									{:else}
+										<span
+											class="mobile-task-blocked-by"
+											title={`Blocked by: ${unresolvedDeps.map(d => d.id).join(', ')}`}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="9" height="9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+											<span>{unresolvedDeps.length} blockers</span>
+										</span>
+									{/if}
+								{/if}
 								{#if !isHumanTask(task)}
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-harness-badge" title="Harness: {harness}">
@@ -3850,6 +3873,32 @@
 		border-radius: 0.25rem;
 		background: oklch(0.30 0.02 250);
 		color: oklch(0.65 0.02 250);
+	}
+
+	.mobile-task-blocked-by {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		font-family: ui-monospace, monospace;
+		padding: 0.05rem 0.3rem;
+		border-radius: 0.25rem;
+		background: oklch(0.55 0.12 30 / 0.15);
+		color: oklch(0.72 0.14 30);
+		border: 1px solid oklch(0.55 0.12 30 / 0.3);
+		line-height: 1;
+	}
+
+	button.mobile-task-blocked-by {
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+	}
+
+	button.mobile-task-blocked-by:hover {
+		background: oklch(0.55 0.12 30 / 0.25);
+		color: oklch(0.82 0.14 30);
+		border-color: oklch(0.55 0.12 30 / 0.5);
 	}
 
 	.mobile-task-label-more {

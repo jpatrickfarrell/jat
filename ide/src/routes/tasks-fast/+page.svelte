@@ -65,6 +65,16 @@
 	] as const;
 	const DEFAULT_STATUSES = new Set<string>(["submitted", "open"]);
 
+	const STATUS_DISPLAY: Record<string, string> = { in_progress: "in progress" };
+	function displayStatus(s: string): string { return STATUS_DISPLAY[s] ?? s; }
+
+	const STATUS_DESCRIPTIONS: Record<string, string> = {
+		submitted: "needs routing",
+		open: "ready to work",
+		in_progress: "agents working",
+		waiting: "pending reply",
+	};
+
 	let tasks = $state<Task[]>([]);
 	let selectedIdx = $state(0);
 	let panelOpen = $state(false);
@@ -197,6 +207,12 @@
 		filteredTasks[selectedIdx] ?? null,
 	);
 
+	const inboxSummary = $derived.by<Record<string, number>>(() => {
+		const counts: Record<string, number> = {};
+		for (const t of tasks) counts[t.status] = (counts[t.status] ?? 0) + 1;
+		return counts;
+	});
+
 	const hasActiveFilters = $derived.by(() => {
 		const statusDefault =
 			filterStatuses.size === DEFAULT_STATUSES.size &&
@@ -224,7 +240,7 @@
 			chips.push(
 				filterStatuses.size === 0
 					? "status: none"
-					: `status: ${[...filterStatuses].sort().join(",")}`,
+					: `status: ${[...filterStatuses].sort().map(displayStatus).join(",")}`,
 			);
 		}
 		if (filterPriorities.size > 0) {
@@ -588,6 +604,14 @@
 			setSubmittedTasksCount(
 				combined.filter((t) => t.status === "submitted").length,
 			);
+
+			// Email-client default: auto-open the first task so the user always
+			// lands in a split layout with context, not a blank right panel.
+			if (!panelOpen && filteredTasks.length > 0) {
+				selectedIdx = 0;
+				panelOpen = true;
+				focusZone = "detail";
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -756,7 +780,7 @@
 </script>
 
 <svelte:head>
-	<title>Tasks Fast · Inbox</title>
+	<title>Inbox · JAT</title>
 </svelte:head>
 
 <div
@@ -768,9 +792,6 @@
 	<section class="list-panel" aria-label="Task list">
 		<header class="panel-header">
 			<h1 class="panel-title">Inbox</h1>
-			<span class="panel-count">
-				{filteredTasks.length} of {tasks.length}
-			</span>
 		</header>
 
 		<!-- FILTER BAR -->
@@ -782,7 +803,7 @@
 					onkeydown={handleFilterKey}
 					type="search"
 					class="filter-search input input-sm input-bordered"
-					placeholder="Filter… ( / to focus, Esc to exit )"
+					placeholder="Search title or description… · / to focus"
 					aria-label="Search title and description"
 				/>
 				{#if hasActiveFilters}
@@ -799,6 +820,7 @@
 
 			<div class="filter-row filter-row-chips">
 				<div class="chip-group" aria-label="Status">
+					<span class="filter-label">Status</span>
 					{#each STATUS_OPTIONS as status}
 						{@const active = filterStatuses.has(status)}
 						<button
@@ -809,12 +831,13 @@
 							aria-pressed={active}
 							title="Status: {status}"
 						>
-							{status}
+							{displayStatus(status)}
 						</button>
 					{/each}
 				</div>
 
 				<div class="chip-group" aria-label="Priority">
+					<span class="filter-label">Priority</span>
 					{#each PRIORITY_OPTIONS as p}
 						{@const active = filterPriorities.has(p)}
 						<button
@@ -833,6 +856,7 @@
 
 			<div class="filter-row filter-row-secondary">
 				<div class="chip-group chip-group-types" aria-label="Type">
+					<span class="filter-label">Type</span>
 					{#each TYPE_OPTIONS as type}
 						{@const active = filterTypes.has(type)}
 						<button
@@ -868,11 +892,30 @@
 						onkeydown={handleFilterKey}
 						type="text"
 						class="input input-xs input-bordered"
-						placeholder="@me or name"
+						placeholder="@me · name"
 						aria-label="Assignee filter"
 					/>
 				</label>
 			</div>
+
+			{#if projectOptions.length > 1}
+				<div class="filter-row filter-row-projects">
+					<div class="chip-group" aria-label="Project">
+						<span class="filter-label">Project</span>
+						{#each projectOptions as proj}
+							{@const active = filterProject === proj}
+							<button
+								type="button"
+								class="chip chip-project"
+								class:active
+								onclick={() => filterProject = active ? "" : proj}
+								aria-pressed={active}
+								title="Project: {proj}"
+							>{proj}</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		{#if loading}
@@ -886,7 +929,7 @@
 			</div>
 		{:else if tasks.length === 0}
 			<div class="state-message">
-				No submitted, open, in-progress, or waiting tasks.
+				Your inbox is empty.
 			</div>
 		{:else if filteredTasks.length === 0}
 			<div class="state-message state-muted">
@@ -974,9 +1017,47 @@
 	<!-- RIGHT: DETAIL PANEL -->
 	<section class="detail-panel" aria-label="Task detail">
 		{#if !panelOpen || !selectedTask}
-			<div class="state-message state-muted">
-				Select a task to view details.
-			</div>
+			{#if tasks.length > 0}
+				<div class="inbox-summary">
+					<div class="inbox-summary-header">
+						<span class="inbox-summary-title">INBOX</span>
+						<span class="inbox-summary-total">{tasks.length} tasks</span>
+					</div>
+					<div class="inbox-summary-stats">
+						{#each FETCH_STATUSES as s}
+							{@const count = inboxSummary[s] ?? 0}
+							{#if count > 0}
+								<button
+									class="inbox-stat-row"
+									class:inbox-stat-submitted={s === "submitted"}
+									onclick={() => { filterStatuses = new Set([s]); }}
+									title="Filter to {displayStatus(s)}"
+									type="button"
+								>
+									<span class="inbox-stat-status">{displayStatus(s)}</span>
+									<span class="inbox-stat-count">{count}</span>
+									<span class="inbox-stat-bar" aria-hidden="true">
+										<span
+											class="inbox-stat-fill"
+											style="width: {Math.round((count / tasks.length) * 100)}%"
+										></span>
+									</span>
+									<span class="inbox-stat-desc">{STATUS_DESCRIPTIONS[s] ?? ""}</span>
+								</button>
+							{/if}
+						{/each}
+					</div>
+					<div class="inbox-summary-shortcuts">
+						<span>j/k <span class="inbox-shortcut-desc">navigate</span></span>
+						<span>Enter <span class="inbox-shortcut-desc">open</span></span>
+						<span>Space <span class="inbox-shortcut-desc">spawn</span></span>
+						<span>/ <span class="inbox-shortcut-desc">filter</span></span>
+						<span>? <span class="inbox-shortcut-desc">help</span></span>
+					</div>
+				</div>
+			{:else}
+				<div class="state-message state-muted">No tasks loaded.</div>
+			{/if}
 		{:else}
 			<TaskFastDetail
 				bind:this={detailRef}
@@ -1057,10 +1138,6 @@
 	}
 
 	.panel-header {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.5rem;
 		padding: 0.75rem 1rem 0.5rem;
 	}
 
@@ -1068,12 +1145,6 @@
 		font-size: 1rem;
 		font-weight: 600;
 		margin: 0;
-	}
-
-	.panel-count {
-		font-size: 0.75rem;
-		opacity: 0.65;
-		font-variant-numeric: tabular-nums;
 	}
 
 	/* ---- Filter bar ---- */
@@ -1092,6 +1163,10 @@
 		align-items: center;
 		gap: 0.4rem;
 		min-width: 0;
+	}
+
+	.filter-row-chips {
+		gap: 0.4rem 1rem;
 	}
 
 	.filter-row-search {
@@ -1154,6 +1229,12 @@
 		color: oklch(0.90 0.10 280);
 	}
 
+	.chip-project.active {
+		background: oklch(0.65 0.15 200 / 0.18);
+		border-color: oklch(0.65 0.15 200 / 0.7);
+		color: oklch(0.90 0.10 200);
+	}
+
 	.chip-group-sort {
 		display: flex;
 		align-items: center;
@@ -1179,9 +1260,12 @@
 	}
 
 	.filter-label {
-		opacity: 0.65;
+		font-size: 0.65rem;
+		opacity: 0.55;
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.05em;
+		white-space: nowrap;
+		user-select: none;
 	}
 
 	/* ---- Task list ---- */
@@ -1367,5 +1451,132 @@
 
 	.state-error .btn {
 		margin-top: 0.75rem;
+	}
+
+	/* ---- Inbox summary (empty detail panel) ---- */
+
+	.inbox-summary {
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+		padding: 3rem 2rem 2rem;
+		height: 100%;
+		justify-content: flex-start;
+	}
+
+	.inbox-summary-header {
+		display: flex;
+		align-items: baseline;
+		gap: 0.75rem;
+	}
+
+	.inbox-summary-title {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		color: oklch(0.70 0.18 240);
+		opacity: 0.9;
+	}
+
+	.inbox-summary-total {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		opacity: 0.4;
+		letter-spacing: 0.04em;
+	}
+
+	.inbox-summary-stats {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.inbox-stat-row {
+		display: grid;
+		grid-template-columns: 7rem 2rem 1fr 8rem;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		background: transparent;
+		border: 0;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		text-align: left;
+		color: inherit;
+		transition: background 0.1s ease;
+	}
+
+	.inbox-stat-row:hover {
+		background: oklch(0.22 0.02 250 / 0.5);
+	}
+
+	.inbox-stat-status {
+		font-size: 0.8rem;
+		opacity: 0.75;
+		text-transform: lowercase;
+		letter-spacing: 0.01em;
+	}
+
+	.inbox-stat-submitted .inbox-stat-status {
+		opacity: 1;
+		color: oklch(0.85 0.12 85);
+	}
+
+	.inbox-stat-count {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.875rem;
+		font-weight: 600;
+		opacity: 0.9;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.inbox-stat-submitted .inbox-stat-count {
+		color: oklch(0.85 0.15 85);
+	}
+
+	.inbox-stat-bar {
+		height: 3px;
+		background: oklch(0.28 0.02 250);
+		border-radius: 2px;
+		overflow: hidden;
+	}
+
+	.inbox-stat-fill {
+		display: block;
+		height: 100%;
+		background: oklch(0.55 0.08 240);
+		border-radius: 2px;
+		transition: width 0.3s ease;
+	}
+
+	.inbox-stat-submitted .inbox-stat-fill {
+		background: oklch(0.70 0.15 85);
+	}
+
+	.inbox-stat-desc {
+		font-size: 0.68rem;
+		opacity: 0.35;
+		letter-spacing: 0.03em;
+	}
+
+	.inbox-summary-shortcuts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.25rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		opacity: 0.4;
+	}
+
+	.inbox-summary-shortcuts span {
+		white-space: nowrap;
+	}
+
+	.inbox-shortcut-desc {
+		opacity: 0.7;
+		margin-left: 0.25rem;
 	}
 </style>

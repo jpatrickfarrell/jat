@@ -9,6 +9,7 @@
 	 */
 
 	import { fly, fade } from 'svelte/transition';
+	import { tick } from 'svelte';
 	import {
 		getServerStateVisual,
 		getServerStateActions,
@@ -144,7 +145,7 @@
 			case 'warning': return 'hover:bg-warning/20 text-warning';
 			case 'error':   return 'hover:bg-error/20 text-error';
 			case 'info':    return 'hover:bg-info/20 text-info';
-			default:        return 'hover:bg-base-300 text-base-content';
+			default:        return 'hover:bg-base-content/10 text-base-content';
 		}
 	}
 
@@ -160,10 +161,19 @@
 	<!-- Status Badge Button -->
 	<button
 		type="button"
-		onclick={() => (isOpen = !isOpen)}
+		onclick={() => {
+			const wasOpen = isOpen;
+			isOpen = !isOpen;
+			if (!wasOpen) {
+				tick().then(() => {
+					const first = dropdownRef?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])');
+					first?.focus();
+				});
+			}
+		}}
 		class="font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant === 'integrated'
-			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded focus:ring-1 focus:ring-current focus:ring-offset-1'
-			: 'text-[10px] px-1.5 pt-0.5 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'}"
+			? 'text-[11px] px-2 py-0.5 hover:bg-base-content/5 rounded focus:ring-1 focus:ring-current focus:ring-offset-1'
+			: 'text-[10px] px-1.5 pt-0.5 rounded hover:brightness-115 hover:ring-1 hover:ring-inset hover:ring-white/20 active:brightness-95 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'}"
 		class:animate-pulse={config.pulse && variant === 'badge'}
 		class:badge-success-flash={successFlash}
 		class:cursor-not-allowed={disabled}
@@ -215,15 +225,12 @@
 		>
 			<!-- Server info header -->
 			{#if port}
-				<div class="px-3 py-2 flex items-center justify-between text-xs server-header">
-					<span class="opacity-70">Port</span>
-					<span class="font-mono font-bold" style="color: {config.textColor};">
-						:{port}
-						{#if portRunning}
-							<span class="text-success ml-1">active</span>
-						{:else}
-							<span class="text-warning/70 ml-1">inactive</span>
-						{/if}
+				<div class="px-3 py-2 flex items-center gap-2 server-header">
+					<span class="text-[10px] font-mono text-base-content/40 uppercase tracking-wider">Port</span>
+					<span class="port-chip font-mono text-[11px] font-bold" style="color: {config.textColor};">:{port}</span>
+					<span class="ml-auto flex items-center gap-1 text-[10px] font-mono {portRunning ? 'text-success' : 'text-base-content/40'}">
+						<span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 {portRunning ? 'bg-success' : 'bg-base-content/30'}"></span>
+						{portRunning ? 'active' : 'inactive'}
 					</span>
 				</div>
 			{/if}
@@ -267,8 +274,7 @@
 							type="button"
 							onclick={() => executeAction(action)}
 							class="w-full px-3 py-2 flex items-center gap-2 text-left text-xs transition-colors {getVariantClasses(action.variant)}"
-							class:opacity-30={confirmingAction !== null && confirmingAction.id !== action.id}
-							class:opacity-40={executingId !== null && executingId !== action.id}
+							class:opacity-40={(confirmingAction !== null && confirmingAction.id !== action.id) || (executingId !== null && executingId !== action.id)}
 							disabled={executingId !== null || confirmingAction !== null}
 							role="menuitem"
 							aria-label={action.label}
@@ -351,6 +357,16 @@
 	.server-header {
 		background: var(--color-base-200);
 		border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+
+	/* Port number chip */
+	.port-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.35rem;
+		border-radius: 0.2rem;
+		background: color-mix(in oklch, currentColor 12%, transparent);
+		border: 1px solid color-mix(in oklch, currentColor 22%, transparent);
 	}
 
 	/* Destructive confirmation row */

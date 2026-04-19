@@ -27,6 +27,7 @@
 		footer,
 		variant = 'default',
 		size = 'md',
+		dropup = false,
 		onChange,
 	}: {
 		value: string;
@@ -40,6 +41,8 @@
 		variant?: 'default' | 'chip';
 		/** 'sm' renders a smaller trigger matching text-[11px] compact UIs */
 		size?: 'sm' | 'md';
+		/** Open the panel above the trigger instead of below */
+		dropup?: boolean;
 		onChange: (value: string) => void;
 	} = $props();
 
@@ -124,6 +127,7 @@
 		<div
 			class="sd-panel"
 			class:sd-panel-sm={size === 'sm'}
+			class:sd-panel-dropup={dropup}
 			transition:slide={{ duration: 120 }}
 		>
 			<!-- Search input -->
@@ -313,6 +317,7 @@
 	.sd-panel {
 		position: absolute;
 		z-index: 50;
+		top: 100%;
 		margin-top: 0.25rem;
 		width: 100%;
 		min-width: 12rem;
@@ -321,6 +326,14 @@
 		box-shadow: 0 4px 24px oklch(0 0 0 / 0.4);
 		background: oklch(0.16 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.sd-panel-dropup {
+		top: auto;
+		bottom: 100%;
+		margin-top: 0;
+		margin-bottom: 0.25rem;
+		box-shadow: 0 -4px 24px oklch(0 0 0 / 0.4);
 	}
 
 	/* Search section */

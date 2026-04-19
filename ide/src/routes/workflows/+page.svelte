@@ -73,6 +73,9 @@
 	let deleteTargetId = $state<string | null>(null);
 	let deleteTargetName = $state('');
 
+	// Per-row run state (list view)
+	let runningId = $state<string | null>(null);
+
 	// Context menu (list view)
 	let ctxWorkflow = $state<WorkflowSummary | null>(null);
 	let ctxX = $state(0);
@@ -151,6 +154,7 @@
 	}
 
 	async function runWorkflowFromList(wf: WorkflowSummary) {
+		runningId = wf.id;
 		try {
 			const res = await fetch(`/api/workflows/${wf.id}/run`, {
 				method: 'POST',
@@ -166,6 +170,8 @@
 			}
 		} catch {
 			showToast('Execution failed', 'error');
+		} finally {
+			runningId = null;
 		}
 	}
 
@@ -297,7 +303,7 @@
 		// Pre-set the name from the list summary so the toolbar doesn't flash "Untitled Workflow".
 		currentId = id;
 		const summary = workflows.find((w) => w.id === id);
-		if (summary) workflowName = summary.name;
+		if (summary) { workflowName = summary.name; workflowEnabled = summary.enabled; }
 		try {
 			const res = await fetch(`/api/workflows/${id}`);
 			if (!res.ok) throw new Error('Not found');
@@ -1331,11 +1337,16 @@
 						<button
 							class="wf-row-action-btn"
 							title="Run now"
+							disabled={runningId === wf.id}
 							onclick={(e) => { e.stopPropagation(); runWorkflowFromList(wf); }}
 						>
-							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M8 5v14l11-7L8 5z" />
-							</svg>
+							{#if runningId === wf.id}
+								<span class="loading loading-spinner" style="width: 10px; height: 10px"></span>
+							{:else}
+								<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M8 5v14l11-7L8 5z" />
+								</svg>
+							{/if}
 						</button>
 						<button
 							class="wf-row-action-btn"
@@ -1491,6 +1502,16 @@
 	.wf-row-action-btn:hover {
 		background: oklch(0.25 0.02 250);
 		color: oklch(0.80 0.02 250);
+	}
+
+	.wf-row-action-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.60 0.15 200 / 0.5);
+	}
+
+	.wf-row-action-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	/* ===== PALETTE ITEMS ===== */

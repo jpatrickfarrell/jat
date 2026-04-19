@@ -584,22 +584,24 @@ This incrementally indexes the new file. If no memory index exists yet, it creat
 jat-step closing --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
-> **Requester workflow:** `jt close` (called by `jat-step closing`) routes the task based
-> on the `requester` field:
+> **Routing workflow:** `jt close` (called by `jat-step closing`) resolves the routing
+> target in priority order — **approver → requester → creator** — and routes accordingly.
+> Each of these is a `{email, name, role, source, ...}` JSONB snapshot (with an optional
+> `_id` UUID) written at task creation.
 >
 > | Condition | Result |
 > |-----------|--------|
-> | No `requester` set | `status=closed` (normal close) |
-> | `requester` set, `previous_assignee != requester` | `status=submitted, assignee=requester` — lands in requester's queue for acceptance |
-> | `requester` set, `previous_assignee == requester` | `status=accepted, assignee=requester` — requester delegated to the agent themselves, so work is auto-accepted |
+> | No target resolved (all three null) | `status=closed` (normal close) |
+> | Target resolved, `previous_assignee != target` | `status=submitted, assignee=target` — lands in target's queue for acceptance |
+> | Target resolved, `previous_assignee == target` | `status=accepted, assignee=target` — target delegated to the agent themselves, so work is auto-accepted |
 >
 > **The self-accept heuristic:** `previous_assignee` is auto-stashed whenever `assignee`
-> changes. When jw creates a task (`requester=jw`) and spawns an agent, the assignee changes
+> changes. When jw creates a task (`approver=jw`) and spawns an agent, the assignee changes
 > from jw → agent, stashing `previous_assignee=jw`. At close time, `previous_assignee ==
-> requester` signals that jw was the one who delegated the work — they've implicitly accepted
-> it by triggering the agent. When a third party (e.g. jw) works on a task that mike
-> requested (`requester=mike`), `previous_assignee=jw != requester=mike`, so it goes to
-> `submitted` for mike to review.
+> approver` signals that jw was the one who delegated the work — they've implicitly
+> accepted it by triggering the agent. When a third party (e.g. jw) works on a task that
+> mike should sign off on (`approver=mike`), `previous_assignee=jw != approver=mike`, so it
+> goes to `submitted` for mike to review. The match is by email or UUID — either works.
 
 ---
 

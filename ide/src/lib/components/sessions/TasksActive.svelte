@@ -58,6 +58,7 @@
 		notes?: string;
 		labels?: string[];
 		agent_program?: string | null;
+		model?: string | null;
 		created_at?: string;
 	}
 
@@ -1871,7 +1872,12 @@
 									</button>
 									{#if harness}
 										<span class="ta-separator">·</span>
-										<span class="ta-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
+										<span class="ta-harness" title={harness}>
+											<ProviderLogo agentId={harness} size={11} />
+											{#if sessionTask.model}
+												<span class="ta-model" title="Model: {sessionTask.model}">{sessionTask.model}</span>
+											{/if}
+										</span>
 									{/if}
 									{#if sessionTask.priority != null && sessionTask.priority <= 1}
 										<span class="ta-separator">·</span>
@@ -3839,6 +3845,16 @@
 	.ta-harness {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.ta-model {
+		font-family: ui-monospace, monospace;
+		font-size: 0.625rem;
+		font-weight: 600;
+		color: oklch(0.68 0.04 250);
+		letter-spacing: 0.02em;
+		text-transform: lowercase;
 	}
 
 	.ta-age {

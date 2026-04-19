@@ -77,6 +77,7 @@
 		labels?: string[];
 		created_at?: string;
 		agent_program?: string;
+		model?: string;
 	}
 
 	interface AgentSessionInfo {
@@ -877,6 +878,7 @@
 						issue_type: taskSource.issue_type,
 						title: taskSource.title,
 						priority: taskSource.priority,
+						model: taskSource.model,
 						description: taskSource.description,
 						labels: taskSource.labels,
 						created_at: taskSource.created_at,

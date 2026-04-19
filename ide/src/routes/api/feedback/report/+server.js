@@ -274,7 +274,10 @@ export async function POST({ request }) {
 			.digest('hex')
 			.slice(0, 32);
 
-		// Build reporter identity from widget body fields
+		// Widget wire format (external jat-feedback npm package contract): the
+		// `reporter_*` fields are what the <jat-feedback> web component POSTs. The
+		// server normalizes them into the creator/requester/approver identity model.
+		// See feedback/README.md for the widget's documented wire format.
 		const reporterStr = body.reporter && typeof body.reporter === 'string' ? body.reporter.trim() : null;
 		const identity = buildTaskIdentity({
 			source: 'widget',

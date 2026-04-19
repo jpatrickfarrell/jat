@@ -911,10 +911,11 @@
 
 	<!-- Right side: Cmd + Search (all screens) + Activity + Servers + Profile -->
 	<div class="flex-none flex items-center gap-2 pr-3">
-		<!-- Unified search + commands — opens UnifiedSearch (Ctrl+K) -->
+		<!-- Unified search + commands — opens UnifiedSearch (Ctrl+K).
+		     Hidden on narrow: MobileProjectSelector already opens the same palette when tapped. -->
 		{#if onGlobalSearchOpen}
 			<button
-				class="search-cmd-btn"
+				class="search-cmd-btn hidden lg:flex"
 				onclick={onGlobalSearchOpen}
 				aria-label="Search and commands (Ctrl+K)"
 				title="Search and commands (Ctrl+K)"

@@ -288,6 +288,7 @@
 			placeholder="Assign…"
 			displayValue={assigneeDisplay}
 			size="sm"
+			dropup={true}
 			onChange={handleAssigneeChange}
 		/>
 		{#if saving === "assignee"}
@@ -302,6 +303,7 @@
 			groups={[{ label: "Status", options: STATUS_OPTIONS }]}
 			placeholder="Status"
 			size="sm"
+			dropup={true}
 			onChange={handleStatusChange}
 		/>
 		{#if saving === "status"}
@@ -317,6 +319,7 @@
 			placeholder={priorityDisplay}
 			displayValue={priorityDisplay}
 			size="sm"
+			dropup={true}
 			onChange={handlePriorityChange}
 		/>
 		{#if saving === "priority"}

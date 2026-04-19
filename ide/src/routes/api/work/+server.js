@@ -389,6 +389,7 @@ function getCachedTasks() {
  * @property {string} [updated_at] - Last update timestamp
  * @property {TaskDep[]} [depends_on] - Task dependencies
  * @property {string} [agent_program] - Agent program for this task (e.g., 'claude-code', 'codex-cli')
+ * @property {string} [model] - Model used for this task (e.g., 'opus', 'sonnet', 'haiku')
  */
 
 /**
@@ -744,7 +745,8 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 						depends_on: t.depends_on || [],
 						labels: t.labels || [],
 						created_at: t.created_at,
-						agent_program: t.agent_program
+						agent_program: t.agent_program,
+						model: t.model
 					});
 				}
 			});
@@ -773,7 +775,8 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 						issue_type: t.issue_type,
 						closedAt: t.updated_at,
 						created_at: t.created_at,
-						agent_program: t.agent_program
+						agent_program: t.agent_program,
+						model: t.model
 					});
 				}
 			});

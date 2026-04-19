@@ -1331,14 +1331,13 @@
 				if (resp.ok) {
 					const data = await resp.json();
 					const assignee = data?.task?.assignee || data?.[0]?.assignee;
-					console.log('[blocked-dep-click]', { depId: dep.id, status: dep.status, assignee });
 					if (assignee) {
 						openMobileSessionName.set(`jat-${assignee}`);
 						return;
 					}
 				}
-			} catch (e) {
-				console.warn('[blocked-dep-click] fetch failed', e);
+			} catch {
+				// fall through to detail drawer
 			}
 		}
 		onTaskClick(dep.id);

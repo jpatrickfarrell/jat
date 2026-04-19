@@ -80,10 +80,10 @@
 		return tasks.find(t => t.assignee === agent.name && t.status === 'in_progress') || null;
 	}
 
-	// Agent status type
-	type AgentStatus = 'live' | 'working' | 'active' | 'idle' | 'offline';
+	// Agent status type — mirrors AgentStatus from agentStatusUtils
+	type AgentStatus = 'working' | 'idle' | 'offline';
 
-	// Helper to compute agent status (matches AgentCard.svelte and store logic)
+	// Helper to compute agent status
 	function getAgentStatus(agent: Agent): AgentStatus {
 		const hasInProgressTask = agent.in_progress_tasks > 0;
 
@@ -92,43 +92,20 @@
 			const isoTimestamp = agent.last_active_ts.includes('T')
 				? agent.last_active_ts
 				: agent.last_active_ts.replace(' ', 'T') + 'Z';
-			const lastActivity = new Date(isoTimestamp);
-			timeSinceActive = Date.now() - lastActivity.getTime();
+			timeSinceActive = Date.now() - new Date(isoTimestamp).getTime();
 		}
 
-		// Priority 1: WORKING - Has active task (regardless of time)
-		// Show "working" if agent has actual work assigned, even if recently active
-		if (hasInProgressTask) {
-			return 'working';
-		}
-
-		// Priority 2: LIVE - Very recent activity (< 1 minute) but no task
-		if (timeSinceActive < 60000) {
-			return 'live';
-		}
-
-		// Priority 3: ACTIVE - Recent activity (< 10 minutes)
-		if (timeSinceActive < 600000) {
-			return 'active';
-		}
-
-		// Priority 4: IDLE - Within 1 hour
-		if (timeSinceActive < 3600000) {
-			return 'idle';
-		}
-
-		// Priority 5: OFFLINE
+		if (hasInProgressTask) return 'working';
+		if (timeSinceActive < 3_600_000) return 'idle';  // < 1 hour
 		return 'offline';
 	}
 
-	// Status priority for sorting (lower number = higher priority)
+	// Status priority for sorting
 	function getStatusPriority(status: AgentStatus): number {
 		const priorities: Record<AgentStatus, number> = {
-			live: 1,
-			working: 2,
-			active: 3,
-			idle: 4,
-			offline: 5
+			working: 1,
+			idle: 2,
+			offline: 3
 		};
 		return priorities[status] || 999;
 	}

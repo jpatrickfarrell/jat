@@ -266,6 +266,7 @@
 				{@const collapsed = isNavGroupCollapsed(group.id)}
 				{@const hasActive = groupHasActiveItem(group.id)}
 
+				{#if group.id !== 'labs' || getDebugMode()}
 				<!-- Group header -->
 				{#if !$isSidebarCollapsed}
 					<button
@@ -379,6 +380,7 @@
 							</a>
 						{/if}
 					{/each}
+				{/if}
 				{/if}
 			{/each}
 		</nav>

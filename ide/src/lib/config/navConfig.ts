@@ -33,7 +33,11 @@
  *   /timeline - Historical view
  *   /kanban   - Agent kanban (sessions grouped by activity state)
  *
- * LABS (experimental):
+ * LABS (debug mode only — hidden unless debug mode enabled in account settings):
+ *   /open-tasks  - Open Tasks (flat task list view)
+ *   /triage      - Triage (radar-style triage view)
+ *   /monitor     - Monitor (raw tmux monitor)
+ *   /clients     - Clients (client management)
  *   /quick-commands - Commands (single-turn quick commands + templates)
  */
 

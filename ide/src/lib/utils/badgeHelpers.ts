@@ -73,15 +73,11 @@ export function getAgentStatusBadge(status: string | null | undefined): string {
 }
 
 export function getAgentStatusIcon(status: string | null | undefined): string {
-	const visual = getAgentStatusVisual(status || 'idle');
-	// Return emoji/character for backward compat with existing badge rendering
 	switch (status) {
-		case 'live': return '...';     // Will be replaced with loading-dots component
-		case 'working': return '⚙';    // Gear emoji (actual SVG rendered separately)
-		case 'active': return '●';     // Pulsing dot
-		case 'idle': return '○';       // Empty circle
-		case 'offline': return '⏻';    // Power symbol
-		default: return '○';
+		case 'working': return '⚙';
+		case 'disconnected': return '⚠';
+		case 'offline': return '⏻';
+		default: return '○';  // idle
 	}
 }
 

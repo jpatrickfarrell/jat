@@ -69,8 +69,8 @@ export const SWIPE_ACTION_CATALOG: Record<string, SwipeActionDef> = {
 };
 
 const DEFAULT_CONFIG: SwipeConfig = {
-	rightSwipe: 'complete',
-	leftSwipe: 'view-task'
+	rightSwipe: 'view-task',
+	leftSwipe: 'complete'
 };
 
 let currentConfig: SwipeConfig = { ...DEFAULT_CONFIG };

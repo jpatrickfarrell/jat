@@ -116,32 +116,19 @@ export const DISPLAY_LIMITS = {
 
 export const AGENT_STATUS_THRESHOLDS = {
 	/**
-	 * LIVE status: Agent responded within this time
-	 * Very recent activity, likely currently working
-	 */
-	LIVE_MS: 60000, // 1 minute
-
-	/**
-	 * WORKING status: Agent has task and was active within this time
-	 * Has active work and recent activity
-	 */
-	WORKING_MS: 600000, // 10 minutes
-
-	/**
-	 * IDLE status: Agent was active within this time but no current work
-	 * Available for tasks
+	 * IDLE threshold: agent was active within this time and has a session → idle
+	 * Beyond this, agent is considered offline even if session exists
 	 */
 	IDLE_MS: 3600000, // 1 hour
 
 	/**
-	 * DISCONNECTED status: Session gone but activity within this time
-	 * Indicates unexpected session loss (vs intentional shutdown)
+	 * DISCONNECTED threshold: no session but activity within this window → disconnected
+	 * Beyond this, treated as intentional offline (not unexpected termination)
 	 */
 	DISCONNECTED_MS: 900000, // 15 minutes
 
 	/**
-	 * STALE status: Activity older than STALE_MINUTES considered stale
-	 * Used for highlighting stale activities
+	 * STALE threshold: activity older than this is highlighted as stale in feeds
 	 */
 	STALE_MINUTES: 5
 } as const;
@@ -182,22 +169,6 @@ export const API_CONFIG = {
 	 * Base delay between retries (doubles each attempt)
 	 */
 	RETRY_DELAY_BASE_MS: 1000
-} as const;
-
-// =============================================================================
-// UI ANIMATION DELAYS
-// =============================================================================
-
-export const ANIMATIONS = {
-	/**
-	 * Delay before auto-closing success modals/toasts
-	 */
-	SUCCESS_CLOSE_DELAY_MS: 2000,
-
-	/**
-	 * Delay before clearing error state
-	 */
-	ERROR_CLEAR_DELAY_MS: 5000
 } as const;
 
 // =============================================================================

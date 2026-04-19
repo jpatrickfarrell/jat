@@ -1216,10 +1216,7 @@
 					{:else}
 						<div class="panel-content">
 							<div class="panel-empty">
-								<svg class="w-12 h-12 text-base-content/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-								</svg>
-								<p class="text-base-content/40 mt-3">Select a project from the top bar to get started</p>
+								<p>Select a project from the top bar to get started</p>
 							</div>
 						</div>
 					{/if}
@@ -1432,12 +1429,13 @@
 	.panel-empty {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		text-align: center;
+		align-items: flex-start;
+		justify-content: flex-start;
+		padding: 1rem;
 		color: oklch(0.45 0.02 250);
-		padding: 2rem;
+		font-size: 0.75rem;
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+		line-height: 1.5;
 	}
 
 	/* Vertical Divider */
@@ -1547,14 +1545,22 @@
 		color: oklch(0.65 0.12 200);
 		background: none;
 		border: none;
-		padding: 0;
+		border-bottom: 1px solid oklch(0.65 0.12 200 / 0.4);
+		padding: 0 0 1px;
 		cursor: pointer;
 		text-align: left;
-		transition: color 0.15s ease;
+		transition: color 0.15s ease, border-color 0.15s ease;
 	}
 
 	.state-action:hover {
 		color: oklch(0.80 0.15 200);
+		border-color: oklch(0.80 0.15 200 / 0.6);
+	}
+
+	.state-action:focus-visible {
+		outline: 2px solid oklch(0.65 0.15 200);
+		outline-offset: 2px;
+		border-radius: 2px;
 	}
 
 	/* Mobile Layout (controlled by JS isMobileLayout state) */

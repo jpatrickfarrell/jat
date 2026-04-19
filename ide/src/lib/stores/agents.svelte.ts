@@ -82,55 +82,28 @@ class AgentsStore {
 		return this.data.task_stats;
 	}
 
-	// Helper to compute agent status (matches AgentCard.svelte logic)
-	private getAgentStatus(agent: Agent): 'live' | 'working' | 'active' | 'idle' | 'offline' {
-		const hasInProgressTask = agent.in_progress_tasks > 0;
+	private getAgentStatus(agent: Agent): 'working' | 'idle' | 'offline' {
+		if (agent.in_progress_tasks > 0) return 'working';
 
 		let timeSinceActive = Infinity;
 		if (agent.last_active_ts) {
 			const isoTimestamp = agent.last_active_ts.includes('T')
 				? agent.last_active_ts
 				: agent.last_active_ts.replace(' ', 'T') + 'Z';
-			const lastActivity = new Date(isoTimestamp);
-			timeSinceActive = Date.now() - lastActivity.getTime();
+			timeSinceActive = Date.now() - new Date(isoTimestamp).getTime();
 		}
 
-		// Priority 1: WORKING - Has active task
-		// Agent has work in progress (takes priority over recency)
-		if (hasInProgressTask) {
-			return 'working';
-		}
-
-		// Priority 2: LIVE - Very recent activity (< 1 minute) without active work
-		// Agent is responsive but not actively working
-		if (timeSinceActive < 60000) {
-			return 'live';
-		}
-
-		// Priority 3: ACTIVE - Recent activity (< 10 minutes)
-		if (timeSinceActive < 600000) {
-			return 'active';
-		}
-
-		// Priority 4: IDLE - Within 1 hour
-		if (timeSinceActive < 3600000) {
-			return 'idle';
-		}
-
-		// Priority 5: OFFLINE
+		if (timeSinceActive < 3_600_000) return 'idle';
 		return 'offline';
-	}
-
-	get liveAgents() {
-		return this.data.agents.filter(a => this.getAgentStatus(a) === 'live');
 	}
 
 	get workingAgents() {
 		return this.data.agents.filter(a => this.getAgentStatus(a) === 'working');
 	}
 
+	/** Agents with active sessions but no task — available for assignment */
 	get activeAgents() {
-		return this.data.agents.filter(a => this.getAgentStatus(a) === 'active');
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'idle');
 	}
 
 	get idleAgents() {
@@ -142,11 +115,7 @@ class AgentsStore {
 	}
 
 	get availableAgents() {
-		// Live, active, or idle agents (can take work)
-		return this.data.agents.filter(a => {
-			const status = this.getAgentStatus(a);
-			return status === 'live' || status === 'active' || status === 'idle';
-		});
+		return this.data.agents.filter(a => this.getAgentStatus(a) !== 'offline');
 	}
 
 	/**

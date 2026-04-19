@@ -13,12 +13,12 @@ import { getTimeSinceMs } from '$lib/utils/dateFormatters';
 
 /**
  * Agent status type.
- * Order reflects priority: live > working > active > idle > connecting > disconnected > offline
- * - connecting: session exists but very new and no activity yet (still initializing)
- * - disconnected: no session but recent activity (unexpected termination)
- * - offline: no session and no recent activity (expected state)
+ * - working: has an in-progress task
+ * - idle: has a session, no active task
+ * - disconnected: no session but was recently active (unexpected termination)
+ * - offline: no session and no recent activity
  */
-export type AgentStatus = 'live' | 'working' | 'active' | 'idle' | 'connecting' | 'disconnected' | 'offline';
+export type AgentStatus = 'working' | 'idle' | 'disconnected' | 'offline';
 
 /**
  * Minimal agent interface for status computation.
@@ -74,42 +74,17 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 
 	const hasInProgressTask = (agent.in_progress_tasks || 0) > 0;
 
-	// Priority 1: WORKING - Has active task
-	// Agent has work in progress (takes priority over recency)
-	// Note: We only reach here if hasSession !== false, so session exists
+	// WORKING - Has active task
 	if (hasInProgressTask) {
 		return 'working';
 	}
 
-	// Priority 1.5: CONNECTING - Session exists but still initializing
-	// Session was created recently (<10 min) but no meaningful activity yet
-	if (agent.session_created_ts && agent.hasSession) {
-		const sessionAge = Date.now() - agent.session_created_ts;
-		const CONNECTING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-
-		// Session is new AND (no activity OR activity is not recent)
-		if (sessionAge < CONNECTING_THRESHOLD_MS && timeSinceActive >= AGENT_STATUS_THRESHOLDS.WORKING_MS) {
-			return 'connecting';
-		}
-	}
-
-	// Priority 2: LIVE - Very recent activity (< 1 minute) without active work
-	// Agent is truly responsive right now but not actively working
-	if (timeSinceActive < AGENT_STATUS_THRESHOLDS.LIVE_MS) {
-		return 'live';
-	}
-
-	// Priority 3: ACTIVE - Recent activity (< 10 minutes) but no current work
-	if (timeSinceActive < AGENT_STATUS_THRESHOLDS.WORKING_MS) {
-		return 'active';
-	}
-
-	// Priority 4: IDLE - Within 1 hour but not active
+	// IDLE - Has session, no task (regardless of recent activity)
 	if (timeSinceActive < AGENT_STATUS_THRESHOLDS.IDLE_MS) {
 		return 'idle';
 	}
 
-	// Priority 5: OFFLINE - Over 1 hour or never active
+	// OFFLINE - Session exists but agent hasn't been active in over an hour
 	return 'offline';
 }
 
@@ -126,41 +101,20 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
  * // → true if agent is currently engaged
  */
 export function isAgentWorking(agent: AgentStatusInput): boolean {
-	const status = computeAgentStatus(agent);
-	return status === 'live' || status === 'working';
+	return computeAgentStatus(agent) === 'working';
 }
 
-/**
- * Check if an agent is available for new work (live, working, or active).
- * More permissive than isAgentWorking - includes recently active agents.
- *
- * @param agent - Agent data with status indicators
- * @returns true if agent is available for assignments
- */
 export function isAgentAvailable(agent: AgentStatusInput): boolean {
 	const status = computeAgentStatus(agent);
-	return status === 'live' || status === 'working' || status === 'active';
+	return status === 'working' || status === 'idle';
 }
 
-/**
- * Get a human-readable description of the agent status.
- * Useful for tooltips and accessibility.
- *
- * @param status - Agent status string
- * @returns Description of what the status means
- */
 export function getAgentStatusDescription(status: AgentStatus): string {
 	switch (status) {
-		case 'live':
-			return 'Agent is responsive and ready (active within 1 minute)';
 		case 'working':
-			return 'Agent is actively working on tasks';
-		case 'active':
-			return 'Agent was recently active (within 10 minutes)';
+			return 'Agent is actively working on a task';
 		case 'idle':
-			return 'Agent is available but has been quiet (within 1 hour)';
-		case 'connecting':
-			return 'Agent session is starting up (created within 10 minutes)';
+			return 'Agent session is active, no task assigned';
 		case 'disconnected':
 			return 'Agent session ended unexpectedly (was active within 15 minutes)';
 		case 'offline':

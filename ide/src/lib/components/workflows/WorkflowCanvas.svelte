@@ -893,6 +893,7 @@
 					--node-icon: {catColors.icon};
 					{overlayColors ? `border-color: ${overlayColors.border}; box-shadow: 0 0 12px ${overlayColors.glow}; background: ${overlayColors.bg};` : ''}
 				"
+				title="Double-click to configure"
 				onmousedown={(e) => handleNodeMouseDown(e, node.id)}
 				ondblclick={(e) => handleNodeDoubleClick(e, node.id)}
 				oncontextmenu={(e) => handleNodeContextMenu(e, node.id)}
@@ -905,6 +906,8 @@
 						{NODE_ICONS[node.type]}
 					</span>
 					<span class="wf-node-label">{node.label}</span>
+					<!-- Config hint — visible on hover -->
+					<span class="wf-node-config-hint" title="Double-click to configure">⚙</span>
 				</div>
 
 				<!-- Input Ports -->
@@ -1143,6 +1146,19 @@
 	.wf-node:hover {
 		border-color: oklch(0.40 0.03 250);
 		box-shadow: 0 4px 20px oklch(0 0 0 / 0.3);
+	}
+
+	.wf-node-config-hint {
+		font-size: 9px;
+		margin-left: auto;
+		opacity: 0;
+		transition: opacity 0.15s;
+		color: oklch(0.45 0.02 250);
+		pointer-events: none;
+	}
+
+	.wf-node:hover .wf-node-config-hint {
+		opacity: 1;
 	}
 
 	.wf-node.selected {

@@ -32,7 +32,7 @@ export interface AgentStatusVisual {
 }
 
 export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
-	// WORKING: Has task/locks, actively coding
+	// WORKING: Has in-progress task
 	working: {
 		badge: 'badge-info',
 		text: 'text-info',
@@ -41,40 +41,12 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		animation: 'animate-spin',
 		label: 'Working',
 		description: 'Actively working on a task',
-		accent: 'oklch(0.70 0.18 240)',       // Electric blue
+		accent: 'oklch(0.70 0.18 240)',
 		bgTint: 'oklch(0.70 0.18 240 / 0.08)',
 		glow: 'oklch(0.70 0.18 240 / 0.4)'
 	},
 
-	// LIVE: Very recent activity (< 1 min) but no formal task
-	live: {
-		badge: 'badge-success',
-		text: 'text-success',
-		icon: 'loading-dots',
-		iconType: 'daisyui',
-		animation: undefined,  // loading-dots has built-in animation
-		label: 'Live',
-		description: 'Responsive and active (< 1 minute)',
-		accent: 'oklch(0.75 0.20 145)',       // Vibrant green
-		bgTint: 'oklch(0.75 0.20 145 / 0.08)',
-		glow: 'oklch(0.75 0.20 145 / 0.4)'
-	},
-
-	// ACTIVE: Recent activity (1-10 min), probably still around
-	active: {
-		badge: 'badge-accent',
-		text: 'text-accent',
-		icon: 'pulse-dot',
-		iconType: 'svg',
-		animation: 'animate-pulse',
-		label: 'Active',
-		description: 'Recently active (< 10 minutes)',
-		accent: 'oklch(0.75 0.18 70)',        // Warm amber
-		bgTint: 'oklch(0.75 0.18 70 / 0.08)',
-		glow: 'oklch(0.75 0.18 70 / 0.4)'
-	},
-
-	// IDLE: Within 1 hour but quiet
+	// IDLE: Session active, no task assigned
 	idle: {
 		badge: 'badge-ghost',
 		text: 'text-base-content/50',
@@ -82,24 +54,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'svg',
 		animation: undefined,
 		label: 'Idle',
-		description: 'Available but quiet (< 1 hour)',
-		accent: 'oklch(0.60 0.03 250)',       // Muted slate
+		description: 'Session active, no task assigned',
+		accent: 'oklch(0.60 0.03 250)',
 		bgTint: 'oklch(0.60 0.03 250 / 0.04)',
 		glow: 'oklch(0.60 0.03 250 / 0.2)'
-	},
-
-	// CONNECTING: Session exists but still initializing (very new, no activity yet)
-	connecting: {
-		badge: 'badge-info badge-outline',
-		text: 'text-info',
-		icon: 'loading-ring',
-		iconType: 'daisyui',
-		animation: undefined,  // loading-ring has built-in animation
-		label: 'Connecting',
-		description: 'Session starting up',
-		accent: 'oklch(0.70 0.15 220)',       // Soft blue
-		bgTint: 'oklch(0.70 0.15 220 / 0.08)',
-		glow: 'oklch(0.70 0.15 220 / 0.3)'
 	},
 
 	// DISCONNECTED: No session but was active recently (unexpected termination)
@@ -111,7 +69,7 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		animation: 'animate-pulse',
 		label: 'Disconnected',
 		description: 'Session lost unexpectedly',
-		accent: 'oklch(0.75 0.18 55)',        // Warning orange
+		accent: 'oklch(0.75 0.18 55)',
 		bgTint: 'oklch(0.75 0.18 55 / 0.08)',
 		glow: 'oklch(0.75 0.18 55 / 0.4)'
 	},
@@ -125,7 +83,7 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		animation: undefined,
 		label: 'Offline',
 		description: 'Not active for over 1 hour',
-		accent: 'oklch(0.55 0.15 25)',        // Dim red
+		accent: 'oklch(0.55 0.15 25)',
 		bgTint: 'oklch(0.55 0.15 25 / 0.05)',
 		glow: 'oklch(0.55 0.15 25 / 0.2)'
 	}

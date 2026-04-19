@@ -1378,6 +1378,29 @@ export async function POST({ request }) {
 		// runs automatically after the user accepts.
 		console.log(`[spawn] Agent launched with command via CLI args (no stdin injection needed)`);
 
+		// Startup stall recovery: Sonnet 4.6 sometimes generates text before tool calls,
+		// causing Claude Code to pause at the interactive prompt (❯) waiting for "continue".
+		// After 25s, check if the session is still in the IDE-written "starting" state —
+		// if so, the agent is stuck and we send "continue" to unblock it.
+		if (mode !== 'plan' && selectedAgent.command === 'claude') {
+			const stallTimer = setTimeout(async () => {
+				try {
+					const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+					if (!existsSync(signalFile)) return;
+					const signal = JSON.parse(readFileSync(signalFile, 'utf-8'));
+					const isStillStarting = signal.type === 'starting' ||
+						(signal.type === 'state' && signal.state === 'starting');
+					if (isStillStarting) {
+						console.log(`[spawn] Startup stall detected for ${sessionName} after 25s, sending continue`);
+						await execAsync(`tmux send-keys -t ${escapedSessionName} "continue" Enter`);
+					}
+				} catch {
+					// Session may have ended or moved on — ignore silently
+				}
+			}, 25000);
+			stallTimer.unref(); // Don't prevent process exit
+		}
+
 		// Step 4c: If imagePath provided, wait for agent to start working, then send the image
 		// This gives the agent context (e.g., bug screenshot) after it has initialized
 		if (imagePath) {

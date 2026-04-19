@@ -304,6 +304,138 @@
 			{/if}
 		</div>
 
+		<!-- Spawn Settings Section -->
+		<div class="settings-section">
+			<div class="section-header-with-actions">
+				<div class="section-header">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="w-4 h-4"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+						stroke-width="1.5"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+						/>
+					</svg>
+					<span>Spawn Configuration</span>
+				</div>
+				<button
+					class="btn btn-ghost btn-sm btn-square"
+					onclick={resetSpawnToFactory}
+					disabled={saving}
+					title="Reset to defaults"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+					</svg>
+				</button>
+			</div>
+
+			<div class="settings-grid">
+				<!-- Model Selection -->
+				<div class="form-control">
+					<div class="label">
+						<span class="label-text font-semibold">Default Model</span>
+					</div>
+					<select class="select select-bordered" bind:value={model} onchange={() => autoSave()}>
+						{#each modelOptions as option}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+					<div class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							{modelOptions.find((o) => o.value === model)?.description}
+						</span>
+					</div>
+				</div>
+
+				<!-- Max Sessions -->
+				<div class="form-control">
+					<div class="label">
+						<span class="label-text font-semibold">Max Concurrent Sessions</span>
+					</div>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={maxSessions}
+						oninput={scheduleAutoSave}
+						min="1"
+						max="20"
+					/>
+					<div class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Maximum tmux sessions allowed (1-20)
+						</span>
+					</div>
+				</div>
+
+				<!-- Default Agent Count -->
+				<div class="form-control">
+					<div class="label">
+						<span class="label-text font-semibold">Default Agent Count</span>
+					</div>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={defaultAgentCount}
+						oninput={scheduleAutoSave}
+						min="1"
+						max={maxSessions}
+					/>
+					<div class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Default number of agents to spawn in swarm
+						</span>
+					</div>
+				</div>
+
+				<!-- Agent Stagger -->
+				<div class="form-control">
+					<div class="label">
+						<span class="label-text font-semibold">Spawn Stagger (seconds)</span>
+					</div>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={agentStagger}
+						oninput={scheduleAutoSave}
+						min="1"
+						max="120"
+					/>
+					<div class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Delay between spawning each agent (1-120s)
+						</span>
+					</div>
+				</div>
+
+				<!-- Claude Startup Timeout -->
+				<div class="form-control">
+					<div class="label">
+						<span class="label-text font-semibold">Claude Startup Timeout (seconds)</span>
+					</div>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={claudeStartupTimeout}
+						oninput={scheduleAutoSave}
+						min="5"
+						max="120"
+					/>
+					<div class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							How long to wait for Claude Code TUI to start
+						</span>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<!-- Autonomous Mode Section -->
 		<div class="settings-section autonomous-section">
 			<div class="section-header">
@@ -698,138 +830,6 @@
 					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Base path where repos are cloned on VPS
-						</span>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Spawn Settings Section (moved to bottom) -->
-		<div class="settings-section">
-			<div class="section-header-with-actions">
-				<div class="section-header">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="w-4 h-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="1.5"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-						/>
-					</svg>
-					<span>Spawn Configuration</span>
-				</div>
-				<button
-					class="btn btn-ghost btn-sm btn-square"
-					onclick={resetSpawnToFactory}
-					disabled={saving}
-					title="Reset to defaults"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-					</svg>
-				</button>
-			</div>
-
-			<div class="settings-grid">
-				<!-- Model Selection -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Default Model</span>
-					</div>
-					<select class="select select-bordered" bind:value={model} onchange={() => autoSave()}>
-						{#each modelOptions as option}
-							<option value={option.value}>{option.label}</option>
-						{/each}
-					</select>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							{modelOptions.find((o) => o.value === model)?.description}
-						</span>
-					</div>
-				</div>
-
-				<!-- Max Sessions -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Max Concurrent Sessions</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={maxSessions}
-						oninput={scheduleAutoSave}
-						min="1"
-						max="20"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Maximum tmux sessions allowed (1-20)
-						</span>
-					</div>
-				</div>
-
-				<!-- Default Agent Count -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Default Agent Count</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={defaultAgentCount}
-						oninput={scheduleAutoSave}
-						min="1"
-						max={maxSessions}
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Default number of agents to spawn in swarm
-						</span>
-					</div>
-				</div>
-
-				<!-- Agent Stagger -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Spawn Stagger (seconds)</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={agentStagger}
-						oninput={scheduleAutoSave}
-						min="1"
-						max="120"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Delay between spawning each agent (1-120s)
-						</span>
-					</div>
-				</div>
-
-				<!-- Claude Startup Timeout -->
-				<div class="form-control">
-					<div class="label">
-						<span class="label-text font-semibold">Claude Startup Timeout (seconds)</span>
-					</div>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={claudeStartupTimeout}
-						oninput={scheduleAutoSave}
-						min="5"
-						max="120"
-					/>
-					<div class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							How long to wait for Claude Code TUI to start
 						</span>
 					</div>
 				</div>

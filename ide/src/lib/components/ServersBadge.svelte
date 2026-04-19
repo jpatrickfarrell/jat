@@ -100,6 +100,17 @@
 		_prevConnectionState = current;
 	});
 
+	// Re-sync tooltip label when pendingStopProject changes (stop button label is dynamic)
+	$effect(() => {
+		const _ = pendingStopProject;
+		if (!dropdownRef) return;
+		const focused = document.activeElement as HTMLElement | null;
+		if (focused && dropdownRef.contains(focused)) {
+			const btn = focused.closest<HTMLElement>('[data-action-label]');
+			if (btn) focusedTooltip = btn.getAttribute('data-action-label') || '';
+		}
+	});
+
 	// Move focus into dropdown when opened via keyboard
 	$effect(() => {
 		if (showDropdown && openedViaKeyboard && dropdownRef) {
@@ -715,10 +726,8 @@
 				{/if}
 			</div>
 
-			<!-- Keyboard focus label — shows which button is focused -->
-			{#if focusedTooltip}
-				<div class="focus-tooltip-bar" aria-live="polite" aria-atomic="true">{focusedTooltip}</div>
-			{/if}
+			<!-- Keyboard focus label — always rendered to prevent layout shift -->
+			<div class="focus-tooltip-bar" aria-live="polite" aria-atomic="true">{focusedTooltip}</div>
 
 			<!-- Footer -->
 			<button class="view-all-btn" onclick={goToServers} data-action-label="View all servers">
@@ -976,6 +985,61 @@
 	.view-all-btn:focus-visible {
 		outline: none;
 		box-shadow: inset 0 0 0 2px oklch(0.70 0.18 200 / 0.6);
+	}
+
+	/* Undo row */
+	.undo-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.4rem 0.75rem;
+		background: oklch(0.22 0.04 145 / 0.25);
+		border-bottom: 1px solid oklch(0.35 0.10 145 / 0.3);
+	}
+
+	.undo-text {
+		font-size: 0.6875rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.75 0.10 145);
+	}
+
+	.undo-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.5rem;
+		border-radius: 0.25rem;
+		border: 1px solid oklch(0.45 0.12 145 / 0.5);
+		background: oklch(0.28 0.08 145 / 0.4);
+		color: oklch(0.80 0.15 145);
+		font-size: 0.625rem;
+		font-family: ui-monospace, monospace;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.undo-btn:hover {
+		background: oklch(0.35 0.10 145 / 0.5);
+		color: oklch(0.95 0.18 145);
+	}
+
+	.undo-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.65 0.18 145 / 0.8);
+	}
+
+	/* Keyboard focus label bar — always rendered, min-height prevents layout shift */
+	.focus-tooltip-bar {
+		min-height: 1.5rem;
+		padding: 0.25rem 0.75rem;
+		background: oklch(0.16 0.02 250);
+		border-top: 1px solid oklch(0.28 0.02 250);
+		color: oklch(0.60 0.08 240);
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		text-align: center;
+		letter-spacing: 0.03em;
 	}
 
 	/* Action column layout stability */

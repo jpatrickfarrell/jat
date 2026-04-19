@@ -1156,11 +1156,11 @@
 	}
 
 	.shortcut-hint {
-		font-size: 0.55rem;
+		font-size: 0.65rem;
 		font-family: ui-monospace, monospace;
 		padding: 0.1rem 0.3rem;
 		border-radius: 0.2rem;
-		color: oklch(0.45 0.04 250);
+		color: oklch(0.52 0.05 250);
 		background: oklch(0.20 0.02 250 / 0.6);
 		border: 1px solid oklch(0.30 0.03 250 / 0.4);
 		letter-spacing: 0.02em;

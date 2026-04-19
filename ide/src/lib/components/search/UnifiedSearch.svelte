@@ -52,14 +52,6 @@
 		date?: string;
 	}
 
-	interface FileResult {
-		path: string;
-		line?: number;
-		snippet?: string;
-		matchType?: string;
-		project?: string;
-	}
-
 	interface FilenameResult {
 		path: string;
 		name: string;
@@ -168,10 +160,9 @@
 		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
 	}
 
-	// All/Tasks/Memory results (from /api/search)
+	// Tasks/Memory results (from /api/search)
 	let taskResults = $state<TaskResult[]>([]);
 	let memoryResults = $state<MemoryResult[]>([]);
-	let fileResults = $state<FileResult[]>([]);
 	let meta = $state<SearchMeta | null>(null);
 
 	// Filenames tab results (from /api/files/search)
@@ -254,7 +245,6 @@
 			query = '';
 			taskResults = [];
 			memoryResults = [];
-			fileResults = [];
 			filenameResults = [];
 			contentResults = [];
 			meta = null;
@@ -268,10 +258,8 @@
 	// --- Derived ---
 	const taskCount = $derived(taskResults.length);
 	const memoryCount = $derived(memoryResults.length);
-	const fileCount = $derived(fileResults.length);
 	const filenameCount = $derived(filenameResults.length);
 	const contentCount = $derived(contentResults.length);
-	const allCount = $derived(taskCount + memoryCount + filenameCount + contentCount);
 
 	function tabCount(tab: SourceTab): number {
 		switch (tab) {
@@ -295,7 +283,6 @@
 		if (!query.trim()) {
 			taskResults = [];
 			memoryResults = [];
-			fileResults = [];
 			meta = null;
 			return;
 		}
@@ -327,13 +314,11 @@
 			const data = await res.json();
 			taskResults = data.tasks || [];
 			memoryResults = data.memory || [];
-			fileResults = data.files || [];
 			meta = data.meta || null;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Search failed';
 			taskResults = [];
 			memoryResults = [];
-			fileResults = [];
 		} finally {
 			loading = false;
 		}
@@ -582,7 +567,7 @@
 			if (mode === 'modal') {
 				if (query) {
 					query = '';
-					taskResults = []; memoryResults = []; fileResults = [];
+					taskResults = []; memoryResults = [];
 					filenameResults = []; contentResults = [];
 					meta = null;
 					filterRoutes('');
@@ -592,7 +577,7 @@
 			} else if (isTabButton) {
 				searchInputEl?.focus();
 			} else {
-				query = ''; taskResults = []; memoryResults = []; fileResults = [];
+				query = ''; taskResults = []; memoryResults = [];
 				filenameResults = []; contentResults = [];
 				meta = null;
 				updateUrl();
@@ -837,7 +822,7 @@
 					<button
 						tabindex={-1}
 						aria-label="Clear search"
-						onclick={() => { query = ''; taskResults = []; memoryResults = []; fileResults = []; filenameResults = []; contentResults = []; meta = null; if (mode === 'route') updateUrl(); searchInputEl?.focus(); }}
+						onclick={() => { query = ''; taskResults = []; memoryResults = []; filenameResults = []; contentResults = []; meta = null; if (mode === 'route') updateUrl(); searchInputEl?.focus(); }}
 						class="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors hover:bg-base-300/30"
 						style="color: oklch(0.50 0.02 250);"
 					>
@@ -867,7 +852,6 @@
 							color: {isActive ? 'oklch(0.90 0.10 200)' : 'oklch(0.55 0.02 250)'};
 							border: 1px solid {isActive ? 'oklch(0.40 0.08 200)' : 'transparent'};
 						"
-						title=""
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-none">
 							<path stroke-linecap="round" stroke-linejoin="round" d={tab.icon} />
@@ -939,15 +923,21 @@
 		{:else if loading || filenameLoading || contentLoading}
 			{@render loadingSkeleton(isModal)}
 		{:else if error}
-			<div class="max-w-2xl mx-auto rounded-lg p-4" style="background: oklch(0.22 0.08 25 / 0.15); border: 1px solid oklch(0.50 0.15 25 / 0.3);">
+			<div class="max-w-2xl mx-auto rounded-lg p-4 flex items-center justify-between gap-3" style="background: oklch(0.22 0.08 25 / 0.15); border: 1px solid oklch(0.50 0.15 25 / 0.3);">
 				<p class="text-sm" style="color: oklch(0.70 0.15 25);">{error}</p>
+				<button
+					onclick={() => { error = ''; doSearchForActiveTab(); }}
+					class="text-xs px-2 py-1 rounded flex-none transition-colors"
+					style="background: oklch(0.26 0.04 25); border: 1px solid oklch(0.40 0.08 25 / 0.5); color: oklch(0.75 0.10 25);"
+				>Retry</button>
 			</div>
 		{:else if hasSearched && !currentTabHasResults}
+			{@const tabLabel = { routes: 'commands', tasks: 'tasks', memory: 'memory entries', filenames: 'filename matches', content: 'content matches' }[activeTab] ?? activeTab}
 			<div class="text-center py-{isModal ? '8' : '12'}">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.40 0.02 250);">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
 				</svg>
-				<p class="text-sm" style="color: oklch(0.55 0.02 250);">No {activeTab} results for "{query}"</p>
+				<p class="text-sm" style="color: oklch(0.55 0.02 250);">No {tabLabel} for "{query}"</p>
 			</div>
 		{:else if !hasSearched}
 			{@render emptyState(isModal)}
@@ -1084,90 +1074,6 @@
 			</p>
 		</div>
 	{/if}
-{/snippet}
-
-{#snippet taskCard(task: TaskResult)}
-	<button
-		onclick={() => openTask(task.id)}
-		class="us-result-card group"
-	>
-		<div class="flex items-center gap-1.5 min-w-0">
-			<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
-			<p class="text-xs font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);"><FxText text={task.title} /></p>
-		</div>
-		{#if task.snippet || task.description}
-			<p class="text-[11px] mt-0.5 line-clamp-2" style="color: oklch(0.50 0.02 250);">
-				{@html highlightMatch(truncate(task.snippet || task.description || '', 150), query)}
-			</p>
-		{/if}
-	</button>
-{/snippet}
-
-{#snippet memoryCard(mem: MemoryResult)}
-	<button
-		onclick={() => navigateToMemory(mem.file)}
-		class="us-result-card"
-	>
-		<div class="flex items-center gap-1.5 flex-wrap">
-			{#if mem.taskId}
-				<TaskIdBadge task={{ id: mem.taskId, status: 'closed' }} size="xs" minimal />
-			{/if}
-			{#if mem.agent}
-				<span class="text-[10px] font-medium" style="color: oklch(0.65 0.10 200);">{mem.agent}</span>
-			{/if}
-			{#if mem.section}
-				<span class="text-[10px] px-1 py-0.5 rounded" style="background: oklch(0.25 0.04 145 / 0.3); color: oklch(0.65 0.12 145);">{mem.section}</span>
-			{/if}
-		</div>
-		<p class="text-[11px] font-mono truncate mt-0.5" style="color: oklch(0.55 0.02 250);">{mem.file.split('/').slice(-2).join('/')}</p>
-		{#if mem.snippet}
-			<p class="text-[11px] mt-0.5 line-clamp-2" style="color: oklch(0.50 0.02 250);">
-				{@html highlightMatch(truncate(mem.snippet, 150), query)}
-			</p>
-		{/if}
-	</button>
-{/snippet}
-
-{#snippet fileCard(file: FileResult)}
-	<button
-		onclick={() => navigateToFile(file.path, file.line)}
-		class="us-result-card"
-	>
-		<p class="text-[11px] font-mono truncate" style="color: oklch(0.70 0.10 85);">
-			{file.path.split('/').pop()}{file.line ? `:${file.line}` : ''}
-		</p>
-		<p class="text-[10px] font-mono truncate" style="color: oklch(0.40 0.02 250);">{file.path}</p>
-		{#if file.snippet}
-			<pre class="text-[11px] mt-0.5 overflow-hidden whitespace-pre-wrap break-all line-clamp-2 font-mono" style="color: oklch(0.50 0.02 250);">{@html highlightMatch(truncate(file.snippet, 200), query)}</pre>
-		{/if}
-	</button>
-{/snippet}
-
-{#snippet filenameCard(file: FilenameResult)}
-	<button
-		onclick={() => openFilename(file)}
-		class="us-compact-file-card"
-	>
-		<span class="flex-none text-xs">{getFileIcon(file.name)}</span>
-		<span class="text-[11px] font-mono font-medium truncate" style="color: oklch(0.80 0.12 220);">{@html highlightMatch(file.name, query)}</span>
-		{#if file.folder}
-			<span class="text-[10px] font-mono truncate ml-auto" style="color: oklch(0.40 0.02 250); direction: rtl; text-align: left;">{file.folder}</span>
-		{/if}
-	</button>
-{/snippet}
-
-{#snippet contentCard(result: ContentResult)}
-	<button
-		onclick={() => openContentResult(result)}
-		class="us-result-card"
-	>
-		<div class="flex items-center gap-1 min-w-0">
-			<span class="flex-none text-xs">{getFileIcon(result.file)}</span>
-			<span class="text-[11px] font-mono truncate" style="color: oklch(0.75 0.12 220);">{result.file.split('/').pop()}</span>
-			<span class="text-[10px] font-mono flex-none" style="color: oklch(0.45 0.02 250);">:{result.line}</span>
-		</div>
-		<pre class="text-[11px] mt-0.5 overflow-hidden whitespace-pre-wrap break-all line-clamp-2 font-mono" style="color: oklch(0.55 0.02 250);">{@html highlightMatch(truncate(result.content, 150), useRegex ? '' : query)}</pre>
-	</button>
 {/snippet}
 
 {#snippet tasksList(isModal: boolean)}
@@ -1420,6 +1326,8 @@
 
 	.us-filename-result.result-selected {
 		background: oklch(0.55 0.12 220 / 0.15);
+		border-left: 2px solid oklch(0.65 0.15 200);
+		padding-left: calc(0.625rem - 1px);
 	}
 
 	/* Content result item */
@@ -1445,6 +1353,8 @@
 
 	.us-content-result.result-selected {
 		background: oklch(0.55 0.12 220 / 0.15);
+		border-left: 2px solid oklch(0.65 0.15 200);
+		padding-left: calc(0.625rem - 1px);
 	}
 
 	.us-content-context {
@@ -1454,81 +1364,6 @@
 		padding: 0.375rem 0.5rem;
 		margin-left: 1.5rem;
 		overflow: hidden;
-	}
-
-	/* 4-column horizontal scroll (Cover Flow for "All" tab) */
-	.us-columns-scroll {
-		display: flex;
-		gap: 0.75rem;
-		overflow-x: auto;
-		overflow-y: hidden;
-		padding: 0.25rem 0.5rem 0.75rem;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	/* Spacer so the last column can be scrolled to center */
-	.us-columns-scroll::after {
-		content: '';
-		flex: 0 0 50%;
-	}
-
-	/* Hide scrollbar but keep functionality */
-	.us-columns-scroll::-webkit-scrollbar {
-		height: 4px;
-	}
-	.us-columns-scroll::-webkit-scrollbar-track {
-		background: transparent;
-	}
-	.us-columns-scroll::-webkit-scrollbar-thumb {
-		background: oklch(0.30 0.02 250);
-		border-radius: 2px;
-	}
-	.us-columns-scroll::-webkit-scrollbar-thumb:hover {
-		background: oklch(0.40 0.02 250);
-	}
-
-	.us-column {
-		flex: 0 0 calc(33% - 0.5rem);
-		min-width: 220px;
-		max-width: 320px;
-	}
-
-	.us-column-header {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		padding: 0.25rem 0.25rem 0.5rem;
-		color: oklch(0.60 0.02 250);
-	}
-
-	.us-column-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-
-	/* Compact file card for filename column */
-	.us-compact-file-card {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		width: 100%;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-		text-align: left;
-		transition: background 0.1s ease;
-		background: transparent;
-		border: none;
-	}
-
-	.us-compact-file-card:hover {
-		background: oklch(0.55 0.12 85 / 0.1);
 	}
 
 	/* Search highlight mark */

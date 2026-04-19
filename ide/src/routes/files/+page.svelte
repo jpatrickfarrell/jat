@@ -1064,28 +1064,23 @@
 		<FilesSkeleton treeItems={12} tabs={3} />
 	{:else if error}
 		<!-- Error State -->
-		<div class="files-content error-state" transition:fade={{ duration: 150 }}>
-			<div class="error-icon">
-				<svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-				</svg>
+		<div class="files-content system-state" transition:fade={{ duration: 150 }}>
+			<div class="state-block">
+				<span class="state-label state-label-error">ERR</span>
+				<p class="state-message">/files — {error}</p>
+				<button class="state-action" onclick={() => { error = null; isLoading = true; fetchProjects(); }}>
+					→ retry
+				</button>
 			</div>
-			<h2 class="error-title">Failed to load projects</h2>
-			<p class="error-message">{error}</p>
-			<button class="btn btn-primary btn-sm mt-4" onclick={() => { error = null; isLoading = true; fetchProjects(); }}>
-				Retry
-			</button>
 		</div>
 	{:else if projects.length === 0}
 		<!-- No Projects State -->
-		<div class="files-content empty-state" transition:fade={{ duration: 150 }}>
-			<div class="empty-icon">
-				<svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-				</svg>
+		<div class="files-content system-state" transition:fade={{ duration: 150 }}>
+			<div class="state-block">
+				<span class="state-label state-label-idle">IDLE</span>
+				<p class="state-message">/files — no projects configured</p>
+				<p class="state-hint">Add a project via Config → Projects to get started</p>
 			</div>
-			<h2 class="empty-title">No Projects Available</h2>
-			<p class="empty-hint">Add a project in the Config tab to get started</p>
 		</div>
 	{:else}
 		<!-- Main Content -->
@@ -1115,14 +1110,14 @@
 						</button>
 						<!-- Keyboard shortcuts button -->
 						<button
-							class="search-button"
+							class="search-button shortcuts-button"
 							title="Keyboard shortcuts (?)"
 							aria-label="Show keyboard shortcuts"
 							onclick={() => { shortcutsOpen = true; }}
 						>
-							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<circle cx="12" cy="12" r="10" />
-								<path stroke-linecap="round" d="M12 16v.01M12 13a2 2 0 000-4 2 2 0 010-4" />
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c.574-1.303 2.376-1.303 2.95 0a1.62 1.62 0 001.533 1.02c1.416 0 2.121 1.72 1.132 2.71l-.47.47a1.62 1.62 0 00-.474 1.146V13.5M12 16.5h.008" />
+								<circle cx="12" cy="12" r="9.75" />
 							</svg>
 						</button>
 						<!-- Collapse button (touch-friendly; keyboard: Ctrl+\) -->
@@ -1326,6 +1321,15 @@
 		cursor: not-allowed;
 	}
 
+	/* Shortcuts button is secondary chrome — slightly dimmer at rest */
+	.shortcuts-button {
+		opacity: 0.7;
+	}
+
+	.shortcuts-button:hover {
+		opacity: 1;
+	}
+
 	/* Body: Side-by-side layout */
 	.files-body {
 		display: flex;
@@ -1487,56 +1491,70 @@
 		background: oklch(0.70 0.18 200);
 	}
 
-	/* Error State */
-	.error-state {
+	/* System state (error / idle) — cockpit instrument readout */
+	.system-state {
+		display: flex;
+		align-items: flex-start;
+		justify-content: flex-start;
+		padding: 1.5rem;
+	}
+
+	.state-block {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
+		gap: 0.375rem;
 	}
 
-	.error-icon {
-		color: oklch(0.60 0.15 25);
-		margin-bottom: 1rem;
+	.state-label {
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		padding: 0.125rem 0.4rem;
+		border-radius: 3px;
+		display: inline-block;
+		width: fit-content;
 	}
 
-	.error-title {
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: oklch(0.70 0.12 25);
+	.state-label-error {
+		background: oklch(0.55 0.15 25 / 0.2);
+		color: oklch(0.70 0.15 25);
+		border: 1px solid oklch(0.55 0.15 25 / 0.35);
+	}
+
+	.state-label-idle {
+		background: oklch(0.35 0.02 250 / 0.4);
+		color: oklch(0.55 0.02 250);
+		border: 1px solid oklch(0.35 0.02 250 / 0.5);
+	}
+
+	.state-message {
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+		font-size: 0.8125rem;
+		color: oklch(0.60 0.02 250);
 		margin: 0;
 	}
 
-	.error-message {
-		font-size: 0.85rem;
-		color: oklch(0.55 0.02 250);
-		margin: 0.5rem 0 0;
-	}
-
-	/* Empty State */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.empty-icon {
-		color: oklch(0.35 0.02 250);
-		margin-bottom: 1rem;
-	}
-
-	.empty-title {
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: oklch(0.55 0.02 250);
-		margin: 0;
-	}
-
-	.empty-hint {
-		font-size: 0.85rem;
+	.state-hint {
+		font-size: 0.75rem;
 		color: oklch(0.45 0.02 250);
-		margin: 0.5rem 0 0;
+		margin: 0;
+	}
+
+	.state-action {
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+		font-size: 0.75rem;
+		color: oklch(0.65 0.12 200);
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		text-align: left;
+		transition: color 0.15s ease;
+	}
+
+	.state-action:hover {
+		color: oklch(0.80 0.15 200);
 	}
 
 	/* Mobile Layout (controlled by JS isMobileLayout state) */

@@ -241,6 +241,7 @@
 				<button
 					class="doc-card"
 					class:selected={selectedPath === doc.path}
+					data-nav-id={doc.path}
 					onclick={() => handleDocClick(doc)}
 					transition:fade={{ duration: 100 }}
 				>

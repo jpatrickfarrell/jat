@@ -387,7 +387,8 @@
 							{#each categoryRules as rule (rule.id)}
 								{@const triggerCount = getTriggerCount(rule.id)}
 								<div
-									class="flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/5 transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-60' : ''}"
+									class="rule-row flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/5 transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-60' : ''}"
+									data-rule-nav-id={rule.id}
 									draggable="true"
 									ondragstart={(e) => handleDragStart(e, rule.id)}
 									ondragover={(e) => handleDragOver(e, rule.id)}
@@ -572,5 +573,9 @@
 {/if}
 
 <style>
-	/* All styling converted to inline Tailwind/DaisyUI classes for Tailwind v4 compatibility */
+	/* Keyboard-nav focus indicator — applied by listNav to [data-rule-nav-id] rows */
+	.rule-row.jk-focused {
+		background: oklch(0.70 0.18 240 / 0.10);
+		box-shadow: inset 3px 0 0 0 oklch(0.70 0.18 240);
+	}
 </style>

@@ -158,6 +158,7 @@
 				<button
 					class="file-item"
 					class:selected={selectedPath === file.path}
+					data-nav-id={file.path}
 					onclick={() => onSelect(file)}
 				>
 					<div class="file-main">

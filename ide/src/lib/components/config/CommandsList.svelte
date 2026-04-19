@@ -993,13 +993,31 @@
 					{#if isExpanded(group.namespace)}
 						<div class="namespace-commands" transition:slide={{ duration: 200, axis: 'y' }}>
 							{#each group.commands as command (command.path)}
-								<CommandCard
-									{command}
-									{searchQuery}
-									{highlightMatch}
-									onEdit={onEditCommand}
-									onDelete={handleDeleteCommand}
-								/>
+								<div
+									class="command-nav-wrapper"
+									data-nav-id={command.path}
+									role="button"
+									tabindex="-1"
+									onclick={(e) => {
+										// Only activate if click wasn't on an inner action button
+										if ((e.target as HTMLElement).closest('.action-btn, .shortcut-badge, button')) return;
+										onEditCommand(command);
+									}}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											onEditCommand(command);
+										}
+									}}
+								>
+									<CommandCard
+										{command}
+										{searchQuery}
+										{highlightMatch}
+										onEdit={onEditCommand}
+										onDelete={handleDeleteCommand}
+									/>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -1264,6 +1282,20 @@
 		gap: 0.75rem;
 		padding: 1rem 1.25rem 1.25rem;
 		background: oklch(0.13 0.02 250);
+	}
+
+	/* listNav wrapper around CommandCard - keeps grid layout but lets wrapper
+	   receive keyboard focus / .jk-focused from listNav. */
+	.command-nav-wrapper {
+		display: contents;
+	}
+
+	/* When focused, reveal a wrapping outline. Use a pseudo-element via the
+	   inner card since display: contents elements can't show outline. */
+	.command-nav-wrapper.jk-focused :global(.command-card) {
+		outline: 2px solid oklch(0.65 0.15 240 / 0.55);
+		outline-offset: -2px;
+		background: oklch(0.22 0.03 240 / 0.35);
 	}
 
 	/* Loading state */

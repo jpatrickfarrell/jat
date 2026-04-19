@@ -6,12 +6,14 @@
 	 * Layout: Rules list (left), Presets picker (right), Pattern tester (bottom), Activity log (bottom).
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import RulesList from '$lib/components/automation/RulesList.svelte';
 	import PresetsPicker from '$lib/components/automation/PresetsPicker.svelte';
 	import PatternTester from '$lib/components/automation/PatternTester.svelte';
 	import ActivityLog from '$lib/components/automation/ActivityLog.svelte';
 	import RuleEditor from '$lib/components/automation/RuleEditor.svelte';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
+	import { createListNav } from '$lib/actions/listNav';
 	import type { AutomationRule } from '$lib/types/automation';
 	import type { ActivityLogEntry } from '$lib/components/automation/ActivityLog.svelte';
 	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized } from '$lib/stores/automationRules.svelte';
@@ -63,6 +65,43 @@
 	let showRuleEditor = $state(false);
 	let editingRule = $state<AutomationRule | null>(null);
 
+	// Keyboard nav controller — navigates [data-rule-nav-id] rows across all
+	// category groups. Enter opens the RuleEditor for the focused rule.
+	const rulesNav = createListNav({
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-rule-nav-id]')),
+		onSelect: (el) => {
+			const ruleId = el.dataset.ruleNavId;
+			if (!ruleId) return;
+			const rule = getRules().find(r => r.id === ruleId);
+			if (rule) handleEditRule(rule);
+		},
+		onEscape: () => rulesNav.clear()
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Don't steal keys while the editor modal or any input is active
+		if (showRuleEditor) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		if (isTypingTarget(e.target)) return;
+
+		// `n` → create new rule
+		if (e.key === 'n') {
+			e.preventDefault();
+			handleAddRule();
+			return;
+		}
+
+		// j/k/Enter/Escape → delegate to rule nav
+		rulesNav.handleKeydown(e);
+	}
+
 	// Activity log entries (in-memory, not persisted)
 	let activityEntries = $state<ActivityLogEntry[]>([]);
 
@@ -111,6 +150,18 @@
 		};
 	});
 
+	// Window keydown — routes j/k/Enter/Escape/n to rule navigation.
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	// Re-home the nav focus whenever the rule list changes (add/delete/reorder).
+	$effect(() => {
+		const count = getRules().length;
+		if (count >= 0) tick().then(() => rulesNav.refresh());
+	});
+
 	// Handle edit rule
 	function handleEditRule(rule: AutomationRule) {
 		editingRule = rule;
@@ -145,6 +196,53 @@
 	function handleClearLog() {
 		activityEntries = [];
 	}
+
+	// ─── Keyboard navigation (j/k/Enter/Escape/n + ? overlay) ──────────────
+	const nav = createListNav({
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-rule-nav-id]')),
+		onSelect: (el) => {
+			const ruleId = el.dataset.ruleNavId;
+			if (!ruleId) return;
+			const rule = getRules().find((r) => r.id === ruleId);
+			if (rule) handleEditRule(rule);
+		}
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Suppress when the rule editor modal is open — its own inputs own the keys.
+		if (showRuleEditor) return;
+		if (isTypingTarget(e.target)) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// Let listNav consume j/k/Enter/Escape first.
+		if (nav.handleKeydown(e)) return;
+
+		// Page-level: `n` creates a new rule.
+		if (e.key === 'n' && !e.shiftKey) {
+			e.preventDefault();
+			handleAddRule();
+		}
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	const keyboardShortcuts = [
+		{ key: 'j / ↓', description: 'Focus next rule' },
+		{ key: 'k / ↑', description: 'Focus previous rule' },
+		{ key: 'Enter', description: 'Edit focused rule' },
+		{ key: 'n', description: 'Create new rule' },
+		{ key: 'Escape', description: 'Clear focus' }
+	];
 </script>
 
 <svelte:head>
@@ -215,4 +313,22 @@
 	rule={editingRule}
 	onSave={handleSaveRule}
 	onCancel={handleCloseEditor}
+/>
+
+<!-- Keyboard Shortcuts Overlay (press ?) -->
+<KeyboardShortcutsOverlay
+	title="Automation Shortcuts"
+	shortcuts={[
+		{ key: 'j / ↓', description: 'Focus next rule' },
+		{ key: 'k / ↑', description: 'Focus previous rule' },
+		{ key: 'Enter', description: 'Edit focused rule' },
+		{ key: 'n', description: 'Add new rule' },
+		{ key: 'Esc', description: 'Clear focus' }
+	]}
+/>
+
+<!-- Keyboard Shortcuts Overlay (toggle with ?) -->
+<KeyboardShortcutsOverlay
+	title="Automation — Keyboard Shortcuts"
+	shortcuts={keyboardShortcuts}
 />

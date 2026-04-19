@@ -453,7 +453,25 @@
 							<div class="templates-grid" transition:slide={{ duration: 200 }}>
 								{#each category.templates as template (template.id)}
 									{@const isBuiltIn = !template.isUserTemplate}
-									<div class="template-card" class:built-in={isBuiltIn} transition:fade={{ duration: 150 }}>
+									<div
+										class="template-card"
+										class:built-in={isBuiltIn}
+										data-nav-id={template.id}
+										role="button"
+										tabindex="-1"
+										onclick={(e) => {
+											if ((e.target as HTMLElement).closest('.action-btn')) return;
+											if (isBuiltIn) handleDuplicate(template);
+											else handleEdit(template as UserTemplate);
+										}}
+										onkeydown={(e) => {
+											if (e.key !== 'Enter' && e.key !== ' ') return;
+											e.preventDefault();
+											if (isBuiltIn) handleDuplicate(template);
+											else handleEdit(template as UserTemplate);
+										}}
+										transition:fade={{ duration: 150 }}
+									>
 										<div class="template-header">
 											<span class="template-icon">{template.icon || '📄'}</span>
 											<div class="template-info">

@@ -15,6 +15,8 @@
 		count: number;
 		collapsed?: boolean;
 		onToggleCollapse?: () => void;
+		/** When true, render a subtle ring around the column (active keyboard-nav column). */
+		focused?: boolean;
 		class?: string;
 		children?: Snippet;
 	}
@@ -24,6 +26,7 @@
 		count,
 		collapsed = false,
 		onToggleCollapse,
+		focused = false,
 		class: className = '',
 		children
 	}: Props = $props();
@@ -32,7 +35,8 @@
 </script>
 
 <div
-	class="flex flex-col h-full min-w-[280px] {collapsed ? 'max-w-[60px]' : 'max-w-[320px]'} transition-all duration-300 fade-in {className}"
+	class="kanban-column flex flex-col h-full min-w-[280px] {collapsed ? 'max-w-[60px]' : 'max-w-[320px]'} transition-all duration-300 fade-in {className}"
+	class:kanban-column-focused={focused}
 >
 	<!-- Column Header -->
 	<button
@@ -121,5 +125,21 @@
 	/* Column content background - slightly darker than base */
 	.kanban-column-content {
 		background: var(--color-base-200);
+	}
+
+	/* Active keyboard-nav column — subtle ring so j/k context is visible */
+	.kanban-column {
+		border-radius: 0.5rem;
+		transition: box-shadow 0.15s ease;
+	}
+
+	.kanban-column-focused {
+		box-shadow: 0 0 0 2px oklch(0.70 0.18 240 / 0.45);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.kanban-column {
+			transition: none;
+		}
 	}
 </style>

@@ -3,6 +3,8 @@
 	import { fly, fade, slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { flip } from 'svelte/animate';
+	import { createListNav, type KeyboardShortcut } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	interface LinkedTask {
 		id: string;
@@ -901,8 +903,128 @@
 		}
 	}
 
+	// ─── Keyboard navigation ────────────────────────────────────────────────
+	// Two-level nav: contracts (j/k across all visible contract rows) and
+	// milestones (j/k within focused contract). Enter expands a contract; a
+	// second Enter drills into its milestones. Right expands / drills in, Left
+	// collapses / returns. Escape clears focus or returns to contract level.
+	type NavMode = 'contract' | 'milestone';
+	let navMode = $state<NavMode>('contract');
+	let navFocusedContractId = $state<string | null>(null);
+
+	function visibleContractRows(): HTMLElement[] {
+		return Array.from(document.querySelectorAll<HTMLElement>('[data-contract-row]'))
+			.filter((el) => el.offsetParent !== null);
+	}
+
+	function visibleMilestoneRows(contractId: string | null): HTMLElement[] {
+		if (!contractId) return [];
+		return Array.from(
+			document.querySelectorAll<HTMLElement>(
+				`[data-milestone-row][data-contract-id="${CSS.escape(contractId)}"]`
+			)
+		).filter((el) => el.offsetParent !== null);
+	}
+
+	const contractNav = createListNav({
+		getItems: visibleContractRows,
+		onSelect: (el) => {
+			const id = el.dataset.contractRow;
+			if (!id) return;
+			if (expandedContract !== id) {
+				expandedContract = id;
+			} else {
+				// Already expanded — drill into milestones
+				navFocusedContractId = id;
+				navMode = 'milestone';
+				requestAnimationFrame(() => milestoneNav.focusFirst());
+			}
+		},
+		onEscape: () => contractNav.clear()
+	});
+
+	const milestoneNav = createListNav({
+		getItems: () => visibleMilestoneRows(navFocusedContractId),
+		onSelect: (el) => {
+			// Click on the focused milestone row to trigger its edit/detail action
+			const clickable = el.querySelector<HTMLElement>('[role="button"]') ?? el;
+			clickable.click();
+		}
+	});
+
+	function returnToContracts() {
+		milestoneNav.clear();
+		navMode = 'contract';
+		navFocusedContractId = null;
+		contractNav.refresh();
+	}
+
+	function isTypingTarget(t: EventTarget | null): boolean {
+		if (!(t instanceof HTMLElement)) return false;
+		const tag = t.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return t.isContentEditable;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		if (isTypingTarget(e.target)) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		if (navMode === 'contract') {
+			if (e.key === 'ArrowRight') {
+				const items = visibleContractRows();
+				const el = items[contractNav.focusedIndex()];
+				if (!el) return;
+				e.preventDefault();
+				const id = el.dataset.contractRow;
+				if (!id) return;
+				if (expandedContract !== id) {
+					expandedContract = id;
+				} else {
+					navFocusedContractId = id;
+					navMode = 'milestone';
+					requestAnimationFrame(() => milestoneNav.focusFirst());
+				}
+				return;
+			}
+			if (e.key === 'ArrowLeft') {
+				const items = visibleContractRows();
+				const el = items[contractNav.focusedIndex()];
+				if (!el) return;
+				const id = el.dataset.contractRow;
+				if (id && expandedContract === id) {
+					e.preventDefault();
+					expandedContract = null;
+				}
+				return;
+			}
+			contractNav.handleKeydown(e);
+			return;
+		}
+
+		// navMode === 'milestone'
+		if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+			e.preventDefault();
+			returnToContracts();
+			return;
+		}
+		milestoneNav.handleKeydown(e);
+	}
+
+	const keyboardShortcuts: KeyboardShortcut[] = [
+		{ key: 'j / ↓', description: 'Focus next contract (or milestone)' },
+		{ key: 'k / ↑', description: 'Focus previous contract (or milestone)' },
+		{ key: 'Enter', description: 'Expand contract; second Enter focuses first milestone' },
+		{ key: '→', description: 'Expand contract or drill into milestones' },
+		{ key: '←', description: 'Collapse contract or return to contract list' },
+		{ key: 'Esc', description: 'Clear focus (or return to contract list from milestones)' },
+		{ key: '?', description: 'Toggle this help overlay' }
+	];
+
 	onMount(() => {
 		fetchData();
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
 	});
 </script>
 
@@ -1098,6 +1220,7 @@
 														.filter(m => m.status === 'paid')
 														.reduce((s, m) => s + m.amount, 0)}
 													<tr
+														data-contract-row={contract.id}
 														class="cursor-pointer hover:bg-base-300/50 transition-colors"
 														class:bg-base-300={expandedContract === contract.id}
 														onclick={() => toggleContract(contract.id)}
@@ -1293,7 +1416,7 @@
 																							</div>
 																						</div>
 																					{:else}
-																						<div class="rounded-lg border border-base-300/50 p-3 space-y-2 {savedItemId === milestone.id ? 'bg-success/5' : 'bg-base-100/50'}">
+																						<div data-milestone-row={milestone.id} data-contract-id={contract.id} class="rounded-lg border border-base-300/50 p-3 space-y-2 {savedItemId === milestone.id ? 'bg-success/5' : 'bg-base-100/50'}">
 																							<div class="flex items-start gap-2">
 																								<span class="text-xs opacity-40 mt-0.5 shrink-0">{mi + 1}.</span>
 																								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -1471,7 +1594,7 @@
 																									</td>
 																								</tr>
 																							{:else}
-																							<tr class="hover:bg-base-300/30 transition-colors duration-500 {savedItemId === milestone.id ? 'bg-success/5' : ''}">
+																							<tr data-milestone-row={milestone.id} data-contract-id={contract.id} class="hover:bg-base-300/30 transition-colors duration-500 {savedItemId === milestone.id ? 'bg-success/5' : ''}">
 																								<td class="opacity-40">{mi + 1}</td>
 																								<td>
 																										<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -2537,6 +2660,8 @@
 		<div class="modal-backdrop" role="button" tabindex="-1" onclick={closeTaskPicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTaskPicker(); } }}></div>
 	</div>
 {/if}
+
+<KeyboardShortcutsOverlay shortcuts={keyboardShortcuts} title="Clients — Keyboard Shortcuts" />
 
 <style>
 	/* Reduced motion: disable all transitions and animations */

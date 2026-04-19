@@ -222,7 +222,7 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Clients',
 			href: '/clients',
 			icon: 'clients',
-			category: 'configure'
+			category: 'labs'
 		},
 		{
 			id: 'config',

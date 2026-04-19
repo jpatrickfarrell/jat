@@ -11,6 +11,7 @@
 	import { page } from '$app/stores';
 	import AgentKanbanBoard from '$lib/components/agent/kanban/AgentKanbanBoard.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 	import {
 		fetch as fetchSessions,
 		fetchUsage as fetchSessionUsage,
@@ -242,4 +243,17 @@
 
 	<!-- Task Detail Drawer -->
 	<TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
+
+	<!-- Keyboard shortcuts overlay (? to toggle) -->
+	<KeyboardShortcutsOverlay
+		title="Kanban Shortcuts"
+		shortcuts={[
+			{ key: 'j / ↓', description: 'Focus next card in column' },
+			{ key: 'k / ↑', description: 'Focus previous card in column' },
+			{ key: '→ / l', description: 'Next non-empty column' },
+			{ key: '← / h', description: 'Previous non-empty column' },
+			{ key: 'Enter / Space', description: 'Open task details' },
+			{ key: 'Esc', description: 'Clear focus' }
+		]}
+	/>
 </div>

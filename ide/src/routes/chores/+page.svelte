@@ -12,6 +12,7 @@
 	import SchedulerControls from '$lib/components/schedules/SchedulerControls.svelte';
 	import ScheduledTasksTable from '$lib/components/schedules/ScheduledTasksTable.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { CRON_PRESETS, describeCron, validateCron, computeNextCronRun } from '$lib/utils/cronUtils';
@@ -393,6 +394,17 @@
 
 <!-- Task Detail Drawer -->
 <TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
+
+<!-- Keyboard Shortcuts Overlay (press ?) -->
+<KeyboardShortcutsOverlay
+	title="Chores Shortcuts"
+	shortcuts={[
+		{ key: 'j / ↓', description: 'Focus next chore' },
+		{ key: 'k / ↑', description: 'Focus previous chore' },
+		{ key: 'Enter', description: 'Open chore detail' },
+		{ key: 'Esc', description: 'Clear focus' }
+	]}
+/>
 
 <style>
 	.chores-page {

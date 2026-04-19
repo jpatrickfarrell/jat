@@ -14,7 +14,7 @@
 	import { onMount, tick } from 'svelte';
 	import FileTreeNode from './FileTreeNode.svelte';
 	import FilePathPicker from './FilePathPicker.svelte';
-	import type { GitFileStatus } from './types';
+	import { getFileIconDef, type GitFileStatus } from './types';
 	import { setFileChangesCount } from '$lib/stores/drawerStore';
 	import { JAT_DEFAULTS } from '$lib/config/constants';
 	import { createListNav } from '$lib/actions/listNav';
@@ -1475,14 +1475,17 @@
 				<div class="starred-list">
 					{#each [...starredFiles] as filePath}
 						{@const fileName = filePath.split('/').pop() || filePath}
+						{@const starredIcon = getFileIconDef(fileName)}
 						<button
 							class="starred-item"
 							class:active={selectedPath === filePath}
 							onclick={() => onFileSelect(filePath)}
 							title={filePath}
 						>
-							<svg class="starred-item-icon" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+							<svg class="starred-item-icon" viewBox="0 0 24 24" fill="none"
+								stroke={starredIcon.color} stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round">
+								<path d={starredIcon.d}/>
 							</svg>
 							<span class="starred-item-name">{fileName}</span>
 							{#if onToggleStar}
@@ -1760,6 +1763,7 @@
 						<br /><span class="modal-warning">This will delete all contents of the folder.</span>
 					{/if}
 				</p>
+				<p class="modal-git-note">Git history will preserve {deleteModal.isFolder ? 'these files' : 'this file'} if the project is tracked.</p>
 				{#if deleteError}
 					<div class="modal-error">{deleteError}</div>
 				{/if}
@@ -1985,8 +1989,8 @@
 	}
 
 	.starred-item-icon {
-		width: 12px;
-		height: 12px;
+		width: 14px;
+		height: 14px;
 		color: oklch(0.75 0.15 85);
 		flex-shrink: 0;
 	}
@@ -2569,6 +2573,13 @@
 	.modal-warning {
 		color: oklch(0.65 0.15 45);
 		font-size: 0.8125rem;
+	}
+
+	.modal-git-note {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.04 250);
+		margin: 0.5rem 0 0;
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
 	}
 
 	.modal-error {

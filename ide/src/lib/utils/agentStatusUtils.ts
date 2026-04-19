@@ -28,32 +28,20 @@ export interface AgentStatusInput {
 	last_active_ts?: string | null;
 	in_progress_tasks?: number;
 	hasSession?: boolean;
-	/** Session creation timestamp (ms since epoch) for "connecting" state detection */
-	session_created_ts?: number | null;
 }
 
 /**
  * Compute agent status based on session and activity.
  *
  * Priority order:
- * 0a. DISCONNECTED - No session but recent activity <15min (unexpected termination)
- * 0b. OFFLINE - No session and no recent activity (expected state)
- * 1. WORKING - Has active task (takes priority - agent is engaged)
- * 1.5 CONNECTING - Session exists but very new (<10min) with no activity yet
- * 2. LIVE - Very recent activity (< 1 minute) without active work
- * 3. ACTIVE - Recent activity (< 10 minutes)
- * 4. IDLE - Within 1 hour but no activity indicators
- * 5. OFFLINE - Over 1 hour or never active
+ * 1. DISCONNECTED - No session but recent activity <15min (unexpected termination)
+ * 2. OFFLINE - No session and no recent activity (expected state)
+ * 3. WORKING - Has active task
+ * 4. IDLE - Session exists, no task, active within 1 hour
+ * 5. OFFLINE - Session exists but no activity in over 1 hour
  *
  * @param agent - Agent data with status indicators
  * @returns Agent status string
- *
- * @example
- * const status = computeAgentStatus({
- *   last_active_ts: new Date().toISOString(),
- *   in_progress_tasks: 1
- * });
- * // → 'working' (has in-progress task)
  */
 export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 	const timeSinceActive = getTimeSinceMs(agent.last_active_ts);
@@ -89,16 +77,8 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 }
 
 /**
- * Check if an agent is actively working (live or working status).
- * Useful for determining if agent can take new tasks.
- *
- * @param agent - Agent data with status indicators
- * @returns true if agent is live or working
- *
- * @example
- * // In TaskTable to show agent availability:
- * const working = isAgentWorking(agent);
- * // → true if agent is currently engaged
+ * Check if an agent is actively working.
+ * Useful for determining if agent is currently engaged on a task.
  */
 export function isAgentWorking(agent: AgentStatusInput): boolean {
 	return computeAgentStatus(agent) === 'working';

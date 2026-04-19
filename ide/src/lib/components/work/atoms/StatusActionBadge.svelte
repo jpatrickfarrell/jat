@@ -160,6 +160,7 @@
 	let dropdownRef: HTMLDivElement | null = null;
 	let triggerRef: HTMLButtonElement | null = $state(null);
 	let dropdownContentRef: HTMLDivElement | null = $state(null);
+	let selectedActionIndex = $state(-1);
 
 	// Portal-based dropdown to escape stacking context (jat-1xa13)
 	let dropdownPosition = $state({ top: 0, left: 0 });
@@ -319,6 +320,35 @@
 			: config.shortLabel,
 	);
 
+	// Keyboard navigation for the main action list
+	function handleDropdownKeyDown(e: KeyboardEvent) {
+		if (!isOpen) return;
+
+		switch (e.key) {
+			case "ArrowDown":
+				e.preventDefault();
+				selectedActionIndex = Math.min(selectedActionIndex + 1, actions.length - 1);
+				focusActionButton(selectedActionIndex);
+				break;
+			case "ArrowUp":
+				e.preventDefault();
+				selectedActionIndex = Math.max(selectedActionIndex - 1, 0);
+				focusActionButton(selectedActionIndex);
+				break;
+			case "Escape":
+				e.preventDefault();
+				isOpen = false;
+				triggerRef?.focus();
+				break;
+		}
+	}
+
+	function focusActionButton(index: number) {
+		if (!dropdownContentRef) return;
+		const buttons = dropdownContentRef.querySelectorAll<HTMLButtonElement>('ul > li > button:not([disabled])');
+		buttons[index]?.focus();
+	}
+
 	// Handle click outside to close dropdown
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as Node;
@@ -329,6 +359,13 @@
 			isOpen = false;
 		}
 	}
+
+	// Return focus to trigger when dropdown closes via any method
+	$effect(() => {
+		if (!isOpen && document.activeElement && dropdownContentRef?.contains(document.activeElement)) {
+			triggerRef?.focus();
+		}
+	});
 
 	// Setup and cleanup click outside listener
 	$effect(() => {
@@ -396,11 +433,12 @@
 		}
 	});
 
-	// Reset epics list when dropdown closes (forces fresh fetch on next open)
+	// Reset epics list and action selection when dropdown closes
 	$effect(() => {
 		if (!isOpen) {
 			epics = [];
 			epicsError = null;
+			selectedActionIndex = -1;
 		}
 	});
 
@@ -798,7 +836,7 @@
 </script>
 
 <div
-	class="relative inline-block {className} {compact ? '' : 'pl-4 py-1'}"
+	class="relative inline-block {className}"
 	bind:this={dropdownRef}
 >
 	<!-- Status Badge Button -->
@@ -812,8 +850,12 @@
 			// Update position when opening (for portal positioning)
 			if (!wasOpen) {
 				updateDropdownPosition();
-				// Re-measure with actual rendered width after DOM update
-				tick().then(() => updateDropdownPosition());
+				// Re-measure with actual rendered width after DOM update, then focus first action
+				tick().then(() => {
+					updateDropdownPosition();
+					selectedActionIndex = 0;
+					focusActionButton(0);
+				});
 			}
 			// Cancel auto-kill countdown when user opens dropdown (shows they're paying attention)
 			if (
@@ -827,10 +869,10 @@
 		}}
 		class="font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
 		'integrated'
-			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded'
+			? 'text-[11px] px-2 py-0.5 hover:bg-base-content/5 rounded'
 			: compact
 				? 'text-[10px] px-2 py-[3px] rounded'
-				: 'min-w-[150px] text-[13px] pt-1.5 pb-1 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'} {stacked ? 'flex flex-col items-center gap-0' : ''}"
+				: 'min-w-[150px] text-[13px] pt-1.5 pb-1 rounded hover:brightness-115 hover:ring-1 hover:ring-inset hover:ring-white/20 active:brightness-95 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'} {stacked ? 'flex flex-col items-center gap-0' : ''}"
 		class:animate-pulse={config.pulse && variant === "badge"}
 		class:cursor-not-allowed={disabled}
 		class:opacity-50={disabled}
@@ -861,7 +903,7 @@
 				</svg>
 			</span>
 			{#if elapsed}
-				<span class="elapsed-time text-[8px] opacity-80">
+				<span class="elapsed-time opacity-80">
 					{#if elapsed.showHours}
 						<AnimatedDigits value={elapsed.hours} class="text-[12px]" />
 						<span class="elapsed-sep">:</span>
@@ -873,7 +915,7 @@
 			{/if}
 			{#if autoKillCountdown !== null && autoKillCountdown > 0}
 				<span
-					class="font-mono text-[8px] opacity-75"
+					class="font-mono text-[10px] opacity-75"
 					title="Session will be cleaned up in {autoKillCountdown}s"
 				>
 					({autoKillCountdown}s)
@@ -885,17 +927,17 @@
 			{#if elapsed}
 				<span class="elapsed-time">
 					{#if elapsed.showHours}
-						<AnimatedDigits value={elapsed.hours} class="text-[9px]" />
+						<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
 						<span class="elapsed-sep">:</span>
 					{/if}
-					<AnimatedDigits value={elapsed.minutes} class="text-[9px]" />
+					<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
 					<span class="elapsed-sep">:</span>
-					<AnimatedDigits value={elapsed.seconds} class="text-[9px]" />
+					<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
 				</span>
 			{/if}
 			{#if autoKillCountdown !== null && autoKillCountdown > 0}
 				<span
-					class="ml-1 font-mono text-[9px] opacity-75"
+					class="ml-1 font-mono text-[10px] opacity-75"
 					title="Session will be cleaned up in {autoKillCountdown}s"
 				>
 					({autoKillCountdown}s)
@@ -927,6 +969,8 @@
 			class="status-dropdown fixed min-w-[180px] rounded-lg shadow-xl overflow-hidden"
 			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; z-index: 2147483647;"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
+			onkeydown={handleDropdownKeyDown}
+			tabindex="-1"
 		>
 			<!-- Actions list -->
 			<ul class="py-1">
@@ -939,11 +983,13 @@
 						<button
 							type="button"
 							onclick={() => executeAction(action)}
+							onmouseenter={() => { selectedActionIndex = actions.indexOf(action); }}
 							class="w-full px-3 py-2 flex items-center gap-2 text-left text-xs transition-colors {getVariantClasses(
 								action.variant,
 							)}"
 							class:opacity-50={actionDisabled}
 							class:cursor-not-allowed={actionDisabled}
+							class:action-item-focused={selectedActionIndex === actions.indexOf(action)}
 							disabled={isExecuting || actionDisabled}
 						>
 							{#if isExecuting || (action.id === "start-next" && nextTaskLoading)}
@@ -968,7 +1014,7 @@
 									<span class="font-semibold">{actionLabel}</span>
 									{#if sourceBadge}
 										<span
-											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap {sourceBadge.colorClass}"
+											class="text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap {sourceBadge.colorClass}"
 										>
 											{sourceBadge.label}
 										</span>
@@ -985,46 +1031,33 @@
 				{/each}
 			</ul>
 
-			<!-- Auto-complete toggle -->
+			<!-- Auto-complete segmented control -->
 			{#if onAutoCompleteToggle && task}
 				<div class="border-t commands-divider px-3 py-2">
-					<button
-						type="button"
-						onclick={() => onAutoCompleteToggle?.()}
-						class="w-full flex items-center justify-between text-xs"
-					>
-						<div class="flex items-center gap-2">
-							{#if autoCompleteEnabled}
-								<svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-								</svg>
-							{:else}
-								<svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-								</svg>
-							{/if}
-							<div class="flex flex-col items-start">
-								<span class="font-semibold {autoCompleteEnabled ? 'text-emerald-300' : 'text-amber-300'}">
-									{autoCompleteEnabled ? 'Auto-complete' : 'Manual review'}
-								</span>
-								{#if reviewReason}
-									<span class="text-[10px] opacity-60">{reviewReason}</span>
-								{/if}
-							</div>
+					<div class="flex items-center justify-between gap-2">
+						<span class="text-[10px] font-mono text-base-content/40 uppercase tracking-wider">Completion</span>
+						<div class="completion-seg-group">
+							<button
+								type="button"
+								onclick={() => !autoCompleteEnabled && onAutoCompleteToggle?.()}
+								class="completion-seg {autoCompleteEnabled ? 'completion-seg-auto' : 'completion-seg-inactive'}"
+								title="Auto-complete: task closes without manual review"
+							>
+								⚡ AUTO
+							</button>
+							<button
+								type="button"
+								onclick={() => autoCompleteEnabled && onAutoCompleteToggle?.()}
+								class="completion-seg {!autoCompleteEnabled ? 'completion-seg-review' : 'completion-seg-inactive'}"
+								title="Manual review: you confirm before task closes"
+							>
+								👁 REVIEW
+							</button>
 						</div>
-						<div
-							class="w-8 h-4 rounded-full transition-colors relative {autoCompleteEnabled
-								? 'bg-emerald-500/30'
-								: 'bg-amber-500/30'}"
-						>
-							<div
-								class="absolute top-0.5 w-3 h-3 rounded-full transition-all {autoCompleteEnabled
-									? 'left-4 bg-emerald-400'
-									: 'left-0.5 bg-amber-400'}"
-							></div>
-						</div>
-					</button>
+					</div>
+					{#if reviewReason}
+						<p class="text-[10px] text-base-content/40 mt-1.5 font-mono">{reviewReason}</p>
+					{/if}
 				</div>
 			{/if}
 
@@ -1035,7 +1068,7 @@
 					<button
 						type="button"
 						onclick={() => (epicExpanded = !epicExpanded)}
-						class="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
+						class="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
 					>
 						<span class="flex items-center gap-1.5">
 							<svg
@@ -1205,7 +1238,7 @@
 															>
 															{#if isClosed}
 																<span
-																	class="text-[8px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase tracking-wider"
+																	class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase tracking-wider"
 																	>closed</span
 																>
 															{/if}
@@ -1216,14 +1249,14 @@
 													</div>
 													{#if epic.dependency_count !== undefined}
 														<span
-															class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0"
+															class="text-[10px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0"
 														>
 															{epic.dependency_count} tasks
 														</span>
 													{/if}
 													{#if !canLink && onViewEpic}
 														<span
-															class="text-[9px] px-1 py-0.5 rounded bg-info/20 text-info flex-shrink-0"
+															class="text-[10px] px-1 py-0.5 rounded bg-info/20 text-info flex-shrink-0"
 														>
 															view
 														</span>
@@ -1258,12 +1291,12 @@
 														autofocus
 													/>
 													{#if createEpicError}
-														<span class="text-[9px] text-error"
+														<span class="text-[10px] text-error"
 															>{createEpicError}</span
 														>
 													{/if}
 													<div class="flex items-center justify-between gap-2">
-														<span class="text-[9px] text-base-content/40">
+														<span class="text-[10px] text-base-content/40">
 															Enter to create, Esc to cancel
 														</span>
 														<div class="flex gap-1">
@@ -1339,7 +1372,7 @@
 					<button
 						type="button"
 						onclick={() => (commandsExpanded = !commandsExpanded)}
-						class="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
+						class="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
 					>
 						<span class="flex items-center gap-1.5">
 							<svg
@@ -1480,7 +1513,7 @@
 												<span class="font-mono">{cmd.invocation}</span>
 												{#if cmd.namespace === "local"}
 													<span
-														class="text-[8px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 ml-auto"
+														class="text-[10px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 ml-auto"
 														>local</span
 													>
 												{/if}
@@ -1501,7 +1534,7 @@
 
 			<!-- Session info footer -->
 			<div
-				class="px-3 py-1.5 text-[9px] font-mono opacity-50 truncate status-footer"
+				class="px-3 py-1.5 text-[10px] font-mono opacity-50 truncate status-footer"
 			>
 				{sessionName}
 			</div>
@@ -1552,6 +1585,12 @@
 		opacity: 0.85;
 	}
 
+	/* Action item keyboard focus state */
+	.action-item-focused {
+		background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+		outline: none;
+	}
+
 	/* Command item states */
 	.command-item-selected {
 		background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
@@ -1579,6 +1618,44 @@
 		background: var(--color-base-200);
 		border-top: 1px solid
 			color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+
+	/* Completion segmented control */
+	.completion-seg-group {
+		display: flex;
+		border-radius: 0.25rem;
+		overflow: hidden;
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+	}
+
+	.completion-seg {
+		padding: 0.2rem 0.6rem;
+		font-size: 0.625rem; /* 10px */
+		font-family: ui-monospace, monospace;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		transition: background 0.12s, color 0.12s;
+		cursor: pointer;
+	}
+
+	.completion-seg-auto {
+		background: color-mix(in oklch, oklch(0.65 0.20 145) 22%, transparent);
+		color: oklch(0.75 0.18 145);
+	}
+
+	.completion-seg-review {
+		background: color-mix(in oklch, oklch(0.75 0.15 85) 22%, transparent);
+		color: oklch(0.80 0.16 85);
+	}
+
+	.completion-seg-inactive {
+		background: transparent;
+		color: color-mix(in oklch, var(--color-base-content) 35%, transparent);
+	}
+
+	.completion-seg-inactive:hover {
+		background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
 	}
 
 	/* Source badges */

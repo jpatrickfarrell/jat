@@ -14,10 +14,14 @@
 	 * @see ide/src/lib/components/config/ for sub-components
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
+	import { createListNav, type KeyboardShortcut } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay, {
+		type ShortcutSection
+	} from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// Store imports
 	import {
@@ -112,6 +116,109 @@
 
 	// Valid tabs for URL sync
 	const validTabs = ['commands', 'tools', 'projects', 'swarm', 'defaults', 'credentials', 'llm', 'agents', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts', 'commit', 'skills'];
+
+	// Tabs that have navigable lists (j/k Enter). Used to wire keyboard nav
+	// and pick per-tab shortcut help. Other tabs still support Tab cycling
+	// and `?` help, but don't get j/k focus handling.
+	const listTabs = new Set(['commands', 'projects', 'claude', 'docs', 'templates', 'tools']);
+
+	// Active panel ref for keyboard nav
+	let activePanelEl: HTMLElement | null = $state(null);
+
+	// Listnav controller — queries [data-nav-id] inside the active panel and
+	// clicks the focused element on Enter. The wrapping `.click()` triggers
+	// the item's own onclick (which opens the editor / selects the file).
+	const listsNav = createListNav({
+		getItems: () =>
+			activePanelEl
+				? Array.from(activePanelEl.querySelectorAll<HTMLElement>('[data-nav-id]'))
+				: [],
+		onSelect: (el) => {
+			// Click the focused element. For `<button>` and wrappers with onclick
+			// handlers, this opens the editor / selects the file.
+			el.click();
+		},
+		onEscape: () => listsNav.clear()
+	});
+
+	// Keyboard shortcuts overlay state (bound to the overlay component)
+	let shortcutsOverlayOpen = $state(false);
+
+	// Per-tab shortcut sections for the ? overlay
+	const baseListShortcuts: KeyboardShortcut[] = [
+		{ key: 'j / ↓', description: 'Focus next item' },
+		{ key: 'k / ↑', description: 'Focus previous item' },
+		{ key: 'Enter', description: 'Open / select focused item' },
+		{ key: 'Escape', description: 'Clear focus' }
+	];
+	const globalShortcuts: KeyboardShortcut[] = [
+		{ key: 'Tab', description: 'Next tab' },
+		{ key: 'Shift+Tab', description: 'Previous tab' }
+	];
+
+	const shortcutSections = $derived.by<ShortcutSection[]>(() => {
+		const sections: ShortcutSection[] = [];
+		if (listTabs.has(activeTab)) {
+			const tabLabels: Record<string, string> = {
+				commands: 'Commands list',
+				projects: 'Projects list',
+				claude: 'CLAUDE.md files',
+				docs: 'Docs list',
+				templates: 'Templates',
+				tools: 'Tools list'
+			};
+			sections.push({
+				title: tabLabels[activeTab] ?? 'List',
+				shortcuts: baseListShortcuts
+			});
+		}
+		sections.push({ title: 'Navigation', shortcuts: globalShortcuts });
+		return sections;
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	// Cycle tabs on Tab / Shift+Tab (when not typing, no modifiers beyond Shift)
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Let modal/overlay keep their own handling
+		if (shortcutsOverlayOpen) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// Tab cycles through config tabs
+		if (e.key === 'Tab' && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			const idx = validTabs.indexOf(activeTab);
+			if (idx < 0) return;
+			const next = e.shiftKey
+				? (idx - 1 + validTabs.length) % validTabs.length
+				: (idx + 1) % validTabs.length;
+			handleTabChange(validTabs[next]);
+			return;
+		}
+
+		// j/k/Enter/Escape only while on a list-bearing tab
+		if (!listTabs.has(activeTab)) return;
+		listsNav.handleKeydown(e);
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	// When tab changes, clear old focus and refresh the nav against the new panel
+	$effect(() => {
+		// Depend on activeTab so this re-runs on tab change
+		void activeTab;
+		listsNav.clear();
+		// Wait for the new panel to render, then re-query items
+		tick().then(() => listsNav.refresh());
+	});
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -428,7 +535,7 @@
 			</div>
 
 			<!-- Tab content -->
-			<div class="config-body">
+			<div class="config-body" bind:this={activePanelEl}>
 				{#if activeTab === 'commands'}
 					<!-- Commands Tab -->
 					<div
@@ -640,6 +747,13 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Keyboard shortcuts overlay (press ? to toggle) -->
+<KeyboardShortcutsOverlay
+	bind:open={shortcutsOverlayOpen}
+	sections={shortcutSections}
+	title="Config — Keyboard Shortcuts"
+/>
 
 <!-- Command Editor Modal -->
 <CommandEditor

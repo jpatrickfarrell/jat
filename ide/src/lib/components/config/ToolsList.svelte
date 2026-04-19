@@ -231,6 +231,7 @@
 								<button
 									class="tool-item"
 									class:selected={selectedPath === tool.path}
+									data-nav-id={tool.path}
 									onclick={() => onSelect(tool)}
 								>
 									<div class="tool-main">

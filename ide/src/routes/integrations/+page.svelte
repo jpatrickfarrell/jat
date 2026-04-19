@@ -7,14 +7,16 @@
 	 * Launches wizard drawer for setup.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
 	import IngestWizard from '$lib/components/ingest/IngestWizard.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 	import { loadProjects } from '$lib/stores/configStore.svelte';
 	import { reveal } from '$lib/actions/reveal';
+	import { createListNav } from '$lib/actions/listNav';
 
 	// Page-level tab
 	let activeTab = $state<'installed' | 'add'>('installed');
@@ -167,6 +169,61 @@
 		if (activeTab === 'add' && !pluginsFetched) {
 			fetchPlugins();
 		}
+	});
+
+	// ==================== Keyboard navigation ====================
+	let sourcesListEl = $state<HTMLElement | null>(null);
+
+	const sourcesNav = createListNav({
+		getItems: () =>
+			sourcesListEl ? Array.from(sourcesListEl.querySelectorAll<HTMLElement>('[data-nav-id]')) : [],
+		onSelect: (el) => {
+			const id = el.dataset.navId;
+			if (id) toggleAudit(id);
+		},
+		onEscape: () => sourcesNav.clear(),
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Skip if wizard/drawer is open — they own their own keyboard UX
+		if (wizardOpen || drawerOpen) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// Tab → toggle between Installed / Add Integration tabs
+		if (e.key === 'Tab' && !e.shiftKey && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			activeTab = activeTab === 'installed' ? 'add' : 'installed';
+			if (activeTab === 'installed') tick().then(() => sourcesNav.refresh());
+			else sourcesNav.clear();
+			return;
+		}
+
+		if (isTypingTarget(e.target)) return;
+
+		// j/k/Enter/Escape → installed-sources nav (only on installed tab)
+		if (activeTab === 'installed') {
+			sourcesNav.handleKeydown(e);
+		}
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	// Refresh nav when the visible sources list changes
+	$effect(() => {
+		if (activeTab !== 'installed') return;
+		// Depend on sortedSources length/ids so nav re-homes after sort/filter
+		void sortedSources.map((s) => s.id).join(',');
+		tick().then(() => sourcesNav.refresh());
 	});
 
 	async function fetchServiceStatus() {
@@ -810,14 +867,14 @@
 				</div>
 			{:else if sources.length > 0}
 				<div>
-					<div class="space-y-2">
+					<div class="space-y-2" bind:this={sourcesListEl}>
 						{#each sortedSources as source, i (source.id)}
 							{@const colors = getTypeColor(source.type)}
 							{@const tmpl = templates.find(t => t.type === source.type)}
 							{@const isExpanded = expandedSource === source.id}
 							{@const stats = sourceStats[source.id]}
 							{@const itemCount = stats?.total ?? 0}
-							<div animate:flip={{ duration: 300, easing: cubicOut }}>
+							<div animate:flip={{ duration: 300, easing: cubicOut }} data-nav-id={source.id}>
 							<div
 								class="rounded-lg overflow-hidden transition-all duration-150"
 								style="
@@ -1886,4 +1943,17 @@ export default class MyAdapter extends BaseAdapter {
 <TaskDetailDrawer
 	bind:taskId={selectedTaskId}
 	bind:isOpen={drawerOpen}
+/>
+
+<!-- Keyboard Shortcuts Overlay (press ?) -->
+<KeyboardShortcutsOverlay
+	title="Integrations Shortcuts"
+	shortcuts={[
+		{ key: 'j / ↓', description: 'Focus next installed source' },
+		{ key: 'k / ↑', description: 'Focus previous installed source' },
+		{ key: 'Enter', description: 'Expand / collapse focused source' },
+		{ key: 'Tab', description: 'Switch between Installed / Add Integration' },
+		{ key: 'Esc', description: 'Clear focus' },
+		{ key: '?', description: 'Toggle this overlay' }
+	]}
 />

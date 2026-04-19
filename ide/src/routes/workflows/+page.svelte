@@ -1252,10 +1252,10 @@
 					tabindex="0"
 				>
 					<!-- Name -->
-					<div class="flex items-center gap-2 min-w-0">
+					<div class="flex flex-col min-w-0 gap-0.5">
 						<span class="text-sm font-medium truncate" style="color: oklch(0.88 0.02 250)">{wf.name}</span>
 						{#if wf.description}
-							<span class="text-xs truncate hidden" style="color: oklch(0.40 0.02 250)">{wf.description}</span>
+							<span class="text-xs truncate" style="color: oklch(0.42 0.02 250)">{wf.description}</span>
 						{/if}
 					</div>
 
@@ -1269,11 +1269,9 @@
 						</span>
 					</div>
 
-					<!-- Nodes / edges -->
-					<div class="flex items-center gap-1 text-xs tabular-nums" style="color: oklch(0.50 0.02 250)">
+					<!-- Nodes -->
+					<div class="flex items-center text-xs tabular-nums" style="color: oklch(0.50 0.02 250)" title="{wf.nodeCount} node{wf.nodeCount !== 1 ? 's' : ''}, {wf.edgeCount} edge{wf.edgeCount !== 1 ? 's' : ''}">
 						<span>{wf.nodeCount}</span>
-						<span style="color: oklch(0.30 0.02 250)">·</span>
-						<span>{wf.edgeCount}e</span>
 					</div>
 
 					<!-- Last run -->
@@ -1291,9 +1289,9 @@
 						{/if}
 					</div>
 
-					<!-- Quick actions (right-click hint) -->
+					<!-- Quick actions (right-click hint, row-hover only) -->
 					<div class="flex items-center justify-end">
-						<span class="text-[10px]" style="color: oklch(0.28 0.02 250)">right-click</span>
+						<span class="wf-row-hint text-[10px]" style="color: oklch(0.40 0.02 250)">right-click</span>
 					</div>
 				</div>
 			{/each}
@@ -1409,6 +1407,15 @@
 
 	.wf-list-row:hover {
 		background: oklch(0.17 0.01 250);
+	}
+
+	.wf-row-hint {
+		opacity: 0;
+		transition: opacity 0.1s;
+	}
+
+	.wf-list-row:hover .wf-row-hint {
+		opacity: 1;
 	}
 
 	/* ===== PALETTE ITEMS ===== */

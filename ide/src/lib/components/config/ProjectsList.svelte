@@ -277,7 +277,7 @@
 				<!-- Projects grid -->
 				<div class="projects-grid">
 					{#each visibleProjects as project, index (project.path)}
-						<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}">
+						<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}" data-nav-id={project.path}>
 							<ProjectCard
 								{project}
 								onEdit={onEditProject}
@@ -324,6 +324,7 @@
 								<tr
 									class="project-row"
 									class:hidden-project={project.hidden}
+									data-nav-id={project.path}
 									onclick={() => onEditProject(project)}
 								>
 									<td class="name-cell">
@@ -432,7 +433,7 @@
 					{#if hiddenSectionExpanded}
 						<div class="hidden-projects-grid" transition:slide={{ duration: 200, axis: 'y' }}>
 							{#each hiddenProjects as project, index (project.path)}
-								<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}">
+								<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}" data-nav-id={project.path}>
 									<ProjectCard
 										{project}
 										onEdit={onEditProject}

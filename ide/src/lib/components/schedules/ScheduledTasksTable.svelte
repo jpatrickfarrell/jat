@@ -10,6 +10,7 @@
 	import AgentSelector from '$lib/components/agents/AgentSelector.svelte';
 	import { describeCron, computeNextCronRuns } from '$lib/utils/cronUtils';
 	import FxText from '$lib/components/FxText.svelte';
+	import { listNav } from '$lib/actions/listNav';
 
 	interface ScheduledTask {
 		id: string;
@@ -259,7 +260,16 @@
 			<p class="empty-desc">Tasks with a cron schedule or next run date will appear here.</p>
 		</div>
 	{:else}
-		<div class="table-scroll">
+		<div
+			class="table-scroll"
+			use:listNav={{
+				itemSelector: 'tbody tr[data-nav-id]',
+				onSelect: (el) => {
+					const id = el.dataset.navId;
+					if (id) onViewTask(id);
+				}
+			}}
+		>
 			<table class="sched-table">
 				<thead>
 					<tr>
@@ -277,7 +287,7 @@
 				<tbody>
 					{#each filteredTasks as task (task.id)}
 						{@const runs = getUpcomingRuns(task)}
-						<tr class="task-row" class:row-closed={task.status === 'closed'}>
+						<tr class="task-row" class:row-closed={task.status === 'closed'} data-nav-id={task.id}>
 							<td class="col-title">
 								<div class="task-title-row">
 									<TaskIdBadge

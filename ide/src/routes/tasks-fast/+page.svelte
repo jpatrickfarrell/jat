@@ -268,7 +268,8 @@
 			filterTypes.length > 0 ||
 			filterAssignee.trim() !== "" ||
 			filterSearch.trim() !== "" ||
-			sortBy !== "priority"
+			sortBy !== "priority" ||
+			sortDir !== DEFAULT_SORT_DIR.priority
 		);
 	});
 
@@ -752,6 +753,8 @@
 		filterAssignee = searchParams.get("assignee") ?? "";
 		const rawSort = searchParams.get("sort");
 		sortBy = (["priority", "age", "updated", "status"].includes(rawSort ?? "") ? rawSort : "priority") as SortBy;
+		const rawDir = searchParams.get("sortDir");
+		sortDir = rawDir === "asc" || rawDir === "desc" ? rawDir : DEFAULT_SORT_DIR[sortBy];
 		filterSearch = searchParams.get("q") ?? "";
 	}
 
@@ -774,6 +777,8 @@
 		}
 		if (filterProject) sp.set("project", filterProject);
 		if (sortBy !== "priority") sp.set("sort", sortBy);
+		// Only encode sortDir when it diverges from this sort type's default.
+		if (sortDir !== DEFAULT_SORT_DIR[sortBy]) sp.set("sortDir", sortDir);
 		if (filterTypes.length > 0) {
 			sp.set("type", [...filterTypes].sort().join(","));
 		}
@@ -840,6 +845,7 @@
 		filterAssignee = "";
 		filterSearch = "";
 		sortBy = "priority";
+		sortDir = DEFAULT_SORT_DIR.priority;
 	}
 
 	async function focusFilter() {

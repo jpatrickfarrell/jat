@@ -433,6 +433,8 @@
 
 									<!-- Enable/disable toggle -->
 									<button
+										role="switch"
+										aria-checked={rule.enabled}
 										class="p-0 bg-transparent border-none cursor-pointer flex-shrink-0"
 										onclick={() => handleToggleRule(rule.id)}
 										aria-label={rule.enabled ? 'Disable rule' : 'Enable rule'}
@@ -491,10 +493,10 @@
 											</svg>
 										</button>
 										<button
-											class="btn btn-xs btn-square btn-ghost text-base-content/50 hover:text-base-content hover:bg-error/20 hover:text-error"
+											class="btn btn-xs btn-square {pendingDeleteId === rule.id ? 'bg-error/20 text-error border border-error/40 hover:bg-error/30 animate-pulse-subtle' : 'btn-ghost text-base-content/50 hover:text-error hover:bg-error/20'}"
 											onclick={() => handleDeleteRule(rule)}
-											title="Delete rule"
-											aria-label="Delete rule"
+											title={pendingDeleteId === rule.id ? 'Click again to confirm delete' : 'Delete rule'}
+											aria-label={pendingDeleteId === rule.id ? 'Confirm delete' : 'Delete rule'}
 										>
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -602,5 +604,12 @@
 	.rule-row.jk-focused {
 		background: oklch(0.70 0.18 240 / 0.10);
 		box-shadow: inset 3px 0 0 0 oklch(0.70 0.18 240);
+	}
+
+	/* Activity log click-through highlight */
+	.rule-row.rule-highlighted {
+		background: oklch(0.70 0.18 280 / 0.12);
+		box-shadow: inset 3px 0 0 0 oklch(0.70 0.18 280);
+		animation: agent-highlight-flash 1.5s ease-out forwards;
 	}
 </style>

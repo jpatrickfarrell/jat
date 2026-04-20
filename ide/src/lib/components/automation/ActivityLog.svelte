@@ -26,6 +26,8 @@
 	interface Props {
 		/** External entries to display (component can also maintain internal state) */
 		entries?: ActivityLogEntry[];
+		/** Called when a rule name in the log is clicked — for click-through to RulesList */
+		onRuleClick?: (ruleName: string) => void;
 		/** Called when clear button is clicked */
 		onClear?: () => void;
 		/** Maximum entries to display */
@@ -36,6 +38,7 @@
 
 	let {
 		entries = $bindable([]),
+		onRuleClick,
 		onClear = () => {},
 		maxEntries = 100,
 		class: className = ''
@@ -121,7 +124,7 @@
 <div class="flex flex-col rounded-lg overflow-hidden bg-base-200 border border-base-300 {className}">
 	<!-- Header with filters and clear button -->
 	<header class="flex items-center justify-between gap-4 px-4 py-3 bg-base-300 border-b border-base-300">
-		<div class="flex items-center gap-2 text-sm font-semibold text-base-content font-mono">
+		<div class="flex items-center gap-2 text-sm font-semibold text-base-content">
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[18px] h-[18px] text-info">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
 			</svg>
@@ -224,7 +227,15 @@
 								<span class="inline-block py-0.5 px-2 rounded font-mono text-[0.7rem] bg-info/20 text-info max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{entry.sessionName}</span>
 							</td>
 							<td class="w-[130px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
-								<span class="text-secondary font-medium">{entry.ruleName}</span>
+								{#if onRuleClick}
+									<button
+										class="text-secondary font-medium hover:text-secondary/70 hover:underline underline-offset-2 cursor-pointer bg-transparent border-none p-0 text-left text-xs"
+										onclick={() => onRuleClick(entry.ruleName)}
+										title="Highlight rule in rules list"
+									>{entry.ruleName}</button>
+								{:else}
+									<span class="text-secondary font-medium">{entry.ruleName}</span>
+								{/if}
 							</td>
 							<td class="min-w-[150px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
 								<code class="inline-block py-0.5 px-1.5 rounded font-mono text-[0.65rem] bg-base-300 border border-base-content/15 text-warning max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={entry.matchedPattern}>

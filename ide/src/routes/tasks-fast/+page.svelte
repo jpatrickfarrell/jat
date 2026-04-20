@@ -824,6 +824,18 @@
 		goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 	});
 
+	// Sync URL → filterProject when the layout changes the project param externally
+	// (e.g. clicking a ProjectSelector chip in the TopBar). This is a one-way read:
+	// it only updates filterProject; the filter-to-URL effect above handles the
+	// reverse direction and guards against loops via untrack().
+	$effect(() => {
+		if (!hydrated || !browser) return;
+		const projectFromUrl = $page.url.searchParams.get("project") ?? "";
+		if (projectFromUrl !== filterProject) {
+			filterProject = projectFromUrl;
+		}
+	});
+
 	// ---- Filter toggle helpers ----
 
 	function handleSortClick(val: SortBy) {

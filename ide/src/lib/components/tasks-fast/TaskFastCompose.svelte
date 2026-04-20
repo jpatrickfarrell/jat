@@ -32,6 +32,11 @@
 	interface Props {
 		taskId: string;
 		task?: RoutingTaskShape | null;
+		// Current JAT IDE user's display name (from git config, via /api/config/user).
+		// Used as the comment `author` so replies show the human's name instead of
+		// the literal string "user". The author_type stays "user" — that's the
+		// role (human vs agent vs system), not the display label.
+		currentUser?: string;
 		onSent?: (comment: any) => void;
 		// Called after the comment (if any) is successfully posted. Parent handles
 		// reassignment + advance. Returning a promise keeps the compose in its
@@ -44,11 +49,16 @@
 	let {
 		taskId,
 		task = null,
+		currentUser = "",
 		onSent,
 		onSendAndRoute,
 		onEscape,
 		onFocus,
 	}: Props = $props();
+
+	// Fall back to "user" only if the IDE couldn't resolve the git user.
+	// (Empty string → placeholder; normal case → "Joseph Winke" etc.)
+	const authorName = $derived(currentUser.trim() || "user");
 
 	const routingTarget = $derived(task ? resolveRoutingTarget(task as any) : null);
 	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
@@ -94,7 +104,7 @@
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						text,
-						author: "user",
+						author: authorName,
 						author_type: "user",
 						comment_type: "note",
 					}),
@@ -143,7 +153,7 @@
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({
 							text,
-							author: "user",
+							author: authorName,
 							author_type: "user",
 							comment_type: "note",
 						}),

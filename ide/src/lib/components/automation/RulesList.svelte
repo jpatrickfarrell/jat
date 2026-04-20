@@ -106,6 +106,10 @@
 		return grouped;
 	});
 
+	const visibleCount = $derived(rules.filter(r => !pendingDeletionIds.has(r.id)).length);
+	const filteredCount = $derived([...rulesByCategory.values()].flat().length);
+	const anyVisibleRules = $derived([...rulesByCategory.values()].some(arr => arr.length > 0));
+
 	// Category order for display
 	const categoryOrder: RuleCategory[] = ['recovery', 'prompt', 'stall', 'notification', 'custom'];
 
@@ -362,8 +366,6 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
 			</svg>
 			<span class="text-sm font-semibold text-base-content">Automation Rules</span>
-			{@const visibleCount = rules.filter(r => !pendingDeletionIds.has(r.id)).length}
-			{@const filteredCount = [...rulesByCategory.values()].flat().length}
 			<span class="text-xs font-normal text-base-content/50 bg-base-100 px-2 py-0.5 rounded-full tabular-nums">
 				{#if showEnabledOnly && filteredCount !== visibleCount}
 					{filteredCount} / {visibleCount}
@@ -440,9 +442,7 @@
 
 	<!-- Rules content -->
 	<div class="flex-1 overflow-auto max-h-[65vh] transition-opacity duration-200 {config.enabled ? '' : 'opacity-50 pointer-events-none'}">
-		{@const actualRuleCount = rules.filter(r => !pendingDeletionIds.has(r.id)).length}
-		{@const anyVisibleRules = [...rulesByCategory.values()].some(arr => arr.length > 0)}
-		{#if actualRuleCount === 0}
+		{#if visibleCount === 0}
 			<!-- True empty state: no rules configured yet -->
 			<div class="flex flex-col gap-4 py-8 px-6" transition:fade={{ duration: 150 * _dur }}>
 				<div class="flex flex-col gap-1.5">
@@ -471,7 +471,7 @@
 		{:else if !anyVisibleRules}
 			<!-- Filtered empty state: rules exist but none match the enabled filter -->
 			<div class="flex items-center gap-2 py-6 px-6 text-xs text-base-content/40" transition:fade={{ duration: 150 * _dur }}>
-				<span>All {actualRuleCount} rule{actualRuleCount !== 1 ? 's' : ''} are disabled —</span>
+				<span>All {visibleCount} rule{visibleCount !== 1 ? 's' : ''} are disabled —</span>
 				<button class="text-info/70 hover:text-info underline underline-offset-2" onclick={() => showEnabledOnly = false}>show all</button>
 			</div>
 		{:else}

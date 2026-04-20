@@ -78,6 +78,9 @@
 	let nameSource = $state<'jat' | 'git' | 'none'>('none');
 	let emailSource = $state<'jat' | 'git' | 'none'>('none');
 
+	// Identity loading state
+	let identityLoading = $state(true);
+
 	// Identity edit state
 	let editingIdentity = $state(false);
 	let editName = $state('');
@@ -87,6 +90,7 @@
 	let editNameInputEl = $state<HTMLInputElement | null>(null);
 
 	async function loadIdentity() {
+		identityLoading = true;
 		try {
 			const res = await fetch('/api/config/user');
 			const data = await res.json();
@@ -97,6 +101,8 @@
 			emailSource = data.source?.email ?? 'none';
 		} catch {
 			// keep defaults
+		} finally {
+			identityLoading = false;
 		}
 	}
 
@@ -149,6 +155,7 @@
 	}
 
 	async function resetIdentityToGit() {
+		if (!confirm('Clear JAT override and fall back to git config user.name / user.email?')) return;
 		identitySaving = true;
 		identityError = null;
 		try {
@@ -235,7 +242,12 @@
 
 	// Keyboard nav
 	function handleNavSelect(el: HTMLElement) {
-		el.click();
+		const firstFocusable = el.querySelector<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])');
+		if (firstFocusable && firstFocusable !== el) {
+			firstFocusable.focus();
+		} else {
+			el.click();
+		}
 	}
 
 	function closeDropdown() {
@@ -468,6 +480,7 @@
 	}
 
 	async function handleUpdate() {
+		if (!confirm('Pull latest from git and run install.sh?')) return;
 		isUpdating = true;
 
 		try {
@@ -494,6 +507,15 @@
 		itemSelector: '[data-nav-id]',
 		onSelect: handleNavSelect,
 		onEscape: closeDropdown,
+	}}
+	onkeydown={(e) => {
+		if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			const t = e.target as HTMLElement;
+			if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable) {
+				e.preventDefault();
+				showHelpModal = !showHelpModal;
+			}
+		}
 	}}
 >
 	<!-- Avatar Button - Industrial -->
@@ -526,7 +548,13 @@
 	>
 		<!-- User Identity -->
 		<li class="px-2 py-1.5">
-			{#if !editingIdentity}
+			{#if identityLoading}
+				<div class="flex flex-col gap-1.5">
+					<div class="skeleton h-3 w-24 rounded"></div>
+					<div class="skeleton h-2.5 w-36 rounded"></div>
+					<div class="skeleton h-2 w-20 rounded"></div>
+				</div>
+			{:else if !editingIdentity}
 				<div class="flex items-start justify-between gap-2">
 					<div class="flex flex-col gap-0.5 min-w-0">
 						{#if userName}
@@ -584,7 +612,7 @@
 						/>
 					</label>
 					{#if identityError}
-						<p class="text-[11px] text-error">{identityError}</p>
+						<p class="text-[11px] text-error" role="alert">{identityError} — check your connection and try again.</p>
 					{/if}
 					<p class="text-[11px] text-base-content/50 leading-snug">
 						Used as the comment author on tasks. Each Supabase-backed project
@@ -658,7 +686,7 @@
 			<span class="text-xs text-base-content/50 uppercase tracking-wider">Appearance</span>
 		</li>
 
-		<li>
+		<li data-nav-id="theme">
 			<ThemeSelector inline={true} />
 		</li>
 
@@ -761,7 +789,7 @@
 		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('notifications')} data-nav-id="section-notifications">
+		<li class="menu-title mt-1 cursor-pointer select-none rounded hover:bg-base-200/40 transition-colors" onclick={() => toggleSection('notifications')} data-nav-id="section-notifications">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('notifications') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
@@ -898,8 +926,9 @@
 					>
 						❓
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Needs Input
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Needs Input</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Toast when agent awaits your response</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {toastNeedsInput ? 'bg-warning/40 text-warning-content' : 'bg-base-200 text-base-content/50'}"
@@ -926,8 +955,9 @@
 					>
 						👁
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Ready for Review
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Ready for Review</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Toast when agent finishes and waits</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {toastReview ? 'bg-info/40 text-info' : 'bg-base-200 text-base-content/50'}"
@@ -954,8 +984,9 @@
 					>
 						✅
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Task Complete
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Task Complete</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Toast when agent marks task done</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {toastComplete ? 'bg-success/40 text-success' : 'bg-base-200 text-base-content/50'}"
@@ -973,7 +1004,7 @@
 		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('terminal')} data-nav-id="section-terminal">
+		<li class="menu-title mt-1 cursor-pointer select-none rounded hover:bg-base-200/40 transition-colors" onclick={() => toggleSection('terminal')} data-nav-id="section-terminal">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('terminal') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
@@ -1111,7 +1142,7 @@
 		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('agents')} data-nav-id="section-agents">
+		<li class="menu-title mt-1 cursor-pointer select-none rounded hover:bg-base-200/40 transition-colors" onclick={() => toggleSection('agents')} data-nav-id="section-agents">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('agents') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />

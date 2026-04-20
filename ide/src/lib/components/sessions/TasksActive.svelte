@@ -1589,7 +1589,7 @@
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 5) as action}
+							{#each cardActions.slice(0, 5) as action (action.id)}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
@@ -1794,12 +1794,13 @@
 							</div>
 						</div>
 						{/if}
-						<div class="ta-card-body">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="ta-card-body" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }}>
 							{#if effectiveState === 'completed'}
 								{@const completionEntry = completionDataMap.get(sessionAgentName)}
 								{#if completionEntry?.state === 'loaded' && completionEntry.events.length > 0}
 									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-								<div class="completion-card-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+								<div class="completion-card-inline" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => e.stopPropagation()}>
 										<CompletionCardCompact events={completionEntry.events} />
 									</div>
 								{:else if completionEntry?.state === 'loading'}
@@ -1853,7 +1854,7 @@
 							</div>
 							<!-- State card: signal payload + hover-revealed terminal output -->
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<div class="state-card-inline" style="--scc-accent: {stateVisual.accent};" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+							<div class="state-card-inline" style="--scc-accent: {stateVisual.accent};" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => e.stopPropagation()}>
 								<StateCardCompact
 									state={effectiveState}
 									event={signalEntry?.event ?? null}
@@ -1914,7 +1915,7 @@
 								</div>
 								<!-- Action tray — fades in over row2 on hover -->
 								<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-									{#each cardActions.slice(0, 5) as action}
+									{#each cardActions.slice(0, 5) as action (action.id)}
 										{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
@@ -1996,7 +1997,7 @@
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 5) as action}
+							{#each cardActions.slice(0, 5) as action (action.id)}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
@@ -3725,6 +3726,7 @@
 		padding: 0.75rem 0.875rem;
 		display: flex;
 		flex-direction: column;
+		cursor: pointer;
 		gap: 0.375rem;
 	}
 

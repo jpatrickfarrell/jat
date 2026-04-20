@@ -48,7 +48,9 @@
 
 	let open = $state(false);
 	let searchQuery = $state('');
+	let highlightedIndex = $state(-1);
 	let searchInput: HTMLInputElement | undefined;
+	let optionListRef: HTMLUListElement | undefined;
 	let containerRef: HTMLDivElement | undefined;
 
 	// Find the currently selected option across all groups
@@ -77,10 +79,56 @@
 		return result;
 	});
 
+	// Flat ordered list of visible options for keyboard navigation
+	const flatOptions = $derived.by(() => {
+		const opts: SearchDropdownOption[] = [];
+		for (const group of filteredGroups) {
+			for (const opt of group.options) opts.push(opt);
+		}
+		return opts;
+	});
+
+	// When search changes, reset highlight to first option (or to current value's position)
+	$effect(() => {
+		void filteredGroups;
+		if (!open) return;
+		const idx = flatOptions.findIndex(o => o.value === value);
+		highlightedIndex = idx >= 0 ? idx : 0;
+	});
+
 	function select(optionValue: string) {
 		open = false;
 		searchQuery = '';
 		onChange(optionValue);
+	}
+
+	function scrollHighlightedIntoView() {
+		tick().then(() => {
+			const el = optionListRef?.querySelector<HTMLElement>('[data-highlighted="true"]');
+			el?.scrollIntoView({ block: 'nearest' });
+		});
+	}
+
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			open = false;
+			searchQuery = '';
+		} else if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			highlightedIndex = Math.min(highlightedIndex + 1, flatOptions.length - 1);
+			scrollHighlightedIntoView();
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			highlightedIndex = Math.max(highlightedIndex - 1, 0);
+			scrollHighlightedIntoView();
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			e.stopPropagation();
+			if (highlightedIndex >= 0 && highlightedIndex < flatOptions.length) {
+				select(flatOptions[highlightedIndex].value);
+			}
+		}
 	}
 
 	function handleClickOutside(e: MouseEvent) {
@@ -139,9 +187,7 @@
 					<input
 						bind:this={searchInput}
 						bind:value={searchQuery}
-						onkeydown={(e) => {
-							if (e.key === 'Escape') { e.stopPropagation(); open = false; searchQuery = ''; }
-						}}
+						onkeydown={handleSearchKeydown}
 						type="text"
 						{placeholder}
 						class="sd-search-input"
@@ -156,19 +202,22 @@
 			</div>
 
 			<!-- Options list -->
-			<ul class="sd-list">
+			<ul class="sd-list" bind:this={optionListRef}>
 				{#if filteredGroups.length > 0}
-					{#each filteredGroups as group}
+					{#each filteredGroups as group, _gi}
 						<li class="sd-group-label">
 							<span>{group.label}</span>
 						</li>
 						{#each group.options as option}
+							{@const flatIdx = flatOptions.indexOf(option)}
 							<li>
 								<button
 									type="button"
 									onclick={() => select(option.value)}
 									class="sd-option"
 									class:sd-option-selected={value === option.value}
+									class:sd-option-highlighted={flatIdx === highlightedIndex}
+									data-highlighted={flatIdx === highlightedIndex ? 'true' : undefined}
 									style={colorFn && colorFn(option.value)
 										? variant === 'chip'
 											? `--sd-color: ${colorFn(option.value)};`
@@ -419,6 +468,14 @@
 	.sd-option-selected {
 		background: oklch(0.20 0.02 250);
 		border-left-color: oklch(0.65 0.15 250);
+	}
+	.sd-option-highlighted {
+		background: oklch(0.22 0.02 250);
+		outline: 1px solid oklch(0.45 0.10 250 / 0.5);
+		outline-offset: -1px;
+	}
+	.sd-option-highlighted.sd-option-selected {
+		background: oklch(0.24 0.03 250);
 	}
 
 	/* Chip variant — options render as inline chip pills */

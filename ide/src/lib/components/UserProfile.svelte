@@ -241,6 +241,8 @@
 	let isUpdating = $state(false);
 
 	// Keyboard nav
+	let avatarButtonRef = $state<HTMLButtonElement | null>(null);
+
 	function handleNavSelect(el: HTMLElement) {
 		const firstFocusable = el.querySelector<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])');
 		if (firstFocusable && firstFocusable !== el) {
@@ -252,6 +254,7 @@
 
 	function closeDropdown() {
 		(document.activeElement as HTMLElement)?.blur();
+		avatarButtonRef?.focus();
 	}
 	const questionIcon = 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z';
 
@@ -513,6 +516,7 @@
 			const t = e.target as HTMLElement;
 			if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable) {
 				e.preventDefault();
+				closeDropdown();
 				showHelpModal = !showHelpModal;
 			}
 		}
@@ -520,6 +524,7 @@
 >
 	<!-- Avatar Button - Industrial -->
 	<button
+		bind:this={avatarButtonRef}
 		tabindex="0"
 		class="flex items-center justify-center w-7 h-7 rounded transition-all hover:scale-105 bg-base-300 border border-base-content/20"
 		aria-label="User profile menu"
@@ -612,7 +617,7 @@
 						/>
 					</label>
 					{#if identityError}
-						<p class="text-[11px] text-error" role="alert">{identityError} — check your connection and try again.</p>
+						<p class="text-[11px] text-error" role="alert">{identityError}. Try again or cancel.</p>
 					{/if}
 					<p class="text-[11px] text-base-content/50 leading-snug">
 						Used as the comment author on tasks. Each Supabase-backed project
@@ -1123,8 +1128,9 @@
 					>
 						^C
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Ctrl+C Interrupt
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Ctrl+C Interrupt</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Sends ^C to terminal instead of copying</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {ctrlCIntercept ? 'bg-error/40 text-error' : 'bg-base-200 text-base-content/50'}"

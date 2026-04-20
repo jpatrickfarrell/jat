@@ -84,6 +84,15 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Resizable divider between list and detail panels.
+	const SPLIT_STORAGE_KEY = "jat-tasks-fast-split-percent";
+	const DEFAULT_SPLIT = 38;
+	const MIN_SPLIT = 22;
+	const MAX_SPLIT = 72;
+	let splitPercent = $state<number>(DEFAULT_SPLIT);
+	let isResizing = $state(false);
+	let layoutEl: HTMLDivElement | null = $state(null);
+
 	// Task ID that should briefly flash green in the list after a successful route.
 	// Send+route errors surface inside the compose box so the user sees them
 	// right where they acted — no page-level banner needed.
@@ -1005,11 +1014,105 @@
 		} catch { /* silent */ }
 	}
 
+	// ---- Avatar helpers ----
+
+	function getActorInitials(actor: { name?: string; email?: string; agent?: string } | null | undefined): string {
+		if (!actor) return "";
+		const src = actor.name || actor.email || actor.agent || "";
+		if (!src) return "";
+		// email: use first char of local part
+		if (src.includes("@")) {
+			return src.split("@")[0].slice(0, 2).toUpperCase();
+		}
+		// name / agent: first letters of first two words
+		const words = src.trim().split(/[\s_\-]+/).filter(Boolean);
+		if (words.length >= 2) {
+			return (words[0][0] + words[1][0]).toUpperCase();
+		}
+		return src.slice(0, 2).toUpperCase();
+	}
+
+	// Deterministic hue from string so the same creator always gets the same color
+	function actorHue(actor: { name?: string; email?: string; agent?: string } | null | undefined): number {
+		const src = actor?.name || actor?.email || actor?.agent || "";
+		let h = 0;
+		for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) & 0xffff;
+		return h % 360;
+	}
+
+	// ---- Resizable divider ----
+
+	function handleDividerPointerDown(e: PointerEvent) {
+		if (!layoutEl) return;
+		e.preventDefault();
+		isResizing = true;
+		const rect = layoutEl.getBoundingClientRect();
+		const handleEl = e.currentTarget as HTMLElement | null;
+		handleEl?.setPointerCapture?.(e.pointerId);
+
+		const onMove = (ev: PointerEvent) => {
+			const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+			splitPercent = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, pct));
+		};
+		const onUp = () => {
+			isResizing = false;
+			try {
+				localStorage.setItem(SPLIT_STORAGE_KEY, String(splitPercent));
+			} catch { /* ignore */ }
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+		};
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
+	}
+
+	function resetDivider() {
+		splitPercent = DEFAULT_SPLIT;
+		try {
+			localStorage.removeItem(SPLIT_STORAGE_KEY);
+		} catch { /* ignore */ }
+	}
+
+	function handleDividerKey(e: KeyboardEvent) {
+		const step = e.shiftKey ? 5 : 2;
+		if (e.key === "ArrowLeft") {
+			e.preventDefault();
+			splitPercent = Math.max(MIN_SPLIT, splitPercent - step);
+			persistSplit();
+		} else if (e.key === "ArrowRight") {
+			e.preventDefault();
+			splitPercent = Math.min(MAX_SPLIT, splitPercent + step);
+			persistSplit();
+		} else if (e.key === "Home") {
+			e.preventDefault();
+			resetDivider();
+		}
+	}
+
+	function persistSplit() {
+		try {
+			localStorage.setItem(SPLIT_STORAGE_KEY, String(splitPercent));
+		} catch { /* ignore */ }
+	}
+
 	// ---- Mount ----
 
 	onMount(() => {
 		hydrateFromUrl($page.url.searchParams);
 		hydrated = true;
+
+		// Restore persisted divider position.
+		try {
+			const saved = localStorage.getItem(SPLIT_STORAGE_KEY);
+			if (saved !== null) {
+				const parsed = parseFloat(saved);
+				if (Number.isFinite(parsed)) {
+					splitPercent = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, parsed));
+				}
+			}
+		} catch { /* ignore */ }
 
 		// Best-effort identity for @me resolution; failure is silent.
 		fetch("/api/config/user")
@@ -1033,9 +1136,12 @@
 </svelte:head>
 
 <div
+	bind:this={layoutEl}
 	class="tasks-fast-layout"
 	class:split={panelOpen}
 	class:list-only={!panelOpen}
+	class:resizing={isResizing}
+	style="--split-left: {splitPercent}%"
 >
 	<!-- LEFT: TASK LIST -->
 	<section class="list-panel" aria-label="Task list">
@@ -1208,6 +1314,9 @@
 				{#each filteredTasks as task, idx (task.id)}
 					{@const isSelected = idx === selectedIdx}
 					{@const isFlashing = task.id === flashTaskId}
+					{@const actor = task.creator || task.requester || null}
+					{@const initials = getActorInitials(actor)}
+					{@const hue = actorHue(actor)}
 					<li>
 						<button
 							type="button"
@@ -1244,6 +1353,16 @@
 								<span class="task-age"
 									>{formatRelativeTime(task.created_at)}</span
 								>
+							{/if}
+							{#if initials}
+								<span
+									class="creator-avatar"
+									style="background: oklch(0.40 0.12 {hue}); color: oklch(0.90 0.08 {hue});"
+									title={actor?.name || actor?.email || actor?.agent || ""}
+									aria-label="Created by {actor?.name || actor?.email || actor?.agent || ''}"
+								>{initials}</span>
+							{:else}
+								<span class="creator-avatar creator-avatar-empty" aria-hidden="true"></span>
 							{/if}
 						</button>
 					</li>
@@ -1285,6 +1404,22 @@
 			<span class="status-bar-hint">/ filter · ? shortcuts · Esc exit</span>
 		</footer>
 	</section>
+
+	<!-- DRAGGABLE DIVIDER -->
+	<div
+		class="divider-handle"
+		role="separator"
+		aria-orientation="vertical"
+		aria-label="Resize task list and detail panels"
+		aria-valuenow={Math.round(splitPercent)}
+		aria-valuemin={MIN_SPLIT}
+		aria-valuemax={MAX_SPLIT}
+		tabindex={panelOpen ? 0 : -1}
+		onpointerdown={handleDividerPointerDown}
+		ondblclick={resetDivider}
+		onkeydown={handleDividerKey}
+		title="Drag to resize · Double-click to reset · ←/→ keyboard"
+	></div>
 
 	<!-- RIGHT: DETAIL PANEL -->
 	<section class="detail-panel" aria-label="Task detail">
@@ -1518,11 +1653,18 @@
 	}
 
 	.tasks-fast-layout.list-only {
-		grid-template-columns: 1fr 0px;
+		grid-template-columns: 1fr 0 0;
 	}
 
 	.tasks-fast-layout.split {
-		grid-template-columns: 38fr 62fr;
+		grid-template-columns: var(--split-left, 38%) 6px 1fr;
+	}
+
+	/* Disable animation during drag so the resize feels direct. */
+	.tasks-fast-layout.resizing {
+		transition: none;
+		cursor: col-resize;
+		user-select: none;
 	}
 
 	/* Below 1280px: list takes full width, detail panel is hidden.
@@ -1533,7 +1675,8 @@
 		.tasks-fast-layout.list-only {
 			grid-template-columns: 1fr;
 		}
-		.detail-panel {
+		.detail-panel,
+		.divider-handle {
 			display: none;
 		}
 	}
@@ -1553,12 +1696,41 @@
 		overflow: hidden;
 	}
 
-	.list-panel {
-		border-right: 1px solid oklch(var(--b3, 0.22 0.02 250));
-	}
-
 	.detail-panel {
 		background: oklch(var(--b1, 0.14 0.01 250));
+	}
+
+	/* ---- Resizable divider ---- */
+
+	.divider-handle {
+		position: relative;
+		cursor: col-resize;
+		background: oklch(var(--b3, 0.22 0.02 250));
+		transition: background 0.15s ease;
+		touch-action: none;
+	}
+
+	/* Widened hit target without widening the visible line. */
+	.divider-handle::before {
+		content: "";
+		position: absolute;
+		inset: 0 -4px;
+		z-index: 1;
+	}
+
+	.divider-handle:hover,
+	.divider-handle:focus-visible,
+	.tasks-fast-layout.resizing .divider-handle {
+		background: oklch(0.70 0.18 240 / 0.7);
+	}
+
+	.divider-handle:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.70 0.18 240 / 0.5);
+	}
+
+	.tasks-fast-layout.list-only .divider-handle {
+		display: none;
 	}
 
 	.panel-header {
@@ -1712,7 +1884,7 @@
 
 	.task-row {
 		display: grid;
-		grid-template-columns: auto auto auto auto 1fr auto;
+		grid-template-columns: auto auto auto auto 1fr auto auto;
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
@@ -1804,6 +1976,26 @@
 		font-size: 0.7rem;
 		opacity: 0.55;
 		white-space: nowrap;
+	}
+
+	.creator-avatar {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 50%;
+		font-size: 0.55rem;
+		font-weight: 700;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		white-space: nowrap;
+		flex-shrink: 0;
+		letter-spacing: -0.02em;
+	}
+
+	.creator-avatar-empty {
+		width: 1.25rem;
+		height: 1.25rem;
 	}
 
 	/* ---- Status bar ---- */

@@ -16,11 +16,15 @@
 	import { createListNav } from '$lib/actions/listNav';
 	import type { AutomationRule } from '$lib/types/automation';
 	import type { ActivityLogEntry } from '$lib/components/automation/ActivityLog.svelte';
-	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized, toggleAutomation, getConfig, toggleRuleEnabled } from '$lib/stores/automationRules.svelte';
+	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized, toggleAutomation, getConfig, toggleRuleEnabled, reorderRules } from '$lib/stores/automationRules.svelte';
 	import { onAutomationTrigger } from '$lib/utils/automationEngine';
 
 	// Reactive automation config for page-level master toggle
 	const config = $derived(getConfig());
+
+	// Rule counts for header strip
+	const enabledRuleCount = $derived(getRules().filter(r => r.enabled).length);
+	const totalRuleCount = $derived(getRules().length);
 
 	// Highlighted rule ID (from activity log click-through)
 	let highlightedRuleId = $state<string | null>(null);
@@ -195,6 +199,25 @@
 				toggleRuleEnabled(focused.dataset.ruleNavId);
 			}
 		}
+
+		// Shift+J / Shift+K: move focused rule down / up in priority order
+		if ((e.key === 'J' || e.key === 'K') && e.shiftKey) {
+			const focused = document.querySelector<HTMLElement>('[data-rule-nav-id].jk-focused');
+			if (focused?.dataset.ruleNavId) {
+				e.preventDefault();
+				const currentOrder = getRules().map(r => r.id);
+				const idx = currentOrder.indexOf(focused.dataset.ruleNavId);
+				if (idx === -1) return;
+				const newOrder = [...currentOrder];
+				if (e.key === 'K' && idx > 0) {
+					[newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+					reorderRules(newOrder);
+				} else if (e.key === 'J' && idx < currentOrder.length - 1) {
+					[newOrder[idx + 1], newOrder[idx]] = [newOrder[idx], newOrder[idx + 1]];
+					reorderRules(newOrder);
+				}
+			}
+		}
 	}
 
 	$effect(() => {
@@ -207,6 +230,7 @@
 		{ key: 'k / ↑', description: 'Focus previous rule' },
 		{ key: 'Enter', description: 'Edit focused rule' },
 		{ key: 'Space', description: 'Toggle focused rule on/off' },
+		{ key: 'Shift+J / Shift+K', description: 'Move focused rule down/up in priority' },
 		{ key: 'n', description: 'Create new rule' },
 		{ key: 'Escape', description: 'Clear focus' }
 	];
@@ -229,6 +253,9 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
 			</svg>
 			<span class="text-xs font-semibold uppercase tracking-widest text-base-content/50">Automation</span>
+			{#if totalRuleCount > 0}
+				<span class="text-[0.65rem] font-mono tabular-nums text-base-content/30">{enabledRuleCount}/{totalRuleCount} active</span>
+			{/if}
 		</div>
 		<div class="flex items-center gap-3">
 			<span class="text-[0.7rem] font-semibold uppercase tracking-widest transition-colors duration-200 {config.enabled ? 'text-success' : 'text-base-content/30'}">

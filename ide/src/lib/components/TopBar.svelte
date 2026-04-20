@@ -1511,15 +1511,10 @@
 		display: flex;
 		align-items: center;
 	}
+	/* Collapse fully when idle; the spawn-loading state is ephemeral, so a slight badge
+	   shift on spawn is a better trade-off than permanent dead space in the topbar. */
 	.swarm-slot-hidden {
-		visibility: hidden;
-		pointer-events: none;
-	}
-	/* On narrow, Activity/Servers badges are hidden, so no shift to prevent — collapse fully. */
-	@media (max-width: 1023.98px) {
-		.swarm-slot-hidden {
-			display: none;
-		}
+		display: none;
 	}
 
 	/* ── Chip drag affordance ── */

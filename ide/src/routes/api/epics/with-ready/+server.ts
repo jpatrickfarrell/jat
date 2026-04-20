@@ -35,7 +35,17 @@ interface EpicWithReady {
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const days = parseInt(url.searchParams.get('days') || '30', 10);
-		const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+		const cutoffMs = Date.now() - days * 86400000;
+
+		// Parse timestamps numerically — string comparison is only safe while
+		// getTasks() is SQLite-only, but postgres-backed tasks return
+		// Date.toString() format which would sort alphabetically by weekday
+		// name. Keep this defensive so future routing changes don't break.
+		const ts = (s: string | undefined | null): number => {
+			if (!s) return 0;
+			const t = new Date(s).getTime();
+			return Number.isFinite(t) ? t : 0;
+		};
 
 		// Single fetch of all tasks
 		const allTasks = getTasks();
@@ -43,7 +53,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Find all epics (open + recently closed)
 		const epics = allTasks.filter((t: any) =>
 			t.issue_type === 'epic' &&
-			(t.status !== 'closed' || !t.closed_at || t.closed_at >= cutoff)
+			(t.status !== 'closed' || !t.closed_at || ts(t.closed_at) >= cutoffMs)
 		);
 
 		// Build a map of task ID → task for quick lookup

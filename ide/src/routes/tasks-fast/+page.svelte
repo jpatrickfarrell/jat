@@ -217,6 +217,17 @@
 			submitted: 0, open: 1, in_progress: 2, waiting: 3,
 		};
 
+		// Parse timestamps numerically — string comparison is unsafe because
+		// postgres-backed tasks (e.g. meadow) return `created_at`/`updated_at`
+		// as human-readable strings like "Thu Apr 16 2026 14:06:28 GMT-0400
+		// (Eastern Daylight Time)", which sort alphabetically by weekday name
+		// rather than by date.
+		const ts = (s: string | undefined | null): number => {
+			if (!s) return 0;
+			const t = new Date(s).getTime();
+			return Number.isFinite(t) ? t : 0;
+		};
+
 		// Comparators always return ascending-direction (-1 → a before b). The
 		// dirMul flips the result when the user wants descending, keeping the
 		// sort functions themselves simple.
@@ -224,22 +235,18 @@
 		filtered.sort((a, b) => {
 			let cmp: number;
 			if (_sort === "age") {
-				cmp = (a.created_at ?? "").localeCompare(b.created_at ?? "");
+				cmp = ts(a.created_at) - ts(b.created_at);
 			} else if (_sort === "updated") {
-				cmp = (a.updated_at ?? "").localeCompare(b.updated_at ?? "");
+				cmp = ts(a.updated_at) - ts(b.updated_at);
 			} else if (_sort === "status") {
 				const sa = STATUS_ORDER[a.status] ?? 9;
 				const sb = STATUS_ORDER[b.status] ?? 9;
-				cmp = sa !== sb
-					? sa - sb
-					: (a.created_at ?? "").localeCompare(b.created_at ?? "");
+				cmp = sa !== sb ? sa - sb : ts(a.created_at) - ts(b.created_at);
 			} else {
 				// priority → age (tie-break)
 				const pa = a.priority ?? 99;
 				const pb = b.priority ?? 99;
-				cmp = pa !== pb
-					? pa - pb
-					: (a.created_at ?? "").localeCompare(b.created_at ?? "");
+				cmp = pa !== pb ? pa - pb : ts(a.created_at) - ts(b.created_at);
 			}
 			return cmp * dirMul;
 		});
@@ -867,6 +874,137 @@
 		}
 	}
 
+	// ---- Context Menu ----
+
+	let ctxTask = $state<Task | null>(null);
+	let ctxX = $state(0);
+	let ctxY = $state(0);
+	let ctxVisible = $state(false);
+	let ctxStatusSubmenuOpen = $state(false);
+	let ctxPrioritySubmenuOpen = $state(false);
+
+	function handleContextMenu(task: Task, event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		const menuWidth = 200;
+		const menuHeight = 260;
+		ctxTask = task;
+		ctxX = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+		ctxY = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+		ctxVisible = true;
+		ctxStatusSubmenuOpen = false;
+		ctxPrioritySubmenuOpen = false;
+	}
+
+	function closeContextMenu() {
+		ctxVisible = false;
+		ctxStatusSubmenuOpen = false;
+		ctxPrioritySubmenuOpen = false;
+		// ctxTask intentionally NOT cleared — keeps DOM alive for CSS toggle
+	}
+
+	$effect(() => {
+		if (!ctxVisible) return;
+		function onClickOutside() { closeContextMenu(); }
+		function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') closeContextMenu(); }
+		const timer = setTimeout(() => {
+			document.addEventListener('click', onClickOutside);
+			document.addEventListener('keydown', onKeyDown);
+		}, 0);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('click', onClickOutside);
+			document.removeEventListener('keydown', onKeyDown);
+		};
+	});
+
+	async function ctxSpawnTask(task: Task) {
+		closeContextMenu();
+		try {
+			const res = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId: task.id }),
+			});
+			if (res.ok) {
+				handleTaskUpdated({ id: task.id, status: 'in_progress' });
+			}
+		} catch { /* silent */ }
+	}
+
+	async function ctxViewDetails(task: Task) {
+		closeContextMenu();
+		const idx = filteredTasks.findIndex((t) => t.id === task.id);
+		if (idx >= 0) selectTask(idx);
+		await tick();
+		detailRef?.openFullDrawer();
+	}
+
+	async function ctxChangeStatus(taskId: string, status: string) {
+		closeContextMenu();
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ status }),
+			});
+			handleTaskUpdated({ id: taskId, status } as any);
+		} catch { /* silent */ }
+	}
+
+	async function ctxChangePriority(taskId: string, priority: number) {
+		closeContextMenu();
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ priority }),
+			});
+			handleTaskUpdated({ id: taskId, priority } as any);
+		} catch { /* silent */ }
+	}
+
+	async function ctxDuplicateTask(task: Task) {
+		closeContextMenu();
+		try {
+			const res = await fetch('/api/tasks', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					title: task.title,
+					description: task.description || '',
+					priority: task.priority,
+					type: task.issue_type || 'task',
+					project: task.project || getProjectFromTaskId(task.id),
+					labels: task.labels?.join(',') || '',
+				}),
+			});
+			if (res.ok) fetchTasks();
+		} catch { /* silent */ }
+	}
+
+	function ctxDismissTask(task: Task) {
+		closeContextMenu();
+		handleTaskDismissed(task.id);
+		// Best-effort server close
+		fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ status: 'closed' }),
+		}).catch(() => {});
+	}
+
+	async function ctxDeleteTask(task: Task) {
+		closeContextMenu();
+		if (!confirm(`Delete task ${task.id}? This cannot be undone.`)) return;
+		try {
+			const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, { method: 'DELETE' });
+			if (res.ok) {
+				handleTaskDismissed(task.id);
+			}
+		} catch { /* silent */ }
+	}
+
 	// ---- Mount ----
 
 	onMount(() => {
@@ -1080,6 +1218,7 @@
 							aria-selected={isSelected}
 							data-nav-id={task.id}
 							onclick={() => selectTask(idx)}
+							oncontextmenu={(e) => handleContextMenu(task, e)}
 						>
 							<span
 								class="status-dot badge badge-xs {getTaskStatusBadge(
@@ -1206,6 +1345,158 @@
 		{/if}
 	</section>
 </div>
+
+<!-- Context Menu -->
+{#if ctxTask}
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+	class="ctx-menu"
+	class:ctx-menu-hidden={!ctxVisible}
+	style="left: {ctxX}px; top: {ctxY}px;"
+	role="menu"
+	tabindex="0"
+	onclick={(e) => e.stopPropagation()}
+	onkeydown={(e) => e.stopPropagation()}
+>
+	<!-- Launch -->
+	<button class="ctx-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxTask = null; ctxSpawnTask(t); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
+			<circle cx="12" cy="10" r="2" />
+		</svg>
+		<span>Launch</span>
+	</button>
+
+	<!-- View Details -->
+	<button class="ctx-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxViewDetails(t); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+			<circle cx="12" cy="12" r="3" />
+		</svg>
+		<span>View Details</span>
+	</button>
+
+	<div class="ctx-divider"></div>
+
+	<!-- Change Status (submenu) -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="ctx-submenu-container"
+		onmouseenter={() => { ctxStatusSubmenuOpen = true; ctxPrioritySubmenuOpen = false; }}
+		onmouseleave={() => { ctxStatusSubmenuOpen = false; }}
+	>
+		<button class="ctx-item ctx-item-has-submenu">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+				<polyline points="22 4 12 14.01 9 11.01" />
+			</svg>
+			<span>Change Status</span>
+			<svg class="ctx-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<polyline points="9 18 15 12 9 6" />
+			</svg>
+		</button>
+		{#if ctxStatusSubmenuOpen}
+			<div class="ctx-submenu">
+				{#each [
+					{ value: 'submitted', label: 'Submitted', color: 'oklch(0.75 0.15 300)' },
+					{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 200)' },
+					{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
+					{ value: 'waiting', label: 'Waiting', color: 'oklch(0.70 0.12 250)' },
+					{ value: 'blocked', label: 'Blocked', color: 'oklch(0.70 0.20 25)' },
+					{ value: 'closed', label: 'Closed', color: 'oklch(0.55 0.03 250)' },
+				] as s}
+					<button
+						class="ctx-item {ctxTask!.status === s.value ? 'ctx-item-active' : ''}"
+						onclick={() => ctxChangeStatus(ctxTask!.id, s.value)}
+					>
+						<span class="ctx-dot" style="background: {s.color};"></span>
+						<span>{s.label}</span>
+						{#if ctxTask!.status === s.value}
+							<svg class="ctx-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Change Priority (submenu) -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="ctx-submenu-container"
+		onmouseenter={() => { ctxPrioritySubmenuOpen = true; ctxStatusSubmenuOpen = false; }}
+		onmouseleave={() => { ctxPrioritySubmenuOpen = false; }}
+	>
+		<button class="ctx-item ctx-item-has-submenu">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M3 3v18h18" /><path d="m7 16 4-8 4 4 4-6" />
+			</svg>
+			<span>Change Priority</span>
+			<svg class="ctx-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<polyline points="9 18 15 12 9 6" />
+			</svg>
+		</button>
+		{#if ctxPrioritySubmenuOpen}
+			<div class="ctx-submenu">
+				{#each [
+					{ value: 0, label: 'P0 — Critical', color: 'oklch(0.70 0.20 25)' },
+					{ value: 1, label: 'P1 — High', color: 'oklch(0.75 0.15 85)' },
+					{ value: 2, label: 'P2 — Medium', color: 'oklch(0.70 0.15 200)' },
+					{ value: 3, label: 'P3 — Low', color: 'oklch(0.55 0.03 250)' },
+					{ value: 4, label: 'P4 — Lowest', color: 'oklch(0.45 0.01 250)' },
+				] as pri}
+					<button
+						class="ctx-item {ctxTask!.priority === pri.value ? 'ctx-item-active' : ''}"
+						onclick={() => ctxChangePriority(ctxTask!.id, pri.value)}
+					>
+						<span class="ctx-dot" style="background: {pri.color};"></span>
+						<span>{pri.label}</span>
+						{#if ctxTask!.priority === pri.value}
+							<svg class="ctx-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<div class="ctx-divider"></div>
+
+	<!-- Duplicate -->
+	<button class="ctx-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxTask = null; ctxDuplicateTask(t); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+			<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+		</svg>
+		<span>Duplicate</span>
+	</button>
+
+	<!-- Dismiss -->
+	<button class="ctx-item ctx-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxTask = null; ctxDismissTask(t); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<circle cx="12" cy="12" r="10" />
+			<line x1="15" y1="9" x2="9" y2="15" />
+			<line x1="9" y1="9" x2="15" y2="15" />
+		</svg>
+		<span>Dismiss</span>
+	</button>
+
+	<!-- Delete -->
+	<button class="ctx-item ctx-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxTask = null; ctxDeleteTask(t); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<polyline points="3 6 5 6 21 6" />
+			<path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+			<path d="M10 11v6M14 11v6" />
+			<path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+		</svg>
+		<span>Delete</span>
+	</button>
+</div>
+{/if}
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
@@ -1830,5 +2121,121 @@
 	.inbox-shortcut-desc {
 		opacity: 0.7;
 		margin-left: 0.25rem;
+	}
+
+	/* ---- Context Menu ---- */
+
+	.ctx-menu {
+		position: fixed;
+		z-index: 100;
+		min-width: 180px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem;
+		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
+		animation: ctxMenuIn 0.1s ease;
+	}
+
+	.ctx-menu-hidden {
+		display: none;
+	}
+
+	@keyframes ctxMenuIn {
+		from { opacity: 0; transform: scale(0.95); }
+		to { opacity: 1; transform: scale(1); }
+	}
+
+	.ctx-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.80 0.02 250);
+		font-size: 0.8125rem;
+		text-align: left;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.1s ease;
+	}
+
+	.ctx-item:hover {
+		background: oklch(0.25 0.02 250);
+	}
+
+	.ctx-item svg {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.ctx-item:hover svg {
+		color: oklch(0.75 0.02 250);
+	}
+
+	.ctx-item-danger:hover {
+		background: oklch(0.55 0.15 30 / 0.2);
+		color: oklch(0.75 0.18 30);
+	}
+
+	.ctx-item-danger:hover svg {
+		color: oklch(0.70 0.18 30);
+	}
+
+	.ctx-divider {
+		height: 1px;
+		background: oklch(0.28 0.02 250);
+		margin: 0.375rem 0;
+	}
+
+	.ctx-submenu-container {
+		position: relative;
+	}
+
+	.ctx-submenu {
+		position: absolute;
+		left: 100%;
+		top: 0;
+		min-width: 150px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem;
+		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
+		animation: ctxMenuIn 0.1s ease;
+		margin-left: 2px;
+	}
+
+	.ctx-item-has-submenu {
+		justify-content: flex-start;
+	}
+
+	.ctx-chevron {
+		width: 12px !important;
+		height: 12px !important;
+		margin-left: auto;
+		color: oklch(0.50 0.02 250) !important;
+	}
+
+	.ctx-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.ctx-item-active {
+		color: oklch(0.85 0.02 250);
+	}
+
+	.ctx-check {
+		width: 14px !important;
+		height: 14px !important;
+		margin-left: auto;
+		color: oklch(0.70 0.15 145) !important;
 	}
 </style>

@@ -610,6 +610,43 @@
 		dirty = true;
 	}
 
+	function duplicateSelectedNodes() {
+		if (selectedNodeIds.size === 0) return;
+		pushUndoState();
+
+		const idMap = new Map<string, string>();
+		const duplicated: WorkflowNode[] = [];
+		for (const node of nodes) {
+			if (!selectedNodeIds.has(node.id)) continue;
+			const newId = generateId('node');
+			idMap.set(node.id, newId);
+			duplicated.push({
+				...deepCopy(node),
+				id: newId,
+				position: { x: node.position.x + 30, y: node.position.y + 30 }
+			});
+		}
+
+		const duplicatedEdges: WorkflowEdge[] = [];
+		for (const edge of edges) {
+			const newSource = idMap.get(edge.sourceNodeId);
+			const newTarget = idMap.get(edge.targetNodeId);
+			if (!newSource || !newTarget) continue;
+			duplicatedEdges.push({
+				...deepCopy(edge),
+				id: generateId('edge'),
+				sourceNodeId: newSource,
+				targetNodeId: newTarget
+			});
+		}
+
+		nodes = [...nodes, ...duplicated];
+		edges = [...edges, ...duplicatedEdges];
+		selectedNodeIds = new Set(duplicated.map((n) => n.id));
+		selectedEdgeIds = new Set();
+		dirty = true;
+	}
+
 	function handleNodesChange(updatedNodes: WorkflowNode[]) {
 		nodes = updatedNodes;
 		dirty = true;
@@ -735,6 +772,10 @@
 		} else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
 			e.preventDefault();
 			redo();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === 'd' && !e.shiftKey && !e.altKey) {
+			if (selectedNodeIds.size === 0) return;
+			e.preventDefault();
+			duplicateSelectedNodes();
 		} else if (e.key === 'Delete' || e.key === 'Backspace') {
 			if (selectedNodeIds.size > 0) {
 				pushUndoState();

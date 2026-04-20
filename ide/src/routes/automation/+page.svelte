@@ -16,14 +16,30 @@
 	import { createListNav } from '$lib/actions/listNav';
 	import type { AutomationRule } from '$lib/types/automation';
 	import type { ActivityLogEntry } from '$lib/components/automation/ActivityLog.svelte';
-	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized } from '$lib/stores/automationRules.svelte';
+	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized, toggleAutomation, getConfig, toggleRuleEnabled } from '$lib/stores/automationRules.svelte';
 	import { onAutomationTrigger } from '$lib/utils/automationEngine';
+
+	// Reactive automation config for page-level master toggle
+	const config = $derived(getConfig());
+
+	// Highlighted rule ID (from activity log click-through)
+	let highlightedRuleId = $state<string | null>(null);
+
+	function handleMasterToggle() {
+		toggleAutomation();
+	}
+
+	function handleRuleClick(ruleName: string) {
+		const rule = getRules().find(r => r.name === ruleName);
+		if (rule) {
+			highlightedRuleId = rule.id;
+			setTimeout(() => { highlightedRuleId = null; }, 3000);
+		}
+	}
 
 	// Convert store activity events to ActivityLog format
 	function convertStoreEventsToLogEntries(): ActivityLogEntry[] {
 		const storeEvents = getActivityEvents();
-		// DEBUG: Log what we're converting
-		console.log('[automation page] Converting', storeEvents.length, 'store events to log entries');
 		const entries: ActivityLogEntry[] = storeEvents.map(event => ({
 			id: event.id,
 			timestamp: new Date(event.timestamp),
@@ -34,7 +50,6 @@
 			result: (event.success ? 'success' : 'failure') as 'success' | 'failure',
 			details: event.error
 		}));
-		console.log('[automation page] Created', entries.length, 'log entries');
 		return entries;
 	}
 
@@ -80,17 +95,11 @@
 
 	// Initialize page
 	onMount(() => {
-		console.log('[automation page] onMount starting...');
-
-		// Ensure automation store is initialized (loads rules from localStorage)
 		if (!isInitialized()) {
-			console.log('[automation page] Store not initialized, initializing now...');
 			initializeStore();
 		}
 
-		// Load existing activity events from store (events that fired before page load)
 		activityEntries = convertStoreEventsToLogEntries();
-		console.log('[automation page] activityEntries set to', activityEntries.length, 'entries');
 
 		// Subscribe to automation triggers for activity log (new events while page is open)
 		const unsubscribe = onAutomationTrigger((sessionName, rule, match, results) => {
@@ -167,18 +176,24 @@
 	}
 
 	function handleWindowKeydown(e: KeyboardEvent) {
-		// Suppress when the rule editor modal is open — its own inputs own the keys.
 		if (showRuleEditor) return;
 		if (isTypingTarget(e.target)) return;
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-		// Let listNav consume j/k/Enter/Escape first.
 		if (nav.handleKeydown(e)) return;
 
-		// Page-level: `n` creates a new rule.
 		if (e.key === 'n' && !e.shiftKey) {
 			e.preventDefault();
 			handleAddRule();
+		}
+
+		// Space: toggle enable/disable on focused rule
+		if (e.key === ' ' && !e.shiftKey) {
+			const focused = document.querySelector<HTMLElement>('[data-rule-nav-id].jk-focused');
+			if (focused?.dataset.ruleNavId) {
+				e.preventDefault();
+				toggleRuleEnabled(focused.dataset.ruleNavId);
+			}
 		}
 	}
 

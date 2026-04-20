@@ -82,6 +82,14 @@
 		'oldest': 'Created (oldest)',
 	};
 
+	// Parse timestamps numerically — never trust string form since backends
+	// differ (postgres returns Date.toString() format, sqlite returns ISO).
+	function tsMs(s: string | undefined | null): number {
+		if (!s) return 0;
+		const t = new Date(s).getTime();
+		return Number.isFinite(t) ? t : 0;
+	}
+
 	// State — selectedProject synced from URL ?project= param (set by TopBar ProjectSelector)
 	let selectedProject = $state<string | null>(null);
 	let tables = $state<TableInfo[]>([]);
@@ -104,10 +112,10 @@
 				sorted.sort((a, b) => a.row_count - b.row_count);
 				break;
 			case 'newest':
-				sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+				sorted.sort((a, b) => tsMs(b.created_at) - tsMs(a.created_at));
 				break;
 			case 'oldest':
-				sorted.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+				sorted.sort((a, b) => tsMs(a.created_at) - tsMs(b.created_at));
 				break;
 		}
 		return sorted;

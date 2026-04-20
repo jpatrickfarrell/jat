@@ -182,14 +182,22 @@
 				items.push(t);
 			}
 
-			// Sort: submitted first, then by priority, then by created_at
+			// Sort: submitted first, then by priority, then by created_at.
+			// Parse timestamps numerically — postgres-backed projects (meadow) return
+			// `created_at` as Date.toString() format, not ISO, so localeCompare would
+			// sort alphabetically by weekday name instead of chronologically.
 			const statusOrder: Record<string, number> = { submitted: 0, open: 1, in_progress: 2 };
+			const ts = (s: string | undefined | null): number => {
+				if (!s) return 0;
+				const t = new Date(s).getTime();
+				return Number.isFinite(t) ? t : 0;
+			};
 			items.sort((a, b) => {
 				const sa = statusOrder[a.status] ?? 9;
 				const sb = statusOrder[b.status] ?? 9;
 				if (sa !== sb) return sa - sb;
 				if (a.priority !== b.priority) return a.priority - b.priority;
-				return (a.created_at ?? '').localeCompare(b.created_at ?? '');
+				return ts(a.created_at) - ts(b.created_at);
 			});
 
 			tasks = items;
@@ -559,6 +567,7 @@
 			</div>
 			<p class="empty-title">Queue is clear</p>
 			<p class="empty-sub">No items to triage right now.</p>
+			<p class="empty-sub" style="margin-top: 0.5rem; font-size: 0.7rem; opacity: 0.4;">j/k to navigate · ? for shortcuts</p>
 		</div>
 	{:else}
 		<div class="triage-content">

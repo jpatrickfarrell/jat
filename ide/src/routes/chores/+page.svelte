@@ -119,6 +119,14 @@
 		editModel = task.model || '';
 	}
 
+	// Reactive reassignment so the ScheduledTasksTable's $derived.by(filteredTasks)
+	// re-runs and the row reflects the new agent_program/model immediately.
+	function handleTaskUpdated(patch: { id: string } & Record<string, any>) {
+		scheduledTasks = scheduledTasks.map((t) =>
+			t.id === patch.id ? { ...t, ...patch } : t
+		);
+	}
+
 	async function handleSaveSchedule() {
 		if (!editingTask) return;
 		editSaving = true;
@@ -266,6 +274,7 @@
 			<p class="empty-hint">
 				You can also schedule any existing task from its detail drawer.
 			</p>
+			<p class="empty-hint" style="margin-top: 0.5rem; font-size: 0.7rem; opacity: 0.4;">j/k to navigate · ? for shortcuts</p>
 		</div>
 	{:else}
 		<div class="table-section">
@@ -276,6 +285,7 @@
 				onEditSchedule={handleEditSchedule}
 				onPauseSchedule={handlePauseSchedule}
 				onViewTask={handleViewTask}
+				onTaskUpdated={handleTaskUpdated}
 			/>
 		</div>
 	{/if}

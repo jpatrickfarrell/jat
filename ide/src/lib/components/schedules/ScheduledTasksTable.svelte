@@ -38,7 +38,8 @@
 		onSpawnNow = (_taskId: string) => {},
 		onEditSchedule = (_task: ScheduledTask) => {},
 		onPauseSchedule = (_taskId: string) => {},
-		onViewTask = (_taskId: string) => {}
+		onViewTask = (_taskId: string) => {},
+		onTaskUpdated = (_patch: Partial<ScheduledTask> & { id: string }) => {}
 	}: {
 		tasks: ScheduledTask[];
 		loading: boolean;
@@ -46,6 +47,7 @@
 		onEditSchedule: (task: ScheduledTask) => void;
 		onPauseSchedule: (taskId: string) => void;
 		onViewTask: (taskId: string) => void;
+		onTaskUpdated?: (patch: Partial<ScheduledTask> & { id: string }) => void;
 	} = $props();
 
 	// Agent selector popover state
@@ -59,8 +61,9 @@
 
 	async function handleAgentSave(selection: { agentId: string | null; model: string | null }) {
 		if (!agentSelectorTask) return;
+		const taskId = agentSelectorTask.id;
 		try {
-			await fetch(`/api/tasks/${agentSelectorTask.id}`, {
+			await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -68,11 +71,15 @@
 					model: selection.model
 				})
 			});
-			// Update local task data
-			const idx = tasks.findIndex(t => t.id === agentSelectorTask!.id);
-			if (idx >= 0) {
-				tasks[idx] = { ...tasks[idx], agent_program: selection.agentId, model: selection.model };
-			}
+			// Bubble the update to the parent. The parent owns `tasks` (it's a
+			// prop) and is responsible for updating its own state so `filteredTasks`
+			// $derived recomputes — direct child-side mutation of a prop array
+			// does not reliably trigger Svelte 5 reactivity for parent-owned $state.
+			onTaskUpdated({
+				id: taskId,
+				agent_program: selection.agentId,
+				model: selection.model
+			});
 		} catch (err) {
 			console.error('Failed to save agent selection:', err);
 		}

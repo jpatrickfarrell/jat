@@ -1159,6 +1159,7 @@
 							<p class="text-sm opacity-40 mt-1">
 								Click "New Contract" to create one.
 							</p>
+							<p class="text-xs opacity-30 mt-2">j/k to navigate · ? for shortcuts</p>
 						</div>
 					</div>
 				{/if}

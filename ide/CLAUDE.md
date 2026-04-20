@@ -3021,105 +3021,74 @@ await fetch('/api/config/defaults', {
 
 ## Keyboard Shortcuts
 
-### Overview
+> **Full reference:** `ide/docs/keyboard-navigation.md` — every shortcut, every route.
 
-The IDE has a comprehensive keyboard shortcut system with three categories: Global shortcuts (work from anywhere), Session shortcuts (require a hovered session), and Command shortcuts (user-assignable).
+### j/k Navigation (All Routes)
 
-**Configuration:** Settings → Shortcuts tab in the IDE.
+All routes with lists support `j`/`k` (or `↓`/`↑`) to navigate, `Enter` to select, `Esc` to clear, and `?` to open the shortcuts overlay.
+
+| Route | j/k Target | Enter Action | Extra Shortcuts |
+|-------|-----------|--------------|-----------------|
+| `/triage` | Queue items | Open task detail drawer | `s` spawn, `p` promote, `e` edit, `r` close, `d` delete, `/` search |
+| `/chores` | Scheduled task rows | Open chore detail | — |
+| `/automation` | Rule rows | Edit focused rule | `n` new rule |
+| `/integrations` | Installed sources | Expand / collapse source | `Tab` switch tabs |
+| `/servers` | Session cards | Scroll card into view | `Space` toggle start/stop; `R`/`S`/`O` on hovered project row |
+| `/kanban` | Cards within column | Open task detail drawer | `←`/`→` (or `h`/`l`) move between columns |
+| `/config` | Items in active tab | Open / select item | `Tab`/`Shift+Tab` cycle all 17 tabs |
+| `/clients` | Contracts → milestones | Expand contract / drill in | `→`/`←` expand/collapse or drill/return |
+| `/search` | Search results | Open result | `Tab`/`←→` switch tabs, `/` focus input |
+| `/dash` | Sessions + task rows | Jump to session / open task | `Tab`/`Shift+Tab` switch project sections, `1`/`2` toggle sections |
+| `/memory` | Files or search results | Open file preview | `Tab` switch tabs, `/` focus search |
+| `/source` | Changed files / migrations | Load diff / preview SQL | `Tab` cycle panels; `Space`/`S`/`U`/`D` for git staging |
+| `/files` | File tree nodes | Toggle folder / open file | `→`/`←` expand/collapse; `Ctrl+S` save; `Alt+W`/`[`/`]` tabs |
+| `/data` | Table rows | Edit focused cell | `←`/`→` move columns; `Tab`/`Shift+Tab` switch tables |
+| `/bases` | Bases list | Open base in canvas | `Tab`/`Shift+Tab` cycle canvas blocks; `n` new base |
+| `/workflows` | Workflow list | Open workflow | `n` new; in editor: `Ctrl+S` save, `Ctrl+Enter` run, `Del` delete node |
 
 ### Global App Shortcuts
 
-These work from anywhere in the app (unless typing in an input field). All are customizable via Settings.
+Work from anywhere (unless typing in an input). All configurable via Settings → Shortcuts.
 
-| Default Shortcut | Action | Description |
-|-----------------|--------|-------------|
-| `Alt+N` | Create New Task | Opens task creation drawer |
-| `Alt+E` | Open Epic Swarm Modal | Launch swarm attack on an epic |
-| `Alt+S` | Open Start Next Dropdown | Quick-start a ready task |
-| `Alt+Shift+P` | Add New Project | Initialize a new project |
+| Shortcut | Action |
+|----------|--------|
+| `Alt+N` | Create new task |
+| `Alt+E` | Open Epic Swarm modal |
+| `Alt+S` | Open Start Next dropdown |
+| `Alt+Shift+P` | Add new project |
 
 ### Session Shortcuts
 
-These require a **hovered session** (mouse over a SessionCard on Work page). All are customizable via Settings.
+Require a hovered session (mouse over a SessionCard on Work page).
 
-| Default Shortcut | Action | Description |
-|-----------------|--------|-------------|
-| `Alt+A` | Attach Terminal | Open session in your terminal |
-| `Alt+K` | Kill Session | Terminate the tmux session |
-| `Alt+I` | Interrupt Session | Send Ctrl+C to the session |
-| `Alt+P` | Pause Session | Pause the agent |
-| `Alt+R` | Restart Session | Restart the session |
-| `Alt+Shift+C` | Copy Session Contents | Copy terminal output to clipboard |
-
-### System Shortcuts (Non-configurable)
-
-These are fixed and cannot be customized.
-
-| Shortcut | Action | Context |
-|----------|--------|---------|
-| `Alt+1` through `Alt+9` | Jump to Session by Position | Work page only |
-| `Escape` | Close Modals/Drawers | Global |
-
-### Files Page Shortcuts
-
-These shortcuts are active on the `/files` page. Ctrl+S is the primary save shortcut (browser default is prevented). Other shortcuts use Alt to avoid browser conflicts.
-
-| Shortcut | Action | Description |
-|----------|--------|-------------|
-| `Ctrl+S` | Save File | Save current file (prevents browser save dialog) |
-| `Alt+W` | Close Tab | Close current editor tab |
-| `Alt+P` | Quick File Finder | Open fuzzy file search modal |
-| `Alt+]` | Next Tab | Switch to next editor tab |
-| `Alt+[` | Previous Tab | Switch to previous editor tab |
-
-**Note:** Ctrl+S prevents the browser's default "Save Page" behavior and saves the active file instead. Alt+P overrides the global shortcut when on the files page.
+| Shortcut | Action |
+|----------|--------|
+| `Alt+A` | Attach terminal |
+| `Alt+K` | Kill session |
+| `Alt+I` | Interrupt session (Ctrl+C) |
+| `Alt+P` | Pause session |
+| `Alt+R` | Restart session |
+| `Alt+Shift+C` | Copy session contents |
+| `Alt+1`–`Alt+9` | Jump to session by position |
 
 ### Command Shortcuts
 
-Users can assign custom keyboard shortcuts to any slash command. These are stored in browser localStorage.
+Users can assign shortcuts to any slash command (Settings → Shortcuts). Must include a modifier key (Alt recommended). Stored in browser localStorage.
 
-**To assign:**
-1. Go to Settings → Shortcuts tab
-2. Find the command in the "Command Shortcuts" section
-3. Click "Add shortcut" and press your key combination
-
-**Requirements:**
-- Must include a modifier key (Alt, Ctrl, or Meta/Cmd)
-- Cannot conflict with existing shortcuts
-- Alt+key combinations are recommended (generally safe)
+```typescript
+import { getShortcut, setShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+setShortcut('/jat:complete', 'Alt+C');
+```
 
 ### Implementation
 
-| Component | Purpose |
-|-----------|---------|
-| `src/lib/stores/keyboardShortcuts.svelte.ts` | Store for shortcut management |
-| `src/lib/components/config/KeyboardShortcutsEditor.svelte` | UI for editing shortcuts |
+| File | Purpose |
+|------|---------|
+| `src/lib/actions/listNav.ts` | `listNav` action + `createListNav()` composable |
+| `src/lib/components/KeyboardShortcutsOverlay.svelte` | `?`-toggled shortcuts modal |
+| `src/lib/stores/keyboardShortcuts.svelte.ts` | Alt-key shortcut store |
 | `src/routes/+layout.svelte` | Global keyboard event handler |
-| `src/lib/stores/hoveredSession.ts` | Track which session is hovered |
-
-### Customization API
-
-```typescript
-// Get/set command shortcuts
-import { getShortcut, setShortcut } from '$lib/stores/keyboardShortcuts.svelte';
-
-setShortcut('/jat:complete', 'Alt+C');
-const shortcut = getShortcut('/jat:complete'); // 'Alt+C'
-
-// Get/set global shortcuts
-import { getGlobalShortcut, setGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
-
-setGlobalShortcut('new-task', 'Alt+T'); // Override default
-const current = getGlobalShortcut('new-task'); // 'Alt+T'
-
-// Reset to default
-import { resetGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
-resetGlobalShortcut('new-task'); // Back to 'Alt+N'
-```
-
-### Task Reference
-
-- jat-tt20r: Add keyboard shortcut documentation to CLAUDE.md
+| `src/app.css` (~line 1279) | `.jk-focused` baseline rule (outline + tint) |
 
 ## Task Context Menus (/tasks page)
 

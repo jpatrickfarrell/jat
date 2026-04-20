@@ -468,6 +468,16 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	let projectDropdownOpen = $state(false);
 	let projectDropdownIndex = $state(0);
 
+	// Disclosure open states for collapsible sections
+	let attachmentsOpen = $state(false);
+	let reviewOverrideOpen = $state(false);
+	let dependenciesOpen = $state(false);
+
+	// Auto-open attachments disclosure when files are dropped/added
+	$effect(() => {
+		if (pendingAttachments.length > 0) attachmentsOpen = true;
+	});
+
 	// Harness selection state
 	let selectedHarness = $state<string>('claude-code');
 	let harnessDropdownOpen = $state(false);
@@ -1354,6 +1364,11 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		harnessDropdownOpen = false;
 		prevProject = '';
 
+		// Reset disclosure states
+		attachmentsOpen = false;
+		reviewOverrideOpen = false;
+		dependenciesOpen = false;
+
 		// Reset review override
 		reviewOverride = null;
 		computedReviewAction = null;
@@ -1596,10 +1611,6 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 			<div
 				class="flex items-center justify-between p-6 relative bg-base-200 border-b border-base-content/30"
 			>
-				<!-- Left accent bar -->
-				<div
-					class="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary/30"
-				></div>
 				<div class="flex-1 min-w-0">
 					<div class="flex items-start justify-between gap-4">
 					<div class="flex flex-col gap-0.5">
@@ -1802,7 +1813,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					<!-- Title (Required) - Industrial -->
 					<div class="form-control">
 						<label class="label justify-between w-full py-0.5" for="task-title">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+							<span class="label-text text-xs font-semibold text-base-content/75">
 								Title
 								<span class="text-error">*</span>
 							</span>
@@ -1830,7 +1841,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					<!-- Description (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label py-0.5" for="task-description">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Description</span>
+							<span class="label-text text-xs font-semibold text-base-content/75">Description</span>
 							{#if isLoadingSuggestions}
 								<span class="flex items-center gap-1.5 text-xs text-primary -mt-2">
 									<span class="loading loading-spinner loading-xs"></span>
@@ -1917,7 +1928,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<!-- Type (Required) -->
 						<div class="form-control">
 							<label class="label py-0.5" for="task-type">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								<span class="label-text text-xs font-semibold text-base-content/75">
 									Type <span class="text-error">*</span>
 									{#if suggestionsApplied && !userModifiedFields.has('type')}
 										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
@@ -1941,7 +1952,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<!-- Priority (Required) -->
 						<div class="form-control">
 							<label class="label py-0.5" for="task-priority">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								<span class="label-text text-xs font-semibold text-base-content/75">
 									Priority <span class="text-error">*</span>
 									{#if suggestionsApplied && !userModifiedFields.has('priority')}
 										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
@@ -1965,7 +1976,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<!-- Labels (Optional) -->
 						<div class="form-control">
 							<label class="label py-0.5" for="task-labels">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								<span class="label-text text-xs font-semibold text-base-content/75">
 									Labels
 									{#if suggestionsApplied && !userModifiedFields.has('labels') && formData.labels}
 										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
@@ -2001,7 +2012,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<div class="mt-2">
 							<div class="form-control">
 								<label class="label py-0.5" for="task-on-behalf-of">
-									<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+									<span class="label-text text-xs font-semibold text-base-content/75">
 										On behalf of (optional)
 									</span>
 								</label>
@@ -2025,7 +2036,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					<!-- Context (Knowledge Bases + Data Tables) -->
 					<div class="form-control">
 						<div class="label py-0.5">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+							<span class="label-text text-xs font-semibold text-base-content/75">
 								Context
 							</span>
 						</div>
@@ -2057,7 +2068,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<!-- Command (searchable dropdown) -->
 						<div class="form-control">
 							<div class="label py-0.5">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								<span class="label-text text-xs font-semibold text-base-content/75">
 									Command
 								</span>
 							</div>
@@ -2073,7 +2084,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						<!-- Due Date -->
 						<div class="form-control">
 							<label class="label py-0.5" for="task-due-date">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								<span class="label-text text-xs font-semibold text-base-content/75">
 									Due Date
 								</span>
 							</label>
@@ -2193,19 +2204,18 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						</div>
 					</details>
 
-					<!-- Attachments Dropzone - Industrial -->
-					<div class="form-control">
-						<div class="label py-0.5">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Attachments
-							</span>
+					<!-- Attachments - collapsed disclosure -->
+					<details class="group" bind:open={attachmentsOpen}>
+						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+							<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Attachments
 							{#if pendingAttachments.length > 0}
-								<span class="label-text-alt font-mono text-primary">
-									{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}
-								</span>
+								<span class="badge badge-xs bg-primary/30 text-base-content ml-1 normal-case tracking-normal font-normal">{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}</span>
 							{/if}
-						</div>
-
+						</summary>
+					<div class="mt-2">
 						<!-- Hidden file input -->
 						<input
 							type="file"
@@ -2278,123 +2288,125 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							</div>
 						{/if}
 					</div>
+					</details>
 					</section>
 
 					<!-- SECTION: Rules — review override, dependencies, AI analysis -->
 					<section class="space-y-3">
-					<!-- Review Override — compact join -->
-					<div class="form-control">
-						<div class="label py-0.5">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Review Override
-							</span>
-							{#if isLoadingReviewPreview}
-								<span class="loading loading-spinner loading-xs text-base-content/70"></span>
-							{:else if computedReviewAction}
-								<span class="text-xs text-base-content/50">
-									Default: <span class="{computedReviewAction === 'review' ? 'text-info' : 'text-success'}">{computedReviewAction === 'review' ? 'Review' : 'Auto-proceed'}</span>
+					<!-- Review Override — collapsed disclosure -->
+					<details class="group" bind:open={reviewOverrideOpen}>
+						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+							<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Review Override
+							{#if reviewOverride !== null}
+								<span class="badge badge-xs {reviewOverride === 'always_review' ? 'bg-info/30 text-info' : 'bg-success/30 text-success'} ml-1 normal-case tracking-normal font-normal">
+									{reviewOverride === 'always_review' ? 'Always Review' : 'Auto-Proceed'}
 								</span>
 							{/if}
+							{#if isLoadingReviewPreview}
+								<span class="loading loading-spinner loading-xs text-base-content/50 ml-auto"></span>
+							{:else if computedReviewAction}
+								<span class="text-[10px] text-base-content/40 ml-auto normal-case tracking-normal font-normal">
+									default: {computedReviewAction === 'review' ? 'review' : 'auto'}
+								</span>
+							{/if}
+						</summary>
+						<div class="mt-2">
+							<div class="join w-full {formDisabled ? 'opacity-50' : ''}">
+								<button
+									type="button"
+									class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === null ? 'btn-active' : 'btn-ghost'}"
+									onclick={() => reviewOverride = null}
+									disabled={formDisabled || isSubmitting}
+								>
+									Project Rules
+								</button>
+								<button
+									type="button"
+									class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_review' ? 'btn-active btn-info' : 'btn-ghost'}"
+									onclick={() => reviewOverride = 'always_review'}
+									disabled={formDisabled || isSubmitting}
+								>
+									Always Review
+								</button>
+								<button
+									type="button"
+									class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_auto' ? 'btn-active btn-success' : 'btn-ghost'}"
+									onclick={() => reviewOverride = 'always_auto'}
+									disabled={formDisabled || isSubmitting}
+								>
+									Auto-Proceed
+								</button>
+							</div>
 						</div>
-						<div class="join w-full {formDisabled ? 'opacity-50' : ''}">
-							<button
-								type="button"
-								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === null ? 'btn-active' : 'btn-ghost'}"
-								onclick={() => reviewOverride = null}
-								disabled={formDisabled || isSubmitting}
-							>
-								Project Rules
-							</button>
-							<button
-								type="button"
-								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_review' ? 'btn-active btn-info' : 'btn-ghost'}"
-								onclick={() => reviewOverride = 'always_review'}
-								disabled={formDisabled || isSubmitting}
-							>
-								Always Review
-							</button>
-							<button
-								type="button"
-								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_auto' ? 'btn-active btn-success' : 'btn-ghost'}"
-								onclick={() => reviewOverride = 'always_auto'}
-								disabled={formDisabled || isSubmitting}
-							>
-								Auto-Proceed
-							</button>
-						</div>
-					</div>
+					</details>
 
-					<!-- Dependencies (Optional) - Industrial -->
-					<div class="form-control">
-						<div class="label py-0.5">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Dependencies
-								{#if selectedDependencies.length > 0}
-									<span class="ml-1 badge badge-xs bg-base-content/20 text-base-content/80">{selectedDependencies.length}</span>
+					<!-- Dependencies - collapsed disclosure -->
+					<details class="group" bind:open={dependenciesOpen}>
+						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+							<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Dependencies
+							{#if selectedDependencies.length > 0}
+								<span class="ml-1 badge badge-xs bg-base-content/20 text-base-content/80 normal-case tracking-normal font-normal">{selectedDependencies.length}</span>
+							{/if}
+						</summary>
+						<div class="mt-2">
+							<!-- Dependency search dropdown -->
+							<div class="mb-2">
+								{#if availableTasksLoading}
+									<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
+										<span class="loading loading-spinner loading-xs"></span>
+										Loading tasks...
+									</div>
+								{:else}
+									<SearchDropdown
+										value={depSearchValue}
+										groups={dependencySearchGroups}
+										placeholder={!formData.project ? 'Select a project first' : availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
+										size="sm"
+										disabled={formDisabled || isSubmitting || !formData.project || availableTasks.length === 0}
+										onChange={(v) => {
+											const t = availableTasks.find(task => task.id === v);
+											if (t) { depSearchValue = ''; addDependency(t); }
+										}}
+									/>
 								{/if}
-							</span>
-						</div>
-						<!-- Dependency search dropdown -->
-						<div class="mb-2">
-							{#if availableTasksLoading}
-								<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
-									<span class="loading loading-spinner loading-xs"></span>
-									Loading tasks...
+							</div>
+
+							<!-- Selected dependencies list -->
+							{#if selectedDependencies.length > 0}
+								<div class="space-y-2 p-2 rounded bg-base-200">
+									{#each selectedDependencies as dep (dep.id)}
+										<div
+											class="flex items-center gap-2 text-sm p-2 rounded group bg-base-100 border-l-2 border-primary/30"
+										>
+											<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">
+												P{dep.priority}
+											</span>
+											<span class="font-mono text-xs">{dep.id}</span>
+											<span class="flex-1 truncate">{dep.title}</span>
+											<!-- Remove button -->
+											<button
+												type="button"
+												class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
+												onclick={() => removeDependency(dep.id)}
+												disabled={isSubmitting}
+												title="Remove dependency"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+												</svg>
+											</button>
+										</div>
+									{/each}
 								</div>
-							{:else}
-								<SearchDropdown
-									value={depSearchValue}
-									groups={dependencySearchGroups}
-									placeholder={!formData.project ? 'Select a project first' : availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
-									size="sm"
-									disabled={formDisabled || isSubmitting || !formData.project || availableTasks.length === 0}
-									onChange={(v) => {
-										const t = availableTasks.find(task => task.id === v);
-										if (t) { depSearchValue = ''; addDependency(t); }
-									}}
-								/>
 							{/if}
 						</div>
-
-						<!-- Selected dependencies list -->
-						{#if selectedDependencies.length > 0}
-							<div class="space-y-2 p-2 rounded bg-base-200">
-								{#each selectedDependencies as dep (dep.id)}
-									<div
-										class="flex items-center gap-2 text-sm p-2 rounded group bg-base-100 border-l-2 border-primary/30"
-									>
-										<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">
-											P{dep.priority}
-										</span>
-										<span class="font-mono text-xs">{dep.id}</span>
-										<span class="flex-1 truncate">{dep.title}</span>
-										<!-- Remove button -->
-										<button
-											type="button"
-											class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
-											onclick={() => removeDependency(dep.id)}
-											disabled={isSubmitting}
-											title="Remove dependency"
-										>
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-												<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-											</svg>
-										</button>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<div class="p-3 rounded text-center bg-base-200">
-								{#if formData.project}
-									<span class="text-sm text-base-content/50">No dependencies selected</span>
-									<p class="text-xs mt-1 text-base-content/40">Click "Add" to select tasks this depends on</p>
-								{:else}
-									<span class="text-sm text-base-content/50">Select a project first</span>
-									<p class="text-xs mt-1 text-base-content/40">Dependencies are loaded based on the selected project</p>
-								{/if}
-							</div>
-						{/if}
-					</div>
+					</details>
 
 					<!-- AI Analysis Reasoning — bottom of form -->
 					{#if suggestionReasoning}

@@ -567,6 +567,7 @@
 						<p class="text-xs" style="color: oklch(0.40 0.02 250); font-family: system-ui, -apple-system, sans-serif;">
 							Memory files are created when tasks complete via /jat:complete
 						</p>
+						<p class="text-xs" style="color: oklch(0.35 0.02 250);">j/k to navigate · ? for shortcuts</p>
 					</div>
 				{:else}
 					<div class="space-y-2" bind:this={browseListEl}>

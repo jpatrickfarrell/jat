@@ -1322,6 +1322,7 @@
 					<p class="font-mono text-xs mb-3" style="color: oklch(0.45 0.02 250);">
 						No sources configured yet.
 					</p>
+					<p class="font-mono text-[10px] mb-3" style="color: oklch(0.35 0.02 250);">j/k to navigate · ? for shortcuts</p>
 					<button
 						class="font-mono text-[10px] font-semibold px-4 py-2 rounded cursor-pointer transition-colors duration-150"
 						style="background: oklch(0.30 0.10 200); color: oklch(0.90 0.10 200); border: 1px solid oklch(0.40 0.12 200);"

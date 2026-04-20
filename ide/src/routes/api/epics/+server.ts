@@ -53,7 +53,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			epics = epics.filter(epic => epic.id.startsWith(`${project}-`));
 		}
 
-		// Sort: open epics first, then by priority, then by created date
+		// Sort: open epics first, then by priority, then by created date.
+		// Parse timestamps numerically — postgres-backed projects (meadow) return
+		// `created_at` as Date.toString() format, not ISO, so localeCompare would
+		// sort alphabetically by weekday name instead of chronologically.
+		const ts = (s: string | undefined | null): number => {
+			if (!s) return 0;
+			const t = new Date(s).getTime();
+			return Number.isFinite(t) ? t : 0;
+		};
 		epics.sort((a, b) => {
 			// Open epics come first
 			const aOpen = a.status === 'open' ? 0 : 1;
@@ -66,7 +74,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				return a.priority - b.priority;
 			}
 			// Fall back to created date (newer first)
-			return (b.created_at || '').localeCompare(a.created_at || '');
+			return ts(b.created_at) - ts(a.created_at);
 		});
 
 		return json({

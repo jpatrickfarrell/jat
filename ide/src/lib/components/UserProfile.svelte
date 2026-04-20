@@ -69,22 +69,95 @@
 		type SessionMaximizeHeight
 	} from '$lib/stores/preferences.svelte';
 
-	// User identity (inferred from git config)
+	// User identity — resolved by /api/config/user: JAT override first, git fallback.
 	let userName = $state('');
 	let userInitials = $state('');
+	let userEmail = $state('');
+	// `jat` means set via JAT override, `git` means from git config, `none` means empty.
+	let nameSource = $state<'jat' | 'git' | 'none'>('none');
+	let emailSource = $state<'jat' | 'git' | 'none'>('none');
 
-	onMount(async () => {
+	// Identity edit state
+	let editingIdentity = $state(false);
+	let editName = $state('');
+	let editEmail = $state('');
+	let identitySaving = $state(false);
+	let identityError = $state<string | null>(null);
+
+	async function loadIdentity() {
 		try {
 			const res = await fetch('/api/config/user');
 			const data = await res.json();
-			if (data.name) {
-				userName = data.name;
-				userInitials = data.initials;
-			}
+			userName = data.name || '';
+			userInitials = data.initials || '';
+			userEmail = data.email || '';
+			nameSource = data.source?.name ?? 'none';
+			emailSource = data.source?.email ?? 'none';
 		} catch {
 			// keep defaults
 		}
-	});
+	}
+
+	onMount(loadIdentity);
+
+	function openIdentityEditor() {
+		// Pre-fill with current effective values, not override-only. Saving with
+		// the same values the git config already provides is harmless — the
+		// backend stores them as an override and falls back if cleared.
+		editName = userName;
+		editEmail = userEmail;
+		identityError = null;
+		editingIdentity = true;
+	}
+
+	async function saveIdentity() {
+		identitySaving = true;
+		identityError = null;
+		try {
+			const res = await fetch('/api/config/user', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: editName.trim(),
+					email: editEmail.trim()
+				})
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${res.status}`);
+			}
+			const data = await res.json();
+			userName = data.name || '';
+			userInitials = data.initials || '';
+			userEmail = data.email || '';
+			nameSource = data.source?.name ?? 'none';
+			emailSource = data.source?.email ?? 'none';
+			editingIdentity = false;
+		} catch (e: any) {
+			identityError = e?.message || 'Failed to save identity';
+		} finally {
+			identitySaving = false;
+		}
+	}
+
+	async function resetIdentityToGit() {
+		identitySaving = true;
+		identityError = null;
+		try {
+			const res = await fetch('/api/config/user', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: '', email: '' })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			await loadIdentity();
+			editingIdentity = false;
+		} catch (e: any) {
+			identityError = e?.message || 'Failed to reset';
+		} finally {
+			identitySaving = false;
+		}
+	}
 
 	// User icon SVG path
 	const userIcon =
@@ -417,13 +490,104 @@
 		role="menu"
 		class="dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
 	>
-		<!-- User Greeting -->
-		{#if userName}
-			<li class="px-2 py-1.5">
-				<span class="text-xs font-medium text-base-content/70">{userName}</span>
-			</li>
-			<div class="divider my-1 h-px bg-base-content/20"></div>
-		{/if}
+		<!-- User Identity -->
+		<li class="px-2 py-1.5">
+			{#if !editingIdentity}
+				<div class="flex items-start justify-between gap-2">
+					<div class="flex flex-col gap-0.5 min-w-0">
+						{#if userName}
+							<span class="text-xs font-medium text-base-content/80 truncate">{userName}</span>
+						{:else}
+							<span class="text-xs italic text-base-content/40">no name set</span>
+						{/if}
+						{#if userEmail}
+							<span
+								class="text-[10px] font-mono text-base-content/50 truncate"
+								title="Email used to match your identity in each project's profiles table. Different Supabase projects can have different UUIDs for the same email."
+							>{userEmail}</span>
+						{/if}
+						<span class="text-[9px] text-base-content/40 mt-0.5">
+							{#if emailSource === 'jat'}
+								source: JAT override
+							{:else if emailSource === 'git'}
+								source: git config
+							{:else}
+								no identity set
+							{/if}
+						</span>
+					</div>
+					<button
+						type="button"
+						class="btn btn-xs btn-ghost shrink-0"
+						onclick={openIdentityEditor}
+						title="Edit identity — lets you use a different email here than your git config"
+					>
+						Edit
+					</button>
+				</div>
+			{:else}
+				<div class="flex flex-col gap-1.5">
+					<label class="flex flex-col gap-0.5">
+						<span class="text-[10px] uppercase tracking-wide text-base-content/60">Name</span>
+						<input
+							type="text"
+							class="input input-xs input-bordered font-mono text-xs"
+							bind:value={editName}
+							placeholder="Your display name"
+							disabled={identitySaving}
+						/>
+					</label>
+					<label class="flex flex-col gap-0.5">
+						<span class="text-[10px] uppercase tracking-wide text-base-content/60">Email</span>
+						<input
+							type="email"
+							class="input input-xs input-bordered font-mono text-xs"
+							bind:value={editEmail}
+							placeholder="you@example.com"
+							disabled={identitySaving}
+						/>
+					</label>
+					{#if identityError}
+						<p class="text-[10px] text-error">{identityError}</p>
+					{/if}
+					<p class="text-[9px] text-base-content/50 leading-snug">
+						Used as the comment author on tasks. Each Supabase-backed project
+						resolves this email to its own <code>profiles.id</code>, so you don't
+						need to match UUIDs across apps — just use the same email.
+					</p>
+					<div class="flex items-center justify-between gap-1">
+						<button
+							type="button"
+							class="btn btn-xs btn-ghost"
+							disabled={identitySaving}
+							onclick={resetIdentityToGit}
+							title="Clear the JAT override and fall back to git config --global user.name / user.email"
+						>
+							Use git config
+						</button>
+						<div class="flex gap-1">
+							<button
+								type="button"
+								class="btn btn-xs btn-ghost"
+								disabled={identitySaving}
+								onclick={() => { editingIdentity = false; identityError = null; }}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								class="btn btn-xs btn-primary"
+								disabled={identitySaving}
+								onclick={saveIdentity}
+							>
+								{identitySaving ? 'Saving…' : 'Save'}
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
+		</li>
+		<div class="divider my-1 h-px bg-base-content/20"></div>
 
 		<!-- Help & Shortcuts -->
 		<li>

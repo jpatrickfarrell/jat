@@ -37,6 +37,11 @@
 		// the literal string "user". The author_type stays "user" — that's the
 		// role (human vs agent vs system), not the display label.
 		currentUser?: string;
+		// Current JAT IDE user's email (from git config). Sent as `author_email`
+		// so postgres-backed backends can resolve the commenter to a per-project
+		// profile UUID (each Supabase project mints its own IDs, but the user's
+		// email is the stable cross-project anchor).
+		currentUserEmail?: string;
 		onSent?: (comment: any) => void;
 		// Called after the comment (if any) is successfully posted. Parent handles
 		// reassignment + advance. Returning a promise keeps the compose in its
@@ -50,6 +55,7 @@
 		taskId,
 		task = null,
 		currentUser = "",
+		currentUserEmail = "",
 		onSent,
 		onSendAndRoute,
 		onEscape,
@@ -59,6 +65,7 @@
 	// Fall back to "user" only if the IDE couldn't resolve the git user.
 	// (Empty string → placeholder; normal case → "Joseph Winke" etc.)
 	const authorName = $derived(currentUser.trim() || "user");
+	const authorEmail = $derived(currentUserEmail.trim() || null);
 
 	const routingTarget = $derived(task ? resolveRoutingTarget(task as any) : null);
 	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
@@ -105,6 +112,7 @@
 					body: JSON.stringify({
 						text,
 						author: authorName,
+						author_email: authorEmail,
 						author_type: "user",
 						comment_type: "note",
 					}),

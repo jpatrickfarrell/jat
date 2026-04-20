@@ -10,6 +10,9 @@
 	 */
 
 	import { fly, fade, slide } from 'svelte/transition';
+
+	// Multiplier for all transition durations — collapses to 0 when reduced motion is preferred
+	const _dur = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
 	import {
 		AUTOMATION_PRESETS,
 		RULE_CATEGORY_META,
@@ -130,10 +133,10 @@
 	}
 </script>
 
-<div class="flex flex-col rounded-[10px] overflow-hidden bg-base-200 border border-base-300 {className}">
+<div class="flex flex-col rounded-lg overflow-hidden bg-base-200 border border-base-300 {className}">
 	<!-- Header -->
 	<header class="flex items-center justify-between py-3 px-4 bg-base-300 border-b border-base-300">
-		<div class="flex items-center gap-2 text-sm font-semibold text-base-content font-mono">
+		<div class="flex items-center gap-2 text-sm font-semibold text-base-content">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				fill="none"
@@ -149,7 +152,7 @@
 				/>
 			</svg>
 			<span>Preset Library</span>
-			<span class="text-[0.7rem] font-normal text-base-content/50 py-0.5 px-2 rounded-[10px] bg-base-100">
+			<span class="text-[0.65rem] font-normal text-base-content/50 py-0.5 px-2 rounded-full bg-base-100 tabular-nums">
 				{installedPresets.size} / {AUTOMATION_PRESETS.length} installed
 			</span>
 		</div>
@@ -163,7 +166,7 @@
 			{@const presets = presetsByCategory[category]}
 
 			{#if presets.length > 0}
-				<div class="flex flex-col gap-3 fade-in-left fade-in-delay-{Math.min(categoryIndex, 12)}" transition:slide={{ duration: 150 }}>
+				<div class="flex flex-col gap-3 fade-in-left fade-in-delay-{Math.min(categoryIndex, 12)}" transition:slide={{ duration: 150 * _dur }}>
 					<!-- Category header -->
 					<div class="flex flex-col gap-1">
 						<div class="flex items-center gap-2">
@@ -177,152 +180,53 @@
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d={meta.icon} />
 							</svg>
-							<span class="text-sm font-semibold text-base-content/80 font-mono">{meta.label}</span>
-							<span class="text-[0.65rem] text-base-content/50 py-0.5 px-1.5 rounded-lg font-mono bg-base-100">
+							<span class="text-sm font-semibold text-base-content/80">{meta.label}</span>
+							<span class="text-[0.65rem] text-base-content/50 py-0.5 px-1.5 rounded-full bg-base-100 tabular-nums">
 								{stats.installed}/{stats.total}
 							</span>
 						</div>
 						<p class="text-[0.7rem] text-base-content/50 m-0 pl-6">{meta.description}</p>
 					</div>
 
-					<!-- Preset cards -->
-					<div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
-						{#each presets as preset, presetIndex (preset.id)}
+					<!-- Preset rows (compact list, not card grid) -->
+					<div class="flex flex-col gap-1">
+						{#each presets as preset (preset.id)}
 							{@const isInstalled = installedPresets.has(preset.id)}
-							<div
-								class="flex flex-col rounded-lg overflow-hidden transition-all duration-150 bg-base-100 border border-base-300 hover:border-base-content/30 hover:bg-base-100/80 fade-in fade-in-delay-{Math.min(presetIndex, 12)} {isInstalled ? 'border-success/40 !bg-success/5' : ''}"
-								transition:fly={{ y: 10, duration: 150 }}
-							>
-								<div class="flex-1 p-3 flex flex-col gap-2">
-									<div class="flex items-center justify-between gap-2">
-										<h4 class="text-sm font-semibold text-base-content m-0 font-mono">{preset.name}</h4>
-										{#if isInstalled}
-											<span class="flex items-center gap-1 text-[0.6rem] font-medium py-0.5 px-1.5 rounded-md uppercase tracking-wide text-success bg-success/20">
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke-width="2"
-													stroke="currentColor"
-													class="w-3 h-3"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M4.5 12.75l6 6 9-13.5"
-													/>
-												</svg>
-												Installed
-											</span>
-										{/if}
-									</div>
+							<div class="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors duration-150 {isInstalled ? 'bg-success/[0.06] border border-success/20' : 'bg-base-100/40 border border-base-content/[0.07] hover:bg-base-100/70 hover:border-base-content/15'}">
+								<!-- Installed indicator dot -->
+								<div class="w-1.5 h-1.5 rounded-full flex-shrink-0 {isInstalled ? 'bg-success' : 'bg-base-content/15'}"></div>
 
-									<p class="text-[0.7rem] text-base-content/60 m-0 leading-relaxed">{preset.description}</p>
-
-									<div class="flex items-center gap-3 mt-auto pt-2">
-										<span class="flex items-center gap-1.5 text-[0.65rem] text-base-content/50 font-mono">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="1.5"
-												stroke="currentColor"
-												class="w-3 h-3"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"
-												/>
-											</svg>
-											{preset.rule.patterns.length} pattern{preset.rule.patterns.length !== 1
-												? 's'
-												: ''}
-										</span>
-										<span class="flex items-center gap-1.5 text-[0.65rem] text-base-content/50 font-mono">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="1.5"
-												stroke="currentColor"
-												class="w-3 h-3"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
-												/>
-											</svg>
-											{preset.rule.actions.length} action{preset.rule.actions.length !== 1
-												? 's'
-												: ''}
-										</span>
-									</div>
+								<!-- Name + description -->
+								<div class="flex-1 min-w-0">
+									<span class="text-xs font-semibold text-base-content truncate block leading-snug">{preset.name}</span>
+									<span class="text-[0.65rem] text-base-content/40 truncate block leading-snug">{preset.description}</span>
 								</div>
 
-								<div class="flex items-center gap-1 px-3 py-2 bg-base-200/50 border-t border-base-300">
-									<button class="flex items-center justify-center w-8 h-8 rounded-md bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-base-300 hover:text-base-content" onclick={() => showPreview(preset)} title="Preview rules">
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-4 h-4"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
-											/>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-											/>
+								<!-- Pattern/action counts -->
+								<div class="flex items-center gap-1 flex-shrink-0">
+									<span class="text-[0.6rem] font-mono text-base-content/30" title="{preset.rule.patterns.length} pattern{preset.rule.patterns.length !== 1 ? 's' : ''}">{preset.rule.patterns.length}p</span>
+									<span class="text-base-content/20 text-[0.6rem]">·</span>
+									<span class="text-[0.6rem] font-mono text-base-content/30" title="{preset.rule.actions.length} action{preset.rule.actions.length !== 1 ? 's' : ''}">{preset.rule.actions.length}a</span>
+								</div>
+
+								<!-- Actions -->
+								<div class="flex items-center gap-1 flex-shrink-0">
+									<button
+										class="flex items-center justify-center w-6 h-6 rounded bg-transparent border-none text-base-content/30 cursor-pointer transition-colors duration-150 hover:bg-base-300 hover:text-base-content"
+										onclick={() => showPreview(preset)}
+										title="Preview {preset.name}"
+										aria-label="Preview {preset.name}"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 										</svg>
 									</button>
-
 									<button
-										class="flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[0.7rem] font-mono font-medium cursor-pointer transition-all duration-150 ml-auto {isInstalled ? 'bg-error/20 border border-error/30 text-error hover:bg-error/30' : 'bg-success/20 border border-success/30 text-success hover:bg-success/30'}"
+										class="py-0.5 px-2 rounded text-[0.65rem] font-medium transition-colors duration-150 {isInstalled ? 'text-error/80 hover:text-error hover:bg-error/10 bg-transparent border-none' : 'text-success bg-success/15 border border-success/25 hover:bg-success/25'}"
 										onclick={() => togglePreset(preset)}
-										title={isInstalled ? 'Uninstall' : 'Install'}
-									>
-										{#if isInstalled}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="1.5"
-												stroke="currentColor"
-												class="w-4 h-4"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-												/>
-											</svg>
-											Remove
-										{:else}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="1.5"
-												stroke="currentColor"
-												class="w-4 h-4"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-												/>
-											</svg>
-											Install
-										{/if}
-									</button>
+										aria-label="{isInstalled ? 'Remove' : 'Install'} {preset.name}"
+									>{isInstalled ? 'Remove' : 'Install'}</button>
 								</div>
 							</div>
 						{/each}
@@ -336,27 +240,27 @@
 <!-- Preview Modal -->
 {#if showPreviewModal && previewPreset}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-base-300/85"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-base-300/85"
 		onclick={closePreview}
 		onkeydown={(e) => e.key === 'Escape' && closePreview()}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="preview-title"
 		tabindex="0"
-		transition:fade={{ duration: 150 }}
+		transition:fade={{ duration: 150 * _dur }}
 	>
 		<div
 			class="flex flex-col w-full max-w-[550px] rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-2xl"
 			style="max-height: calc(100vh - 2rem);"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
-			transition:fly={{ y: 20, duration: 200 }}
+			transition:fly={{ y: 20, duration: 200 * _dur }}
 			role="presentation"
 		>
 			<!-- Modal Header -->
 			<header class="flex items-center justify-between px-5 py-4 bg-base-300 border-b border-base-300">
 				<div class="flex items-center gap-3">
-					<h3 id="preview-title" class="text-base font-semibold text-base-content m-0 font-mono">{previewPreset.name}</h3>
+					<h3 id="preview-title" class="text-base font-semibold text-base-content m-0">{previewPreset.name}</h3>
 					<span class="text-[0.65rem] font-medium py-0.5 px-2 rounded-md uppercase tracking-wide {RULE_CATEGORY_META[previewPreset.category].color} bg-base-100">
 						{RULE_CATEGORY_META[previewPreset.category].label}
 					</span>
@@ -381,7 +285,7 @@
 
 				<!-- Patterns Section -->
 				<section class="flex flex-col gap-3">
-					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -415,7 +319,7 @@
 
 				<!-- Actions Section -->
 				<section class="flex flex-col gap-3">
-					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -447,7 +351,7 @@
 
 				<!-- Settings Section -->
 				<section class="flex flex-col gap-3">
-					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -471,11 +375,11 @@
 					</h4>
 					<div class="grid grid-cols-2 gap-2">
 						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
-							<span class="text-[0.65rem] text-base-content/50 font-mono">Cooldown</span>
+							<span class="text-[0.65rem] text-base-content/50">Cooldown</span>
 							<span class="text-xs font-medium text-base-content font-mono">{previewPreset.rule.cooldownSeconds}s</span>
 						</div>
 						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
-							<span class="text-[0.65rem] text-base-content/50 font-mono">Max Triggers</span>
+							<span class="text-[0.65rem] text-base-content/50">Max Triggers</span>
 							<span class="text-xs font-medium text-base-content font-mono">
 								{previewPreset.rule.maxTriggersPerSession === 0
 									? 'Unlimited'
@@ -483,11 +387,11 @@
 							</span>
 						</div>
 						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
-							<span class="text-[0.65rem] text-base-content/50 font-mono">Priority</span>
+							<span class="text-[0.65rem] text-base-content/50">Priority</span>
 							<span class="text-xs font-medium text-base-content font-mono">{previewPreset.rule.priority}</span>
 						</div>
 						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
-							<span class="text-[0.65rem] text-base-content/50 font-mono">Default State</span>
+							<span class="text-[0.65rem] text-base-content/50">Default State</span>
 							<span class="text-xs font-medium font-mono {previewPreset.rule.enabled ? 'text-success' : 'text-error'}">
 								{previewPreset.rule.enabled ? 'Enabled' : 'Disabled'}
 							</span>
@@ -498,9 +402,9 @@
 
 			<!-- Modal Footer -->
 			<footer class="flex justify-end gap-3 px-5 py-4 bg-base-300 border-t border-base-300">
-				<button class="py-2 px-5 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-transparent border border-base-content/30 text-base-content/70 hover:bg-base-100 hover:border-base-content/40" onclick={closePreview}> Close </button>
+				<button class="py-2 px-5 text-sm font-medium rounded-md cursor-pointer transition-all duration-150 bg-transparent border border-base-content/30 text-base-content/70 hover:bg-base-100 hover:border-base-content/40" onclick={closePreview}> Close </button>
 				{#if installedPresets.has(previewPreset.id)}
-					<button class="flex items-center gap-2 py-2 px-4 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-error/20 border border-error/30 text-error hover:bg-error/30" onclick={() => { if (previewPreset) uninstallPreset(previewPreset); closePreview(); }}>
+					<button class="flex items-center gap-2 py-2 px-4 text-sm font-medium rounded-md cursor-pointer transition-all duration-150 bg-error/20 border border-error/30 text-error hover:bg-error/30" onclick={() => { if (previewPreset) uninstallPreset(previewPreset); closePreview(); }}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -518,7 +422,7 @@
 						Remove Preset
 					</button>
 				{:else}
-					<button class="flex items-center gap-2 py-2 px-4 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-success border border-success text-success-content hover:brightness-110" onclick={installFromPreview}>
+					<button class="flex items-center gap-2 py-2 px-4 text-sm font-medium rounded-md cursor-pointer transition-all duration-150 bg-success border border-success text-success-content hover:brightness-110" onclick={installFromPreview}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"

@@ -384,10 +384,10 @@
 					d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
 				/>
 			</svg>
-			<h3 class="font-mono text-sm font-semibold text-base-content">
+			<h3 class="text-sm font-semibold text-base-content">
 				Pattern Tester
 			</h3>
-			<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-base-100 text-base-content/60">
+			<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-base-100 text-base-content/60 tabular-nums">
 				{totalMatches} match{totalMatches !== 1 ? 'es' : ''}
 			</span>
 		</div>
@@ -412,7 +412,7 @@
 		<!-- Left Panel: Sample Output -->
 		<div class="flex-1 p-4 border-b lg:border-b-0 lg:border-r border-base-300">
 			<div class="mb-3">
-				<label for="sample-output" class="block mb-1 font-mono text-xs text-base-content/60">
+				<label for="sample-output" class="block mb-1 text-xs text-base-content/60">
 					Sample Terminal Output
 				</label>
 				<textarea
@@ -425,7 +425,7 @@
 
 			<!-- Highlighted Preview -->
 			<div class="mb-3">
-				<span class="block mb-1 font-mono text-xs text-base-content/60">
+				<span class="block mb-1 text-xs text-base-content/60">
 					Highlighted Preview
 				</span>
 				<div class="w-full h-48 px-3 py-2 rounded-lg font-mono text-xs overflow-auto whitespace-pre-wrap bg-base-300/80 text-base-content/80 border border-base-content/20">
@@ -435,7 +435,7 @@
 
 			<!-- Custom Pattern Input -->
 			<div class="p-3 rounded-lg bg-base-300/50 border border-base-content/15">
-				<label for="custom-pattern" class="block mb-1 font-mono text-xs text-base-content/60 font-semibold">
+				<label for="custom-pattern" class="block mb-1 text-xs text-base-content/60 font-semibold">
 					Quick Test Pattern
 				</label>
 				<div class="flex items-center gap-2">
@@ -452,7 +452,7 @@
 							bind:checked={customIsRegex}
 							class="checkbox checkbox-xs checkbox-info"
 						/>
-						<span class="font-mono text-[10px] text-base-content/60">Regex</span>
+						<span class="text-[10px] text-base-content/60">Regex</span>
 					</label>
 					<label class="flex items-center gap-1.5 cursor-pointer">
 						<input
@@ -460,7 +460,7 @@
 							bind:checked={customCaseSensitive}
 							class="checkbox checkbox-xs checkbox-info"
 						/>
-						<span class="font-mono text-[10px] text-base-content/60">Case</span>
+						<span class="text-[10px] text-base-content/60">Case</span>
 					</label>
 				</div>
 				{#if customError}
@@ -490,30 +490,15 @@
 		<!-- Right Panel: Matching Rules -->
 		<div class="w-full lg:w-96 p-4">
 			<div class="mb-3">
-				<h4 class="block mb-1 font-mono text-xs text-base-content/60 font-semibold">
+				<h4 class="block mb-1 text-xs text-base-content/60 font-semibold">
 					Matching Rules
 				</h4>
 			</div>
 
 			{#if ruleMatches.length === 0}
-				<div class="text-center py-8 rounded-lg bg-base-300/50 border border-dashed border-base-content/20">
-					<svg
-						class="w-8 h-8 mx-auto mb-2 text-base-content/30"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="1.5"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-						/>
-					</svg>
-					<p class="font-mono text-sm text-base-content/50">No matching rules</p>
-					<p class="font-mono text-xs mt-1 text-base-content/30">
-						Paste terminal output to see matches
-					</p>
+				<div class="py-5 px-3 rounded-md bg-base-300/30 border border-dashed border-base-content/[0.12]">
+					<p class="text-sm text-base-content/45 m-0">No matching rules</p>
+					<p class="text-xs text-base-content/30 mt-1 m-0">Paste terminal output above to see matches</p>
 				</div>
 			{:else}
 				<div class="space-y-2 max-h-[500px] overflow-y-auto">
@@ -551,7 +536,7 @@
 							<div class="px-3 pb-2">
 								<!-- Pattern -->
 								<div class="flex items-center gap-2 mb-2">
-									<span class="text-[10px] font-mono text-base-content/40">
+									<span class="text-[10px] text-base-content/40">
 										Pattern:
 									</span>
 									<code class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-base-300 text-info">
@@ -566,7 +551,7 @@
 
 								<!-- Action -->
 								<div class="flex items-center gap-2">
-									<span class="text-[10px] font-mono text-base-content/40">
+									<span class="text-[10px] text-base-content/40">
 										Action:
 									</span>
 									<div class="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-base-300/50 {actionInfo.colorClass === 'action-send-text' ? 'text-info' : actionInfo.colorClass === 'action-send-keys' ? 'text-success' : actionInfo.colorClass === 'action-tmux' ? 'text-warning' : actionInfo.colorClass === 'action-signal' ? 'text-secondary' : 'text-accent'}">
@@ -612,7 +597,7 @@
 			<!-- All Rules (non-matching) -->
 			{#if activeRules.filter((r) => r.enabled && !ruleMatches.find((rm) => rm.rule.id === r.id)).length > 0}
 				<div class="mt-4">
-					<h5 class="block mb-1 font-mono text-xs text-base-content/50">
+					<h5 class="block mb-1 text-xs text-base-content/50">
 						Other Active Rules
 					</h5>
 					<div class="space-y-1">

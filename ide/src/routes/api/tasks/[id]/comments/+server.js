@@ -77,7 +77,7 @@ export async function POST({ params, request }) {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	const { text, author, author_type, comment_type, session_id, metadata } = body || {};
+	const { text, author, author_email, author_type, comment_type, session_id, metadata } = body || {};
 	if (!text || typeof text !== 'string' || !text.trim()) {
 		return json({ error: 'text is required' }, { status: 400 });
 	}
@@ -86,6 +86,9 @@ export async function POST({ params, request }) {
 	}
 	if (!author_type || !['agent', 'user', 'system'].includes(author_type)) {
 		return json({ error: "author_type must be 'agent', 'user', or 'system'" }, { status: 400 });
+	}
+	if (author_email !== undefined && author_email !== null && typeof author_email !== 'string') {
+		return json({ error: "author_email must be a string" }, { status: 400 });
 	}
 	if (!comment_type || !['question', 'answer', 'note', 'event'].includes(comment_type)) {
 		return json(
@@ -101,30 +104,29 @@ export async function POST({ params, request }) {
 			if (!task) return json({ error: 'Task not found' }, { status: 404 });
 			const created = await pg.addComment(taskId, {
 				author,
+				author_email: author_email ?? null,
 				text,
 				author_type,
 				comment_type,
 				session_id: session_id ?? null,
+				metadata: metadata ?? null,
 			});
-			return json(
-				{
-					comment: {
-						...created,
-						metadata: metadata ?? null,
-					},
-				},
-				{ status: 201 }
-			);
+			return json({ comment: created }, { status: 201 });
 		}
 
 		const task = sqlite.getById(taskId);
 		if (!task) return json({ error: 'Task not found' }, { status: 404 });
 
+		// SQLite has no profiles table — persist author_email in metadata so
+		// downstream features (avatar lookup, cross-app identity) can use it.
+		const mergedMetadata = author_email
+			? { ...(metadata ?? {}), author_email }
+			: (metadata ?? null);
 		const comment = sqlite.addComment(taskId, author, text, undefined, {
 			author_type,
 			comment_type,
 			session_id: session_id ?? null,
-			metadata: metadata ?? null,
+			metadata: mergedMetadata,
 		});
 
 		// Resume trigger: if this is an answer to an open agent question,

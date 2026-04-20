@@ -71,6 +71,7 @@
 	interface Props {
 		task: Task;
 		currentUser?: string;
+		currentUserEmail?: string;
 		allAssignees?: string[];
 		onEscapeCompose?: () => void;
 		onComposeFocus?: () => void;
@@ -82,6 +83,7 @@
 	let {
 		task,
 		currentUser = "",
+		currentUserEmail = "",
 		allAssignees = [],
 		onEscapeCompose,
 		onComposeFocus,
@@ -455,6 +457,8 @@
 		bind:this={composeRef}
 		taskId={task.id}
 		{task}
+		{currentUser}
+		{currentUserEmail}
 		onSent={handleSent}
 		onSendAndRoute={handleSendAndRoute}
 		onEscape={() => onEscapeCompose?.()}

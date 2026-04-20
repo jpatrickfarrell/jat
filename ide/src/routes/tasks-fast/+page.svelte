@@ -128,6 +128,7 @@
 	let hydrated = $state(false);
 
 	let currentUser = $state<string>("");
+	let currentUserEmail = $state<string>("");
 
 	let filterInputEl = $state<HTMLInputElement | null>(null);
 	let listEl = $state<HTMLUListElement | null>(null);
@@ -1126,11 +1127,15 @@
 			}
 		} catch { /* ignore */ }
 
-		// Best-effort identity for @me resolution; failure is silent.
+		// Best-effort identity for @me resolution and comment author tagging.
+		// Email is used by postgres-backed backends to resolve the commenter
+		// to a per-project profile UUID (so comments show the canonical name
+		// in each Supabase project). Failure is silent.
 		fetch("/api/config/user")
 			.then((r) => (r.ok ? r.json() : null))
 			.then((data) => {
 				if (data?.name) currentUser = data.name;
+				if (data?.email) currentUserEmail = data.email;
 			})
 			.catch(() => {});
 
@@ -1482,6 +1487,7 @@
 				bind:this={detailRef}
 				task={selectedTask}
 				{currentUser}
+				{currentUserEmail}
 				{allAssignees}
 				onEscapeCompose={handleEscapeCompose}
 				onComposeFocus={() => (focusZone = "compose")}

@@ -281,6 +281,65 @@
 		dirty = true;
 	}
 
+	function arrangeNodes() {
+		if (nodes.length === 0) return;
+		pushUndoState();
+
+		// Build predecessor map (incoming edges per node)
+		const preds = new Map<string, Set<string>>();
+		for (const n of nodes) preds.set(n.id, new Set());
+		for (const e of edges) {
+			if (preds.has(e.targetNodeId) && e.sourceNodeId !== e.targetNodeId) {
+				preds.get(e.targetNodeId)!.add(e.sourceNodeId);
+			}
+		}
+
+		// Kahn's topological sort into layers (columns).
+		const col = new Map<string, number>();
+		const remaining = new Set(nodes.map((n) => n.id));
+		let level = 0;
+		while (remaining.size > 0) {
+			const ready: string[] = [];
+			for (const id of remaining) {
+				const p = preds.get(id)!;
+				let allAssigned = true;
+				for (const predId of p) {
+					if (remaining.has(predId)) { allAssigned = false; break; }
+				}
+				if (allAssigned) ready.push(id);
+			}
+			if (ready.length === 0) {
+				// Cycle — drop remaining into the current column so we don't loop forever.
+				for (const id of remaining) col.set(id, level);
+				break;
+			}
+			for (const id of ready) {
+				col.set(id, level);
+				remaining.delete(id);
+			}
+			level++;
+		}
+
+		// Group node IDs by column, preserving original node order for stable rows.
+		const columns = new Map<number, string[]>();
+		for (const n of nodes) {
+			const c = col.get(n.id) ?? 0;
+			if (!columns.has(c)) columns.set(c, []);
+			columns.get(c)!.push(n.id);
+		}
+
+		// Assign positions: x = col * 280 + 80, y = row * 160 + 80.
+		nodes = nodes.map((n) => {
+			const c = col.get(n.id) ?? 0;
+			const r = columns.get(c)!.indexOf(n.id);
+			return { ...n, position: { x: 80 + c * 280, y: 80 + r * 160 } };
+		});
+		dirty = true;
+
+		// Frame the result after positions apply.
+		setTimeout(() => canvasRef?.fitView(60), 50);
+	}
+
 	// =========================================================================
 	// API CALLS
 	// =========================================================================
@@ -915,6 +974,31 @@
 					</svg>
 				</button>
 			</div>
+
+			<!-- Separator -->
+			<div class="w-px h-6 mx-1" style="background: oklch(0.25 0.02 250)"></div>
+
+			<!-- Auto-arrange -->
+			<button
+				class="btn btn-sm btn-ghost btn-square"
+				style="color: {nodes.length > 0 ? 'oklch(0.65 0.02 250)' : 'oklch(0.35 0.02 250)'}"
+				onclick={arrangeNodes}
+				disabled={nodes.length === 0}
+				title="Auto-arrange nodes"
+			>
+				<svg
+					class="w-4 h-4"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<rect x="3" y="3" width="7" height="7" rx="1" />
+					<rect x="14" y="3" width="7" height="7" rx="1" />
+					<rect x="3" y="14" width="7" height="7" rx="1" />
+					<rect x="14" y="14" width="7" height="7" rx="1" />
+				</svg>
+			</button>
 
 			<!-- Separator before destructive zone -->
 			<div class="w-px h-6 mx-1" style="background: oklch(0.25 0.02 250)"></div>

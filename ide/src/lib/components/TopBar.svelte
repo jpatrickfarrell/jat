@@ -812,7 +812,8 @@
 				<span>Add Project</span>
 			</button>
 		{/if}
-		<div class="flex-1"></div>
+		<!-- Desktop-only spacer: on narrow, MobileProjectSelector (flex-1) fills the space. -->
+		<div class="flex-1 hidden lg:block"></div>
 	{/if}
 
 	<!-- Shared sort dropdown snippet — used by both /agents and /servers pages -->

@@ -228,6 +228,12 @@
 	export function openType() {
 		actionBarRef?.openType();
 	}
+	export function openEpic() {
+		actionBarRef?.openEpic();
+	}
+	export function openMilestone() {
+		actionBarRef?.openMilestone();
+	}
 	export function spawnAgent() {
 		actionBarRef?.spawn();
 	}

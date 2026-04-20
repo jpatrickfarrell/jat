@@ -420,6 +420,44 @@ function startSessionsWatcher(): void {
 // ============================================================================
 
 /**
+ * Sync task DB status when a signal indicates a state change.
+ * Keeps the task's persisted status in sync with agent signal state so
+ * postgres-backed projects (like Meadow) don't show stale status in their admin UI.
+ *
+ * signal state → task status mapping:
+ *   working / starting  → in_progress
+ *   review / completing → submitted  (only if currently in_progress, avoids overwriting closed)
+ */
+async function syncTaskStatusFromSignal(mappedState: string, taskId: string | undefined): Promise<void> {
+	if (!taskId) return;
+
+	// Extract project from task ID prefix (e.g. "meadow-uu11j" → "meadow")
+	const match = taskId.match(/^([a-z][a-z0-9_-]*)-[a-z0-9]+$/i);
+	if (!match) return;
+	const project = match[1];
+
+	let newStatus: string | null = null;
+	if (mappedState === 'working' || mappedState === 'starting') {
+		newStatus = 'in_progress';
+	}
+	if (!newStatus) return;
+
+	try {
+		const { getBackendForProject } = await import('../../../../../lib/tasks-backend.js');
+		const backend = await getBackendForProject(project);
+		const task = await backend.getById(taskId);
+		if (!task) return;
+		// Only update if not already in a terminal/advanced state
+		const skipStatuses = ['closed', 'submitted', 'accepted', 'deployed', 'in_progress'];
+		if (skipStatuses.includes(task.status)) return;
+		await backend.update(taskId, { status: newStatus });
+		console.log(`[WS Watcher] Synced task ${taskId} status: ${task.status} → ${newStatus}`);
+	} catch {
+		// Best-effort — don't crash signal processing on DB error
+	}
+}
+
+/**
  * Simple hash function for change detection
  * We only need to detect if content changed, not cryptographic security
  */
@@ -546,6 +584,10 @@ function processSignalFileChange(sessionName: string): void {
 			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
 				dispatchStatePush(sessionName, mappedState, signal.data as Record<string, unknown> | undefined);
 			}
+			if (stateChanged) {
+				const taskId = (signal.data as Record<string, unknown> | undefined)?.taskId as string | undefined;
+				syncTaskStatusFromSignal(mappedState, taskId);
+			}
 		}
 	}
 
@@ -574,6 +616,10 @@ function processSignalFileChange(sessionName: string): void {
 			}
 			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
 				dispatchStatePush(sessionName, mappedState, idePayloadData);
+			}
+			if (stateChanged) {
+				const taskId = idePayloadData.taskId as string | undefined;
+				syncTaskStatusFromSignal(mappedState, taskId);
 			}
 		}
 	}

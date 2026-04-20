@@ -4534,6 +4534,30 @@ This ensures the agent uses the pre-registered name instead of generating a new 
 - jat-sud88: Add agent registration to IDE spawn API (completed)
 - jat-jbhnu: Document New Agent Registration Process (this section)
 
+## Identity & Cross-Project User Linking
+
+The IDE's `/api/config/user` endpoint, the UserProfile dropdown edit form, and
+the `author_email` field on comment POSTs are all part of the cross-project
+identity system. Full design + schema assumptions + sync tool docs live in
+[`shared/identity.md`](../shared/identity.md).
+
+Short summary:
+
+- **Source of truth**: `~/.config/jat/identity.json` (override) → git config (fallback).
+- **Cross-project anchor**: your email. Every Supabase `auth.users` has it; each project's UUID is resolved on demand via `auth.users.email` join.
+- **Comment author flow**: `TaskFastCompose` → POST `/api/tasks/:id/comments` with `author` + `author_email` → postgres backend joins `auth.users LEFT JOIN profiles` to store `author` = canonical full_name + `metadata.author_id` = project-specific UUID.
+- **Propagation tool**: `jat-identity-sync [--apply] [--project X]` upserts the auth user + profile row in every project registered with `jat-secret`.
+
+If you touch any of these files, keep the behavior matching the doc:
+
+| File | Role |
+|---|---|
+| `src/routes/api/config/user/+server.ts` | GET/PUT identity |
+| `src/lib/components/UserProfile.svelte` | Edit UI — dropdown stays open via `tick()+focus` trick |
+| `src/lib/components/tasks-fast/TaskFastCompose.svelte` | Sends name + email on every comment |
+| `src/routes/api/tasks/[id]/comments/+server.js` | Accepts `author_email` |
+| `../lib/tasks-project-tasks.js` `addComment` | Resolves email via `auth.users` (NOT `profiles.email`) |
+
 ## References
 
 - [Tailwind CSS v4 Docs](https://tailwindcss.com/docs)

@@ -44,6 +44,7 @@
 		project?: string;
 		created_at?: string;
 		updated_at?: string;
+		blocked_by?: { id: string; title?: string; status?: string; issue_type?: string }[];
 	}
 
 	type FocusZone = "list" | "detail" | "compose";
@@ -110,7 +111,7 @@
 	let filterStatuses = $state<string[]>([...DEFAULT_STATUSES]);
 	let filterPriorities = $state<number[]>([]);
 	let filterProject = $state<string>("");
-	type SortBy = "priority" | "age" | "updated" | "status";
+	type SortBy = "priority" | "age" | "updated" | "status" | "type";
 	type SortDir = "asc" | "desc";
 	// Default direction per sort type — clicking a NEW sort chip resets to this;
 	// clicking the CURRENT sort chip toggles direction.
@@ -119,6 +120,7 @@
 		age: "asc", // oldest (been waiting longest) first
 		updated: "desc", // most recently updated first
 		status: "asc", // submitted → open → in_progress → waiting
+		type: "asc",   // alphabetical: bug → chat → chore → epic → feature → task
 	};
 	let sortBy = $state<SortBy>("priority");
 	let sortDir = $state<SortDir>(DEFAULT_SORT_DIR.priority);
@@ -253,6 +255,10 @@
 				const sa = STATUS_ORDER[a.status] ?? 9;
 				const sb = STATUS_ORDER[b.status] ?? 9;
 				cmp = sa !== sb ? sa - sb : ts(a.created_at) - ts(b.created_at);
+			} else if (_sort === "type") {
+				const ta = a.issue_type ?? "task";
+				const tb = b.issue_type ?? "task";
+				cmp = ta !== tb ? ta.localeCompare(tb) : (a.priority ?? 99) - (b.priority ?? 99);
 			} else {
 				// priority → age (tie-break)
 				const pa = a.priority ?? 99;
@@ -351,6 +357,8 @@
 				{ key: "s", description: "Open status picker" },
 				{ key: "p", description: "Open priority picker" },
 				{ key: "t", description: "Open type picker" },
+				{ key: "e", description: "Open epic picker" },
+				{ key: "m", description: "Open milestone picker" },
 				{ key: "Space", description: "Spawn agent on this task" },
 				{ key: "o", description: "Open full task detail drawer" },
 				{ key: "d", description: "Dismiss / close task" },
@@ -473,6 +481,14 @@
 					case "t":
 						e.preventDefault();
 						detailRef.openType();
+						return;
+					case "e":
+						e.preventDefault();
+						detailRef.openEpic();
+						return;
+					case "m":
+						e.preventDefault();
+						detailRef.openMilestone();
 						return;
 					case "o":
 						e.preventDefault();
@@ -775,7 +791,7 @@
 		filterTypes = [...parseSet(searchParams.get("type"), TYPE_OPTIONS)];
 		filterAssignee = searchParams.get("assignee") ?? "";
 		const rawSort = searchParams.get("sort");
-		sortBy = (["priority", "age", "updated", "status"].includes(rawSort ?? "") ? rawSort : "priority") as SortBy;
+		sortBy = (["priority", "age", "updated", "status", "type"].includes(rawSort ?? "") ? rawSort : "priority") as SortBy;
 		const rawDir = searchParams.get("sortDir");
 		sortDir = rawDir === "asc" || rawDir === "desc" ? rawDir : DEFAULT_SORT_DIR[sortBy];
 		filterSearch = searchParams.get("q") ?? "";
@@ -1252,7 +1268,7 @@
 
 				<div class="chip-group chip-group-sort" aria-label="Sort by">
 					<span class="filter-label">Sort</span>
-					{#each ([["priority","Priority"],["age","Age"],["updated","Updated"],["status","Status"]] as const) as [val, label]}
+					{#each ([["priority","Priority"],["age","Age"],["updated","Updated"],["status","Status"],["type","Type"]] as const) as [val, label]}
 						{@const active = sortBy === val}
 						<button
 							type="button"

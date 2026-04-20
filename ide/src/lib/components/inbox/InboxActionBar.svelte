@@ -6,15 +6,19 @@
 	 *   a      → Assign picker   (SearchDropdown, assignee list)
 	 *   s      → Status picker   (submitted/open/in_progress/waiting/closed)
 	 *   p      → Priority picker (P0-P4)
+	 *   e      → Epic picker     (link task to an open epic)
+	 *   m      → Milestone picker (add/change a label used as milestone tag)
 	 *   Space  → Spawn agent     (POST /api/work/spawn)
 	 *   o      → Open full       (TaskDetailDrawer via drawerStore)
 	 *   d      → Dismiss task    (two-press confirmation, closes the task)
 	 *
 	 * Exposed methods (called by InboxDetail via bind:this):
-	 *   openAssign() / openStatus() / openPriority() → open the relevant picker
-	 *   spawn() / openFull() / dismiss()             → direct actions
+	 *   openAssign() / openStatus() / openPriority() / openType() → open pickers
+	 *   openEpic() / openMilestone()                              → open pickers
+	 *   spawn() / openFull() / dismiss()                          → direct actions
 	 */
 
+	import { tick, untrack } from "svelte";
 	import SearchDropdown, {
 		type SearchDropdownGroup,
 	} from "$lib/components/SearchDropdown.svelte";
@@ -28,6 +32,13 @@
 		source?: string;
 	}
 
+	interface DepItem {
+		id: string;
+		title?: string;
+		status?: string;
+		issue_type?: string;
+	}
+
 	interface Task {
 		id: string;
 		title: string;
@@ -36,6 +47,9 @@
 		issue_type?: string;
 		assignee?: string | null;
 		requester?: RequesterActor | null;
+		labels?: string[];
+		project?: string;
+		blocked_by?: DepItem[];
 	}
 
 	interface Props {
@@ -60,6 +74,8 @@
 	let statusWrapEl = $state<HTMLDivElement | null>(null);
 	let priorityWrapEl = $state<HTMLDivElement | null>(null);
 	let typeWrapEl = $state<HTMLDivElement | null>(null);
+	let epicWrapEl = $state<HTMLDivElement | null>(null);
+	let milestoneWrapEl = $state<HTMLDivElement | null>(null);
 
 	function clickTrigger(wrap: HTMLElement | null) {
 		if (!wrap) return;
@@ -93,6 +109,227 @@
 		{ value: "chore", label: "chore" },
 		{ value: "chat", label: "chat" },
 	];
+
+	// ---- Epic ----
+
+	let epicList = $state<{ id: string; title: string }[]>([]);
+	let epicsLoading = $state(false);
+	let epicLoadedProject = $state("");
+
+	async function loadEpics() {
+		const project = task.project || task.id.split("-")[0];
+		if (epicsLoading || epicLoadedProject === project) return;
+		epicsLoading = true;
+		epicLoadedProject = project;
+		try {
+			const res = await fetch(
+				`/api/epics?project=${encodeURIComponent(project)}&status=open`,
+			);
+			if (!res.ok) { epicLoadedProject = ""; return; }
+			const data = await res.json();
+			epicList = (data.epics || []).map((e: any) => ({
+				id: e.id,
+				title: e.title || e.id,
+			}));
+		} catch {
+			epicLoadedProject = "";
+		} finally {
+			epicsLoading = false;
+		}
+	}
+
+	// Pre-load epics when the task changes. untrack prevents epicsLoading/epicLoadedProject
+	// reads inside loadEpics from being tracked as effect dependencies.
+	$effect(() => {
+		void task.id;
+		untrack(() => {
+			epicLoadedProject = "";
+			epicList = [];
+			loadEpics();
+		});
+	});
+
+	const currentEpicId = $derived.by(() => {
+		return task.blocked_by?.find((d) => d.issue_type === "epic")?.id ?? "";
+	});
+
+	const epicGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const opts = epicList.map((e) => ({
+			value: e.id,
+			label: `${e.id} — ${e.title.length > 50 ? e.title.slice(0, 50) + "…" : e.title}`,
+		}));
+		const groups: SearchDropdownGroup[] = [];
+		if (opts.length > 0) groups.push({ label: "Open epics", options: opts });
+		groups.push({
+			label: "Clear",
+			options: [{ value: "", label: "— no epic —" }],
+		});
+		return groups;
+	});
+
+	async function handleEpicChange(epicId: string) {
+		if (epicId === currentEpicId) return;
+		errorMessage = null;
+		try {
+			if (epicId) {
+				const res = await fetch(
+					`/api/tasks/${encodeURIComponent(task.id)}/epic`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ epicId }),
+					},
+				);
+				if (!res.ok) {
+					const payload = await res.json().catch(() => ({}));
+					throw new Error(payload.error || `HTTP ${res.status}`);
+				}
+			} else if (currentEpicId) {
+				const res = await fetch(
+					`/api/tasks/${encodeURIComponent(task.id)}/epic`,
+					{
+						method: "DELETE",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ epicId: currentEpicId }),
+					},
+				);
+				if (!res.ok) {
+					const payload = await res.json().catch(() => ({}));
+					throw new Error(payload.error || `HTTP ${res.status}`);
+				}
+			}
+			// Notify parent — include updated blocked_by so derived currentEpicId updates
+			const updatedBlockedBy = epicId
+				? [
+						...(task.blocked_by?.filter((d) => d.issue_type !== "epic") ??
+							[]),
+						{ id: epicId, issue_type: "epic" },
+					]
+				: (task.blocked_by?.filter((d) => d.issue_type !== "epic") ?? []);
+			onTaskUpdated?.({
+				id: task.id,
+				blocked_by: updatedBlockedBy,
+			} as any);
+		} catch (err: any) {
+			errorMessage = err?.message || "Failed to update epic";
+		}
+	}
+
+	// ---- Milestone (Supabase client milestones) ----
+
+	interface MilestoneOption {
+		id: string;
+		name: string;
+		status: string;
+		linked_tasks?: { id: string }[];
+	}
+
+	let milestoneList = $state<MilestoneOption[]>([]);
+	let milestonesLoading = $state(false);
+	let milestoneLoadedProject = $state("");
+	let currentMilestoneId = $state("");
+
+	async function loadMilestones() {
+		const project = task.project || task.id.split("-")[0];
+		if (milestonesLoading || milestoneLoadedProject === project) return;
+		milestonesLoading = true;
+		milestoneLoadedProject = project;
+		try {
+			const res = await fetch("/api/clients");
+			if (!res.ok) { milestoneLoadedProject = ""; return; }
+			const data = await res.json();
+			const pLower = project.toLowerCase();
+			const projectData = (data.projects || []).find(
+				(p: any) =>
+					(p.projectKey || "").toLowerCase() === pLower ||
+					(p.name || "").toLowerCase() === pLower,
+			);
+			const milestones: MilestoneOption[] = projectData?.milestones || [];
+			milestoneList = milestones;
+			// Detect current milestone from linked_tasks
+			const linked = milestones.find((m) =>
+				(m.linked_tasks || []).some((t) => t.id === task.id),
+			);
+			currentMilestoneId = linked?.id ?? "";
+		} catch {
+			milestoneLoadedProject = "";
+		} finally {
+			milestonesLoading = false;
+		}
+	}
+
+	$effect(() => {
+		void task.id;
+		untrack(() => {
+			milestoneLoadedProject = "";
+			milestoneList = [];
+			currentMilestoneId = "";
+			loadMilestones();
+		});
+	});
+
+	const milestoneGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		if (milestoneList.length === 0) {
+			return [
+				{
+					label: "Milestones",
+					options: milestonesLoading
+						? [{ value: "", label: "Loading…" }]
+						: [{ value: "", label: "No milestones available" }],
+				},
+			];
+		}
+		const open = milestoneList.filter((m) => m.status !== "paid" && m.status !== "closed");
+		const done = milestoneList.filter((m) => m.status === "paid" || m.status === "closed");
+		const toOpt = (m: MilestoneOption) => ({ value: m.id, label: m.name });
+		const groups: SearchDropdownGroup[] = [];
+		if (open.length) groups.push({ label: "Open", options: open.map(toOpt) });
+		if (done.length) groups.push({ label: "Completed", options: done.map(toOpt) });
+		groups.push({ label: "Clear", options: [{ value: "", label: "— no milestone —" }] });
+		return groups;
+	});
+
+	async function handleMilestoneChange(milestoneId: string) {
+		if (milestoneId === currentMilestoneId) return;
+		const project = task.project || task.id.split("-")[0];
+		errorMessage = null;
+		saving = "milestone";
+		try {
+			if (currentMilestoneId) {
+				await fetch("/api/clients", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						action: "unlinkTask",
+						projectKey: project,
+						milestoneId: currentMilestoneId,
+						taskId: task.id,
+					}),
+				});
+			}
+			if (milestoneId) {
+				const res = await fetch("/api/clients", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						action: "linkTask",
+						projectKey: project,
+						milestoneId,
+						taskId: task.id,
+					}),
+				});
+				if (!res.ok) {
+					const payload = await res.json().catch(() => ({}));
+					throw new Error(payload.error || `HTTP ${res.status}`);
+				}
+			}
+			currentMilestoneId = milestoneId;
+		} catch (err: any) {
+			errorMessage = err?.message || "Failed to update milestone";
+		} finally {
+			saving = null;
+		}
+	}
 
 	// ---- Assignee groups (@me, known assignees) ----
 
@@ -139,7 +376,7 @@
 
 	// ---- PUT helper ----
 
-	let saving = $state<"assignee" | "status" | "priority" | "issue_type" | null>(null);
+	let saving = $state<"assignee" | "status" | "priority" | "issue_type" | "milestone" | null>(null);
 	let errorMessage = $state<string | null>(null);
 
 	async function patchTask(
@@ -278,6 +515,12 @@
 	export function openType() {
 		clickTrigger(typeWrapEl);
 	}
+	export function openEpic() {
+		clickTrigger(epicWrapEl);
+	}
+	export function openMilestone() {
+		clickTrigger(milestoneWrapEl);
+	}
 	export function spawn() {
 		spawnAgent();
 	}
@@ -297,6 +540,16 @@
 	const assigneeDisplay = $derived(task.assignee || "— unassigned —");
 	const priorityDisplay = $derived(`P${task.priority ?? "?"}`);
 	const typeDisplay = $derived(task.issue_type || "task");
+	const epicDisplay = $derived(
+		currentEpicId
+			? (epicList.find((e) => e.id === currentEpicId)?.id ?? currentEpicId)
+			: "— no epic —",
+	);
+	const milestoneDisplay = $derived(
+		currentMilestoneId
+			? (milestoneList.find((m) => m.id === currentMilestoneId)?.name ?? currentMilestoneId)
+			: "— no milestone —",
+	);
 </script>
 
 <div class="action-bar" aria-label="Quick actions">
@@ -359,6 +612,35 @@
 			onChange={handleTypeChange}
 		/>
 		{#if saving === "issue_type"}
+			<span class="saving">…</span>
+		{/if}
+	</div>
+
+	<div class="slot slot-picker" bind:this={epicWrapEl}>
+		<span class="kbd-label"><kbd>e</kbd> Epic</span>
+		<SearchDropdown
+			value={currentEpicId}
+			groups={epicGroups}
+			placeholder={epicsLoading ? "Loading…" : "— no epic —"}
+			displayValue={epicDisplay}
+			size="sm"
+			dropup={true}
+			onChange={handleEpicChange}
+		/>
+	</div>
+
+	<div class="slot slot-picker" bind:this={milestoneWrapEl}>
+		<span class="kbd-label"><kbd>m</kbd> Milestone</span>
+		<SearchDropdown
+			value={currentMilestoneId}
+			groups={milestoneGroups}
+			placeholder={milestonesLoading ? "Loading…" : "— no milestone —"}
+			displayValue={milestoneDisplay}
+			size="sm"
+			dropup={true}
+			onChange={handleMilestoneChange}
+		/>
+		{#if saving === "milestone"}
 			<span class="saving">…</span>
 		{/if}
 	</div>

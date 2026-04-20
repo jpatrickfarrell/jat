@@ -15,6 +15,9 @@
 
 	import { flip } from 'svelte/animate';
 	import { fade, slide } from 'svelte/transition';
+
+	// Multiplier for all transition durations — collapses to 0 when reduced motion is preferred
+	const _dur = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
 	import type { AutomationRule, RuleCategory } from '$lib/types/automation';
 	import {
 		getRules,
@@ -167,6 +170,18 @@
 	// Handle rule toggle
 	function handleToggleRule(ruleId: string) {
 		toggleRuleEnabled(ruleId);
+	}
+
+	// Bulk-toggle all visible rules in a category (disable all if all enabled, else enable all)
+	function handleCategoryToggle(category: RuleCategory) {
+		const categoryRules = rulesByCategory.get(category);
+		if (!categoryRules?.length) return;
+		const allEnabled = categoryRules.every(r => r.enabled);
+		for (const rule of categoryRules) {
+			if (allEnabled ? rule.enabled : !rule.enabled) {
+				toggleRuleEnabled(rule.id);
+			}
+		}
 	}
 
 	function clearPendingDelete() {
@@ -429,7 +444,7 @@
 		{@const anyVisibleRules = [...rulesByCategory.values()].some(arr => arr.length > 0)}
 		{#if actualRuleCount === 0}
 			<!-- True empty state: no rules configured yet -->
-			<div class="flex flex-col gap-4 py-8 px-6" transition:fade={{ duration: 150 }}>
+			<div class="flex flex-col gap-4 py-8 px-6" transition:fade={{ duration: 150 * _dur }}>
 				<div class="flex flex-col gap-1.5">
 					<p class="text-sm font-semibold text-base-content/65 m-0">No rules configured</p>
 					<p class="text-xs text-base-content/40 leading-relaxed m-0">Rules watch session output for patterns and fire actions automatically — auto-respond, emit signals, or run commands.</p>
@@ -455,7 +470,7 @@
 			</div>
 		{:else if !anyVisibleRules}
 			<!-- Filtered empty state: rules exist but none match the enabled filter -->
-			<div class="flex items-center gap-2 py-6 px-6 text-xs text-base-content/40" transition:fade={{ duration: 150 }}>
+			<div class="flex items-center gap-2 py-6 px-6 text-xs text-base-content/40" transition:fade={{ duration: 150 * _dur }}>
 				<span>All {actualRuleCount} rule{actualRuleCount !== 1 ? 's' : ''} are disabled —</span>
 				<button class="text-info/70 hover:text-info underline underline-offset-2" onclick={() => showEnabledOnly = false}>show all</button>
 			</div>
@@ -465,20 +480,33 @@
 				{@const categoryRules = rulesByCategory.get(category)}
 				{#if categoryRules && categoryRules.length > 0}
 					{@const meta = getCategoryMeta(category)}
-					<div class="border-b border-base-content/10 last:border-b-0 fade-in-left fade-in-delay-{Math.min(categoryIndex, 12)}" transition:slide={{ duration: 200, axis: 'y' }}>
+					{@const allCatEnabled = categoryRules.every(r => r.enabled)}
+					<div class="border-b border-base-content/10 last:border-b-0 fade-in-left fade-in-delay-{Math.min(categoryIndex, 12)}" transition:slide={{ duration: 200 * _dur, axis: 'y' }}>
 						<div class="flex items-center gap-2 px-4 py-2.5 bg-base-300/50 border-b border-base-content/10">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 {meta.color}">
 								<path stroke-linecap="round" stroke-linejoin="round" d={meta.icon} />
 							</svg>
 							<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">{meta.label}</span>
-							<span class="text-[0.6rem] text-base-content/50 bg-base-100 px-1.5 py-0.5 rounded-lg">{categoryRules.length}</span>
+							<span class="text-[0.6rem] text-base-content/50 bg-base-100 px-1.5 py-0.5 rounded-full">{categoryRules.length}</span>
+							<button
+								role="switch"
+								aria-checked={allCatEnabled}
+								class="ml-auto p-0 bg-transparent border-none cursor-pointer opacity-40 hover:opacity-90 transition-opacity duration-150"
+								onclick={() => handleCategoryToggle(category)}
+								aria-label="{allCatEnabled ? 'Disable' : 'Enable'} all {meta.label} rules"
+								title="{allCatEnabled ? 'Disable' : 'Enable'} all {meta.label} rules"
+							>
+								<span class="flex items-center w-6 h-3.5 rounded-full p-0.5 transition-colors duration-150 {allCatEnabled ? 'bg-success/70' : 'bg-base-content/20'}">
+									<span class="w-2.5 h-2.5 bg-base-content/80 rounded-full transition-transform duration-150 {allCatEnabled ? 'translate-x-2.5' : ''}"></span>
+								</span>
+							</button>
 						</div>
 
 						<div class="flex flex-col">
 							{#each categoryRules as rule (rule.id)}
 								{@const triggerCount = getTriggerCount(rule.id)}
 								<div
-									class="rule-row flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/5 transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-50' : ''} {highlightedRuleId === rule.id ? 'rule-highlighted' : ''}"
+									class="rule-row flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/[0.09] transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-50' : ''} {highlightedRuleId === rule.id ? 'rule-highlighted' : ''}"
 									data-rule-nav-id={rule.id}
 									draggable="true"
 									ondragstart={(e) => handleDragStart(e, rule.id)}
@@ -487,8 +515,8 @@
 									ondrop={(e) => handleDrop(e, rule.id)}
 									ondragend={handleDragEnd}
 									role="group"
-									animate:flip={{ duration: 200 }}
-									transition:slide={{ duration: 150, axis: 'y' }}
+									animate:flip={{ duration: 200 * _dur }}
+									transition:slide={{ duration: 150 * _dur, axis: 'y' }}
 								>
 									<!-- Drag handle -->
 									<div class="flex items-center justify-center w-5 text-base-content/30 cursor-grab transition-colors duration-150 hover:text-base-content/50 active:cursor-grabbing" aria-label="Drag to reorder">
@@ -584,7 +612,7 @@
 
 	<!-- Undo delete toast -->
 	{#if showUndoToast && undoRule}
-		<div class="flex items-center justify-between gap-3 px-4 py-2 border-t border-base-content/[0.08]" style="background: oklch(0.165 0.012 250);" transition:slide={{ duration: 150, axis: 'y' }}>
+		<div class="flex items-center justify-between gap-3 px-4 py-2 border-t border-base-content/[0.08]" style="background: oklch(0.165 0.012 250);" transition:slide={{ duration: 150 * _dur, axis: 'y' }}>
 			<div class="flex items-center gap-2 min-w-0">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 text-base-content/35 flex-shrink-0">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -600,7 +628,7 @@
 
 	<!-- Import success/error messages -->
 	{#if importSuccess}
-		<div role="alert" class="alert alert-success text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 }}>
+		<div role="alert" class="alert alert-success text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 * _dur }}>
 			<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
@@ -608,7 +636,7 @@
 		</div>
 	{/if}
 	{#if importError && !showImportModal}
-		<div role="alert" class="alert alert-error text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 }}>
+		<div role="alert" class="alert alert-error text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 * _dur }}>
 			<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
 			</svg>
@@ -623,7 +651,7 @@
 <!-- Import Modal -->
 {#if showImportModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 bg-base-300/80 flex items-center justify-center z-[1000] backdrop-blur-sm" onclick={handleCancelImport} role="presentation" transition:fade={{ duration: 150 }}>
+	<div class="fixed inset-0 bg-base-300/80 flex items-center justify-center z-[1000] backdrop-blur-sm" onclick={handleCancelImport} role="presentation" transition:fade={{ duration: 150 * _dur }}>
 		<div class="bg-base-200 border border-base-content/20 rounded-xl shadow-2xl min-w-[380px] max-w-[90vw]" role="dialog" tabindex="0" aria-modal="true" aria-labelledby="import-modal-title" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center gap-2.5 px-5 py-4 border-b border-base-content/10 bg-base-300 rounded-t-xl">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[22px] h-[22px] text-success">
@@ -670,7 +698,7 @@
 				</div>
 
 				{#if importError}
-					<div class="alert alert-error py-2.5 px-3.5 text-sm" transition:fade={{ duration: 150 }}>
+					<div class="alert alert-error py-2.5 px-3.5 text-sm" transition:fade={{ duration: 150 * _dur }}>
 						{importError}
 					</div>
 				{/if}

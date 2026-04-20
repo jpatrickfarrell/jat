@@ -174,6 +174,13 @@ export async function PUT({ params, request }) {
 		if (updates.assignee !== undefined) {
 			updateFields.assignee = updates.assignee ? updates.assignee.trim() : '';
 		}
+		// assignee_id must pass through for postgres-backed projects. Without
+		// it, mapRow() joins on the OLD assignee_id → profiles and returns the
+		// stale assignee_name, making assignee-only updates look like no-ops.
+		// This is what was breaking /tasks-fast send+route on meadow tasks.
+		if (updates.assignee_id !== undefined) {
+			updateFields.assignee_id = updates.assignee_id;
+		}
 		if (updates.notes !== undefined) {
 			updateFields.notes = updates.notes ? updates.notes.trim() : '';
 		}
@@ -373,6 +380,12 @@ export async function PATCH({ params, request }) {
 		}
 		if (updates.assignee !== undefined) {
 			updateFields.assignee = updates.assignee ? updates.assignee.trim() : '';
+		}
+		// assignee_id pass-through for postgres-backed projects — without it
+		// the profiles join returns the stale assignee_name. See PUT handler
+		// above for the full explanation.
+		if (updates.assignee_id !== undefined) {
+			updateFields.assignee_id = updates.assignee_id;
 		}
 		if (updates.notes !== undefined) {
 			updateFields.notes = updates.notes ? updates.notes.trim() : '';

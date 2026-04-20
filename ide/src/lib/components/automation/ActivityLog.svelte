@@ -11,6 +11,9 @@
 
 	import { fly, fade, slide } from 'svelte/transition';
 
+	// Multiplier for all transition durations — collapses to 0 when reduced motion is preferred
+	const _dur = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
+
 	/** Activity log entry */
 	export interface ActivityLogEntry {
 		id: string;
@@ -186,7 +189,7 @@
 	<!-- Log table -->
 	<div class="flex-1 overflow-auto min-h-[200px] max-h-[400px]">
 		{#if filteredEntries.length === 0}
-			<div class="flex flex-col items-center justify-center py-10 px-4 gap-2" transition:fade={{ duration: 150 }}>
+			<div class="flex flex-col items-center justify-center py-10 px-4 gap-2" transition:fade={{ duration: 150 * _dur }}>
 				{#if entries.length === 0}
 					<div class="w-2 h-2 rounded-full bg-success/40 animate-pulse-subtle mb-1"></div>
 					<p class="text-sm font-medium text-base-content/45 m-0">Listening</p>
@@ -213,7 +216,7 @@
 						<tr
 							class="transition-colors duration-100 hover:bg-base-300/50"
 							style={entry.result === 'success' ? 'box-shadow: inset 3px 0 0 var(--color-success)' : entry.result === 'failure' ? 'box-shadow: inset 3px 0 0 var(--color-error)' : ''}
-							transition:slide={{ duration: 150, axis: 'y' }}
+							transition:slide={{ duration: 150 * _dur, axis: 'y' }}
 						>
 							<td class="w-[75px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle font-mono text-base-content/60" title={formatTimestampFull(entry.timestamp)}>
 								{formatTimestamp(entry.timestamp)}

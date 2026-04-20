@@ -2215,7 +2215,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								<span class="badge badge-xs bg-primary/30 text-base-content ml-1 normal-case tracking-normal font-normal">{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}</span>
 							{/if}
 						</summary>
-					<div class="mt-2">
+						<div class="mt-2">
 						<!-- Hidden file input -->
 						<input
 							type="file"
@@ -2287,7 +2287,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								{/each}
 							</div>
 						{/if}
-					</div>
+						</div>
 					</details>
 					</section>
 

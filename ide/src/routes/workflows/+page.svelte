@@ -28,6 +28,16 @@
 	// Workflow list
 	let workflows = $state<WorkflowSummary[]>([]);
 	let loadingList = $state(true);
+	let listFilter = $state('');
+	const filteredWorkflows = $derived.by(() => {
+		const q = listFilter.trim().toLowerCase();
+		if (!q) return workflows;
+		return workflows.filter((wf) => {
+			const name = (wf.name ?? '').toLowerCase();
+			const desc = (wf.description ?? '').toLowerCase();
+			return name.includes(q) || desc.includes(q);
+		});
+	});
 
 	// Column sort (component-local, no URL param; null = server order)
 	type WfSortKey = 'name' | 'status' | 'lastRun';
@@ -44,8 +54,8 @@
 	}
 
 	const sortedWorkflows = $derived.by(() => {
-		if (!sortBy) return workflows;
-		const list = [...workflows];
+		if (!sortBy) return filteredWorkflows;
+		const list = [...filteredWorkflows];
 		const key = sortBy;
 		const mult = sortDir === 'asc' ? 1 : -1;
 		list.sort((a, b) => {
@@ -53,8 +63,10 @@
 			if (key === 'name') {
 				cmp = (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' });
 			} else if (key === 'status') {
+				// Active (true) before Off (false) when asc
 				cmp = (a.enabled === b.enabled) ? 0 : a.enabled ? -1 : 1;
 			} else if (key === 'lastRun') {
+				// Missing lastRunAt sorts to end regardless of direction
 				const aT = a.lastRunAt ? Date.parse(a.lastRunAt) : NaN;
 				const bT = b.lastRunAt ? Date.parse(b.lastRunAt) : NaN;
 				const aMissing = Number.isNaN(aT);
@@ -62,6 +74,7 @@
 				if (aMissing && bMissing) cmp = 0;
 				else if (aMissing) return 1;
 				else if (bMissing) return -1;
+				// Most recent first when asc (most useful default)
 				else cmp = bT - aT;
 			}
 			return cmp * mult;
@@ -1488,14 +1501,43 @@
 			class="flex items-center justify-between px-4 py-2 shrink-0 sticky top-0 z-10"
 			style="background: oklch(0.16 0.01 250); border-bottom: 1px solid oklch(0.22 0.02 250)"
 		>
-			<div class="flex items-center gap-2">
-				<span class="text-sm font-semibold" style="color: oklch(0.88 0.02 250)">Workflows</span>
+			<div class="flex items-center gap-2 min-w-0 flex-1">
+				<span class="text-sm font-semibold shrink-0" style="color: oklch(0.88 0.02 250)">Workflows</span>
 				{#if !loadingList}
-					<span class="text-xs tabular-nums" style="color: oklch(0.40 0.02 250)">{workflows.length}</span>
+					<span class="text-xs tabular-nums shrink-0" style="color: oklch(0.40 0.02 250)">
+						{#if listFilter.trim()}
+							{filteredWorkflows.length} of {workflows.length}
+						{:else}
+							{workflows.length}
+						{/if}
+					</span>
 				{/if}
+				<!-- Filter input -->
+				<div class="relative flex-1 max-w-xs ml-2">
+					<input
+						type="text"
+						bind:value={listFilter}
+						placeholder="Filter..."
+						class="w-full text-xs rounded px-2 py-1 pr-6 outline-none focus:outline-none"
+						style="background: oklch(0.12 0.01 250); color: oklch(0.88 0.02 250); border: 1px solid oklch(0.22 0.02 250)"
+					/>
+					{#if listFilter}
+						<button
+							onclick={() => (listFilter = '')}
+							class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded hover:bg-base-300"
+							style="color: oklch(0.55 0.02 250)"
+							title="Clear filter"
+							aria-label="Clear filter"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+								<path d="M6 6l12 12M18 6L6 18" />
+							</svg>
+						</button>
+					{/if}
+				</div>
 			</div>
 			<button
-				class="btn btn-xs gap-1"
+				class="btn btn-xs gap-1 shrink-0"
 				style="background: oklch(0.22 0.05 145); color: oklch(0.80 0.15 145); border: 1px solid oklch(0.30 0.10 145 / 0.5)"
 				onclick={createWorkflow}
 			>
@@ -1536,6 +1578,7 @@
 				>
 					Create one →
 				</button>
+				<span class="text-xs" style="color: oklch(0.35 0.02 250); margin-left: auto;">j/k to navigate · ? for shortcuts</span>
 			</div>
 		{:else}
 			<!-- Column headers -->
@@ -1600,6 +1643,20 @@
 				</button>
 				<span></span>
 			</div>
+
+			<!-- No-match filter state -->
+			{#if filteredWorkflows.length === 0 && listFilter.trim()}
+				<div class="px-4 py-8 flex items-center gap-3" style="border-bottom: 1px solid oklch(0.18 0.01 250)">
+					<span class="text-xs" style="color: oklch(0.40 0.02 250)">No workflows match "{listFilter}".</span>
+					<button
+						class="text-xs underline"
+						style="color: oklch(0.55 0.15 200)"
+						onclick={() => (listFilter = '')}
+					>
+						Clear filter
+					</button>
+				</div>
+			{/if}
 
 			<!-- Workflow rows -->
 			{#each sortedWorkflows as wf (wf.id)}

@@ -206,6 +206,7 @@
 		{ key: 'j / ↓', description: 'Focus next rule' },
 		{ key: 'k / ↑', description: 'Focus previous rule' },
 		{ key: 'Enter', description: 'Edit focused rule' },
+		{ key: 'Space', description: 'Toggle focused rule on/off' },
 		{ key: 'n', description: 'Create new rule' },
 		{ key: 'Escape', description: 'Clear focus' }
 	];
@@ -221,50 +222,74 @@
 </svelte:head>
 
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.14 0.01 250);">
+	<!-- Page-level automation system toggle -->
+	<div class="flex items-center justify-between px-4 py-2.5 border-b border-base-content/[0.08] flex-shrink-0" style="background: oklch(0.165 0.015 250);">
+		<div class="flex items-center gap-2.5">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 transition-colors duration-200 {config.enabled ? 'text-success' : 'text-base-content/30'}">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+			</svg>
+			<span class="text-xs font-semibold uppercase tracking-widest text-base-content/50">Automation</span>
+		</div>
+		<div class="flex items-center gap-3">
+			<span class="text-[0.7rem] font-semibold uppercase tracking-widest transition-colors duration-200 {config.enabled ? 'text-success' : 'text-base-content/30'}">
+				{config.enabled ? 'System On' : 'System Off'}
+			</span>
+			<button
+				role="switch"
+				aria-checked={config.enabled}
+				class="p-0 bg-transparent border-none cursor-pointer"
+				onclick={handleMasterToggle}
+				aria-label={config.enabled ? 'Disable automation system' : 'Enable automation system'}
+				title={config.enabled ? 'Disable all automation rules' : 'Enable all automation rules'}
+			>
+				<span class="flex items-center w-9 h-5 rounded-full p-0.5 transition-colors duration-200 {config.enabled ? 'bg-success' : 'bg-base-content/20'}">
+					<span class="w-4 h-4 bg-white/80 rounded-full shadow-sm transition-transform duration-200 {config.enabled ? 'translate-x-4' : ''}"></span>
+				</span>
+			</button>
+		</div>
+	</div>
+
 	{#if isLoading}
 		<!-- Skeleton Loading State -->
 		<div class="flex-1 p-4 overflow-hidden">
-			<div class="h-full grid grid-cols-1 lg:grid-cols-2 gap-4">
-				<!-- Top Row: Rules List and Presets Picker Skeletons -->
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+				<div class="lg:col-span-2 skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 300px;"></div>
 				<div class="skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 300px;"></div>
-				<div class="skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 300px;"></div>
-
-				<!-- Bottom Row: Pattern Tester and Activity Log Skeletons -->
 				<div class="skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 250px;"></div>
-				<div class="skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 250px;"></div>
+				<div class="lg:col-span-2 skeleton rounded-lg" style="background: oklch(0.18 0.02 250); min-height: 250px;"></div>
 			</div>
 		</div>
 	{:else}
 		<!-- Main Content -->
 		<div class="flex-1 p-4 overflow-auto">
-			<div class="h-full grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-min">
-				<!-- Top Row -->
-				<!-- Rules List (left) -->
-				<div class="min-h-[300px] max-h-[500px] overflow-hidden">
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 auto-rows-min">
+				<!-- RulesList: primary surface, 2/3 width -->
+				<div class="lg:col-span-2 min-h-[300px] overflow-hidden">
 					<RulesList
 						onEditRule={handleEditRule}
 						onAddRule={handleAddRule}
 						{triggerCounts}
+						{highlightedRuleId}
 						class="h-full"
 					/>
 				</div>
 
-				<!-- Presets Picker (right) -->
-				<div class="min-h-[300px] max-h-[500px] overflow-hidden">
+				<!-- PresetsPicker: supplementary, 1/3 width -->
+				<div class="min-h-[300px] overflow-hidden">
 					<PresetsPicker class="h-full" />
 				</div>
 
-				<!-- Bottom Row -->
-				<!-- Pattern Tester (left) -->
+				<!-- PatternTester: supplementary, 1/3 width -->
 				<div class="min-h-[250px] overflow-hidden">
 					<PatternTester rules={testerRules} />
 				</div>
 
-				<!-- Activity Log (right) -->
-				<div class="min-h-[250px] overflow-hidden">
+				<!-- ActivityLog: secondary surface, 2/3 width -->
+				<div class="lg:col-span-2 min-h-[250px] overflow-hidden">
 					<ActivityLog
 						bind:entries={activityEntries}
 						onClear={handleClearLog}
+						onRuleClick={handleRuleClick}
 						class="h-full"
 					/>
 				</div>

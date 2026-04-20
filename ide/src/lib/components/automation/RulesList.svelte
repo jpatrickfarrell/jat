@@ -22,7 +22,6 @@
 		toggleRuleEnabled,
 		deleteRule,
 		reorderRules,
-		toggleAutomation,
 		cloneRule,
 		exportRules,
 		importRules
@@ -36,6 +35,8 @@
 		onAddRule?: () => void;
 		/** Trigger counts per rule ID (from activity tracking) */
 		triggerCounts?: Map<string, number>;
+		/** Highlighted rule ID (from activity log click-through) */
+		highlightedRuleId?: string | null;
 		/** Custom class */
 		class?: string;
 	}
@@ -44,6 +45,7 @@
 		onEditRule = () => {},
 		onAddRule = () => {},
 		triggerCounts = new Map(),
+		highlightedRuleId = null,
 		class: className = ''
 	}: Props = $props();
 
@@ -54,6 +56,13 @@
 	// Drag state
 	let draggedRuleId = $state<string | null>(null);
 	let dragOverRuleId = $state<string | null>(null);
+
+	// Filter state
+	let showEnabledOnly = $state(false);
+
+	// Inline delete confirmation state
+	let pendingDeleteId = $state<string | null>(null);
+	let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Import modal state
 	let showImportModal = $state(false);
@@ -66,9 +75,10 @@
 
 	// Group rules by category
 	const rulesByCategory = $derived.by(() => {
+		const filtered = showEnabledOnly ? rules.filter(r => r.enabled) : rules;
 		const grouped = new Map<RuleCategory, AutomationRule[]>();
 
-		for (const rule of rules) {
+		for (const rule of filtered) {
 			const category = rule.category || 'custom';
 			if (!grouped.has(category)) {
 				grouped.set(category, []);
@@ -150,21 +160,31 @@
 		toggleRuleEnabled(ruleId);
 	}
 
-	// Handle delete rule
+	// Handle delete rule (inline 2-click confirmation, auto-cancels after 3s)
 	function handleDeleteRule(rule: AutomationRule) {
-		if (confirm(`Delete rule "${rule.name}"?`)) {
+		if (pendingDeleteId === rule.id) {
 			deleteRule(rule.id);
+			pendingDeleteId = null;
+			if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+			pendingDeleteTimer = null;
+		} else {
+			if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+			pendingDeleteId = rule.id;
+			pendingDeleteTimer = setTimeout(() => {
+				pendingDeleteId = null;
+				pendingDeleteTimer = null;
+			}, 3000);
 		}
 	}
 
 	// Handle clone rule
 	function handleCloneRule(ruleId: string) {
+		if (pendingDeleteId === ruleId) {
+			pendingDeleteId = null;
+			if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+			pendingDeleteTimer = null;
+		}
 		cloneRule(ruleId);
-	}
-
-	// Handle master toggle
-	function handleMasterToggle() {
-		toggleAutomation();
 	}
 
 	// Get trigger count for a rule
@@ -264,6 +284,14 @@
 		}
 	}
 
+	// Scroll highlighted rule into view when activity log click-through fires
+	$effect(() => {
+		if (highlightedRuleId) {
+			const el = document.querySelector<HTMLElement>(`[data-rule-nav-id="${highlightedRuleId}"]`);
+			el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		}
+	});
+
 	// Cancel import
 	function handleCancelImport() {
 		showImportModal = false;
@@ -281,27 +309,24 @@
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[18px] h-[18px] text-info">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
 			</svg>
-			<span class="text-sm font-semibold text-base-content font-mono">Automation Rules</span>
+			<span class="text-sm font-semibold text-base-content">Automation Rules</span>
 			<span class="text-xs font-normal text-base-content/50 bg-base-100 px-2 py-0.5 rounded-full">{rules.length} rule{rules.length !== 1 ? 's' : ''}</span>
+			<button
+				class="btn btn-xs gap-1 {showEnabledOnly ? 'btn-success' : 'btn-ghost text-base-content/40 hover:text-base-content'}"
+				onclick={() => showEnabledOnly = !showEnabledOnly}
+				title={showEnabledOnly ? 'Show all rules' : 'Show enabled only'}
+				aria-pressed={showEnabledOnly}
+			>
+				{#if showEnabledOnly}
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+					</svg>
+				{/if}
+				Enabled
+			</button>
 		</div>
 
 		<div class="flex items-center gap-3">
-			<!-- Master toggle -->
-			<div class="flex items-center gap-2">
-				<span class="text-xs font-medium font-mono uppercase tracking-wide {config.enabled ? 'text-success' : 'text-base-content/50'}">
-					{config.enabled ? 'Enabled' : 'Disabled'}
-				</span>
-				<button
-					class="p-0 bg-transparent border-none cursor-pointer"
-					onclick={handleMasterToggle}
-					aria-label={config.enabled ? 'Disable automation' : 'Enable automation'}
-				>
-					<span class="flex items-center w-9 h-5 rounded-full p-0.5 transition-colors duration-200 {config.enabled ? 'bg-success' : 'bg-base-content/20'}">
-						<span class="w-4 h-4 bg-base-content/80 rounded-full transition-transform duration-200 {config.enabled ? 'translate-x-4' : ''}"></span>
-					</span>
-				</button>
-			</div>
-
 			<!-- Import/Export buttons -->
 			<div class="flex items-center gap-1">
 				<!-- Hidden file input for import -->
@@ -352,7 +377,7 @@
 	</header>
 
 	<!-- Rules content -->
-	<div class="flex-1 overflow-auto max-h-[500px] transition-opacity duration-200 {config.enabled ? '' : 'opacity-50 pointer-events-none'}">
+	<div class="flex-1 overflow-auto max-h-[65vh] transition-opacity duration-200 {config.enabled ? '' : 'opacity-50 pointer-events-none'}">
 		{#if rules.length === 0}
 			<div class="flex flex-col items-center justify-center py-12 px-4 gap-2 text-base-content/50" transition:fade={{ duration: 150 }}>
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 text-base-content/30 mb-2">
@@ -387,7 +412,7 @@
 							{#each categoryRules as rule (rule.id)}
 								{@const triggerCount = getTriggerCount(rule.id)}
 								<div
-									class="rule-row flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/5 transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-60' : ''}"
+									class="rule-row flex items-center gap-3 px-4 py-2.5 bg-base-200 border-b border-base-content/5 transition-all duration-150 cursor-grab last:border-b-0 hover:bg-base-300 {draggedRuleId === rule.id ? 'opacity-50 bg-base-300' : ''} {dragOverRuleId === rule.id ? 'bg-info/10 border-t-2 border-t-info' : ''} {!rule.enabled ? 'opacity-60' : ''} {highlightedRuleId === rule.id ? 'rule-highlighted' : ''}"
 									data-rule-nav-id={rule.id}
 									draggable="true"
 									ondragstart={(e) => handleDragStart(e, rule.id)}

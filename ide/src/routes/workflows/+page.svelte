@@ -122,7 +122,7 @@
 	let undoStack = $state<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
 	let redoStack = $state<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
 
-	// Canvas ref
+	// Canvas ref (methods exposed via bind:this).
 	let canvasRef:
 		| {
 				fitView: (padding?: number) => void;
@@ -131,29 +131,26 @@
 		  }
 		| undefined = $state();
 
-	// Zoom controls (displayed in toolbar). Kept in sync with canvas via $effect
-	// below; updated eagerly when the user clicks toolbar buttons.
+	// Canvas zoom is bound so the toolbar label updates reactively on wheel zoom.
+	let canvasZoom = $state(1);
+
+	// Toolbar button step; canvas internal limits are wider than these so wheel
+	// zoom can still go beyond, but explicit controls stay in a comfortable range.
 	const ZOOM_STEP = 0.1;
 	const ZOOM_MIN = 0.25;
 	const ZOOM_MAX = 2.0;
-	let zoomDisplay = $state(1);
-
-	function clampZoom(z: number): number {
-		return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
-	}
 
 	function applyZoom(target: number) {
-		const next = clampZoom(Math.round(target * 100) / 100);
+		const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(target * 100) / 100));
 		canvasRef?.setZoom(next);
-		zoomDisplay = canvasRef?.getZoom() ?? next;
 	}
 
 	function zoomIn() {
-		applyZoom((canvasRef?.getZoom() ?? zoomDisplay) + ZOOM_STEP);
+		applyZoom(canvasZoom + ZOOM_STEP);
 	}
 
 	function zoomOut() {
-		applyZoom((canvasRef?.getZoom() ?? zoomDisplay) - ZOOM_STEP);
+		applyZoom(canvasZoom - ZOOM_STEP);
 	}
 
 	function resetZoom() {
@@ -821,6 +818,22 @@
 			return;
 		}
 
+		// Zoom shortcuts work from anywhere in the editor, including while typing.
+		// Ctrl+= (and Ctrl++) zoom in, Ctrl+- zooms out. Covers both the main row
+		// and numpad variants.
+		if ((e.ctrlKey || e.metaKey) && currentId) {
+			if (e.key === '=' || e.key === '+') {
+				e.preventDefault();
+				zoomIn();
+				return;
+			}
+			if (e.key === '-' || e.key === '_') {
+				e.preventDefault();
+				zoomOut();
+				return;
+			}
+		}
+
 		if (typing) return;
 		if (shortcutsOpen) return; // overlay swallows its own keys
 
@@ -913,7 +926,8 @@
 				{ key: 'Ctrl+S', description: 'Save workflow' },
 				{ key: 'Ctrl+Enter', description: 'Run workflow' },
 				{ key: 'Ctrl+Z', description: 'Undo' },
-				{ key: 'Ctrl+Y / Ctrl+Shift+Z', description: 'Redo' }
+				{ key: 'Ctrl+Y / Ctrl+Shift+Z', description: 'Redo' },
+				{ key: 'Ctrl+= / Ctrl+-', description: 'Zoom in / out' }
 			]
 		}
 	];
@@ -1171,6 +1185,40 @@
 				{/if}
 			</div>
 
+			<!-- Zoom controls -->
+			<div class="wf-zoom-controls" style="margin-left: 0.5rem">
+				<button
+					class="wf-zoom-btn"
+					onclick={zoomOut}
+					disabled={canvasZoom <= ZOOM_MIN + 0.001}
+					title="Zoom out (Ctrl+-)"
+					aria-label="Zoom out"
+				>
+					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+						<path d="M5 12h14" stroke-linecap="round" />
+					</svg>
+				</button>
+				<button
+					class="wf-zoom-pct"
+					onclick={resetZoom}
+					title="Reset zoom to 100%"
+					aria-label="Reset zoom to 100 percent"
+				>
+					{Math.round(canvasZoom * 100)}%
+				</button>
+				<button
+					class="wf-zoom-btn"
+					onclick={zoomIn}
+					disabled={canvasZoom >= ZOOM_MAX - 0.001}
+					title="Zoom in (Ctrl+=)"
+					aria-label="Zoom in"
+				>
+					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+						<path d="M12 5v14M5 12h14" stroke-linecap="round" />
+					</svg>
+				</button>
+			</div>
+
 			<!-- Run button -->
 			<button
 				class="btn btn-sm gap-1.5"
@@ -1368,6 +1416,7 @@
 					bind:edges
 					bind:selectedNodeIds
 					bind:selectedEdgeIds
+					bind:zoom={canvasZoom}
 					{nodeStatusOverlay}
 					onNodesChange={handleNodesChange}
 					onEdgesChange={handleEdgesChange}
@@ -1869,6 +1918,61 @@
 {/if}
 
 <style>
+	/* ===== ZOOM CONTROLS ===== */
+
+	.wf-zoom-controls {
+		display: inline-flex;
+		align-items: center;
+		height: 1.75rem;
+		padding: 0 0.125rem;
+		gap: 0.125rem;
+		border-radius: 0.375rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.24 0.02 250);
+	}
+
+	.wf-zoom-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 0.25rem;
+		color: oklch(0.70 0.02 250);
+		background: transparent;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.wf-zoom-btn:hover:not(:disabled) {
+		background: oklch(0.24 0.02 250);
+		color: oklch(0.92 0.02 250);
+	}
+
+	.wf-zoom-btn:disabled {
+		color: oklch(0.35 0.02 250);
+		cursor: not-allowed;
+	}
+
+	.wf-zoom-pct {
+		min-width: 3rem;
+		padding: 0 0.375rem;
+		height: 1.5rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+		color: oklch(0.78 0.02 250);
+		border-radius: 0.25rem;
+		background: transparent;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.wf-zoom-pct:hover {
+		background: oklch(0.24 0.02 250);
+		color: oklch(0.95 0.02 250);
+	}
+
 	/* ===== LIST VIEW ===== */
 
 	.wf-list-grid {

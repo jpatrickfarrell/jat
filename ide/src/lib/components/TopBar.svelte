@@ -1083,6 +1083,11 @@
 	.fav-chips-scroll::-webkit-scrollbar {
 		display: none; /* Chrome/Safari */
 	}
+	/* Right-align chips when they fit so they sit adjacent to the right cluster.
+	   When chips overflow, the auto margin resolves to 0 and horizontal scroll works normally. */
+	.fav-chips-scroll > :first-child {
+		margin-inline-start: auto;
+	}
 
 	/* Drag feedback */
 	.fav-dragging {

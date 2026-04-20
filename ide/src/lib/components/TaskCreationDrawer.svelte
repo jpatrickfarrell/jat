@@ -12,6 +12,7 @@
 	 */
 
 	import { tick, onDestroy, untrack } from 'svelte';
+	import { fly, fade } from 'svelte/transition';
 
 	import { get } from 'svelte/store';
 	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText, initialIssueType, initialScheduleType, drawerCreationMode, type DrawerCreationMode } from '$lib/stores/drawerStore';
@@ -810,15 +811,23 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				suggestionReasoning = suggestions.reasoning || '';
 				suggestionsApplied = true;
 
-				// Flash the fields that AI populated
+				// Flash fields sequentially — scanner effect (90ms stagger per field)
 				const flashSet = new Set<string>();
 				if (!userModifiedFields.has('type') && suggestions.type) flashSet.add('type');
 				if (!userModifiedFields.has('priority') && suggestions.priority !== undefined) flashSet.add('priority');
 				if (!userModifiedFields.has('labels') && suggestions.labels?.length > 0) flashSet.add('labels');
 				if (!userModifiedFields.has('bases') && suggestions.bases?.length > 0) flashSet.add('bases');
 				if (flashSet.size > 0) {
-					aiFlashFields = flashSet;
-					setTimeout(() => { aiFlashFields = new Set(); }, 600);
+					const scanOrder = ['type', 'priority', 'labels', 'bases'];
+					let delay = 0;
+					aiFlashFields = new Set();
+					for (const field of scanOrder) {
+						if (flashSet.has(field)) {
+							setTimeout(() => { aiFlashFields = new Set([...aiFlashFields, field]); }, delay);
+							delay += 90;
+						}
+					}
+					setTimeout(() => { aiFlashFields = new Set(); }, delay + 450);
 				}
 			}
 		} catch (err: any) {
@@ -1798,7 +1807,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					>
 						{tab.label}
 						{#if activeMode === tab.id}
-							<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+							<div transition:fade={{ duration: 120 }} class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
 						{/if}
 					</button>
 				{/each}
@@ -2382,6 +2391,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								<div class="space-y-2 p-2 rounded bg-base-200">
 									{#each selectedDependencies as dep (dep.id)}
 										<div
+											in:fly={{ y: -6, duration: 140, opacity: 0 }}
 											class="flex items-center gap-2 text-sm p-2 rounded group bg-base-100 border-l-2 border-primary/30"
 										>
 											<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">

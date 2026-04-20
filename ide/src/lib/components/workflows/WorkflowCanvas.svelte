@@ -12,6 +12,7 @@
 		selectedNodeIds = $bindable<Set<string>>(new Set()),
 		selectedEdgeIds = $bindable<Set<string>>(new Set()),
 		gridSnap = $bindable(false),
+		zoom = $bindable(1),
 		gridSize = 20,
 		readonly = false,
 		nodeStatusOverlay = null,
@@ -24,6 +25,7 @@
 		selectedNodeIds?: Set<string>;
 		selectedEdgeIds?: Set<string>;
 		gridSnap?: boolean;
+		zoom?: number;
 		gridSize?: number;
 		readonly?: boolean;
 		nodeStatusOverlay?: Record<string, string> | null;
@@ -91,7 +93,6 @@
 
 	let panX = $state(0);
 	let panY = $state(0);
-	let zoom = $state(1);
 	let containerEl: HTMLDivElement | undefined = $state();
 	let containerRect = $state({ left: 0, top: 0, width: 0, height: 0 });
 

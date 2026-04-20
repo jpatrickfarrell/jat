@@ -1646,10 +1646,9 @@
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		/* Enter/exit transition covers task jat-nm0nq.7 polish — defined here so
-		   later animation work can just tune easing/duration. */
-		transition: grid-template-columns 200ms
-			cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		/* Note: grid-template-columns is intentionally not transitioned.
+		   Browsers can't interpolate between mismatched track unit types
+		   (1fr vs percentage+px), which freezes the computed layout. */
 	}
 
 	.tasks-fast-layout.list-only {
@@ -1660,9 +1659,8 @@
 		grid-template-columns: var(--split-left, 38%) 6px 1fr;
 	}
 
-	/* Disable animation during drag so the resize feels direct. */
+	/* While dragging, prevent text selection and show the resize cursor everywhere. */
 	.tasks-fast-layout.resizing {
-		transition: none;
 		cursor: col-resize;
 		user-select: none;
 	}
@@ -1678,12 +1676,6 @@
 		.detail-panel,
 		.divider-handle {
 			display: none;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.tasks-fast-layout {
-			transition: none;
 		}
 	}
 

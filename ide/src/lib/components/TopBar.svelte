@@ -1509,6 +1509,12 @@
 		visibility: hidden;
 		pointer-events: none;
 	}
+	/* On narrow, Activity/Servers badges are hidden, so no shift to prevent — collapse fully. */
+	@media (max-width: 1023.98px) {
+		.swarm-slot-hidden {
+			display: none;
+		}
+	}
 
 	/* ── Chip drag affordance ── */
 	.fav-drag-handle {

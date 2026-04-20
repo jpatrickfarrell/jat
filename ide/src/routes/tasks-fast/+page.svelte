@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 	import { fly, slide } from "svelte/transition";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
@@ -95,12 +95,25 @@
 	const UNDO_MS = 4000;
 
 	// Filter + sort state — hydrated from URL on mount.
-	let filterStatuses = $state<Set<string>>(new Set(DEFAULT_STATUSES));
-	let filterPriorities = $state<Set<number>>(new Set());
+	// Using sorted string arrays instead of Sets because Svelte 5.41 does not
+	// track SvelteSet/Set method calls (.has, .size) from $derived.by across
+	// mutations. Plain arrays with $state work reliably.
+	let filterStatuses = $state<string[]>([...DEFAULT_STATUSES]);
+	let filterPriorities = $state<number[]>([]);
 	let filterProject = $state<string>("");
 	type SortBy = "priority" | "age" | "updated" | "status";
+	type SortDir = "asc" | "desc";
+	// Default direction per sort type — clicking a NEW sort chip resets to this;
+	// clicking the CURRENT sort chip toggles direction.
+	const DEFAULT_SORT_DIR: Record<SortBy, SortDir> = {
+		priority: "asc", // P0 first
+		age: "asc", // oldest (been waiting longest) first
+		updated: "desc", // most recently updated first
+		status: "asc", // submitted → open → in_progress → waiting
+	};
 	let sortBy = $state<SortBy>("priority");
-	let filterTypes = $state<Set<string>>(new Set());
+	let sortDir = $state<SortDir>(DEFAULT_SORT_DIR.priority);
+	let filterTypes = $state<string[]>([]);
 	let filterAssignee = $state<string>("");
 	let filterSearch = $state<string>("");
 	let hydrated = $state(false);
@@ -143,30 +156,48 @@
 	});
 
 	const filteredTasks = $derived.by<Task[]>(() => {
-		const meName = currentUser.toLowerCase();
-		const search = filterSearch.trim().toLowerCase();
-		const assigneeRaw = filterAssignee.trim().toLowerCase();
+		// IMPORTANT: snapshot every reactive dependency at the top level of
+		// the derivation. Svelte 5's runes mode does NOT reliably track $state
+		// reads that only occur inside nested callbacks (e.g. inside a
+		// `tasks.filter((t) => { ... filterStatuses.includes(t.status) ... })`).
+		// Without these top-level reads, the derivation establishes deps only
+		// on `tasks` and `currentUser`, and silently stops re-running when the
+		// filter arrays or sortBy change — even though the URL-sync $effect
+		// and template-level `{@const}` expressions (which ARE top-level reads)
+		// continue to fire. This is the root cause of "chip toggles but list
+		// doesn't filter" on this page.
+		const _tasks = tasks;
+		const _statuses = filterStatuses;
+		const _priorities = filterPriorities;
+		const _types = filterTypes;
+		const _project = filterProject;
+		const _assignee = filterAssignee;
+		const _search = filterSearch;
+		const _sort = sortBy;
+		const _dir = sortDir;
+		const _user = currentUser;
+
+		const meName = _user.toLowerCase();
+		const search = _search.trim().toLowerCase();
+		const assigneeRaw = _assignee.trim().toLowerCase();
 		const assigneeMatch =
 			assigneeRaw === "@me" && meName ? meName : assigneeRaw;
 
-		const filtered = tasks.filter((t) => {
-			if (filterStatuses.size > 0 && !filterStatuses.has(t.status)) {
+		const filtered = _tasks.filter((t) => {
+			if (_statuses.length > 0 && !_statuses.includes(t.status)) {
 				return false;
 			}
 			if (
-				filterPriorities.size > 0 &&
-				!filterPriorities.has(t.priority ?? -1)
+				_priorities.length > 0 &&
+				!_priorities.includes(t.priority ?? -1)
 			) {
 				return false;
 			}
-			if (filterProject) {
+			if (_project) {
 				const p = t.project || getProjectFromTaskId(t.id) || "";
-				if (p !== filterProject) return false;
+				if (p !== _project) return false;
 			}
-			if (
-				filterTypes.size > 0 &&
-				!filterTypes.has(t.issue_type ?? "task")
-			) {
+			if (_types.length > 0 && !_types.includes(t.issue_type ?? "task")) {
 				return false;
 			}
 			if (assigneeMatch) {
@@ -186,23 +217,31 @@
 			submitted: 0, open: 1, in_progress: 2, waiting: 3,
 		};
 
+		// Comparators always return ascending-direction (-1 → a before b). The
+		// dirMul flips the result when the user wants descending, keeping the
+		// sort functions themselves simple.
+		const dirMul = _dir === "asc" ? 1 : -1;
 		filtered.sort((a, b) => {
-			if (sortBy === "age") {
-				return (a.created_at ?? "").localeCompare(b.created_at ?? "");
-			}
-			if (sortBy === "updated") {
-				return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
-			}
-			if (sortBy === "status") {
+			let cmp: number;
+			if (_sort === "age") {
+				cmp = (a.created_at ?? "").localeCompare(b.created_at ?? "");
+			} else if (_sort === "updated") {
+				cmp = (a.updated_at ?? "").localeCompare(b.updated_at ?? "");
+			} else if (_sort === "status") {
 				const sa = STATUS_ORDER[a.status] ?? 9;
 				const sb = STATUS_ORDER[b.status] ?? 9;
-				if (sa !== sb) return sa - sb;
-				return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+				cmp = sa !== sb
+					? sa - sb
+					: (a.created_at ?? "").localeCompare(b.created_at ?? "");
+			} else {
+				// priority → age (tie-break)
+				const pa = a.priority ?? 99;
+				const pb = b.priority ?? 99;
+				cmp = pa !== pb
+					? pa - pb
+					: (a.created_at ?? "").localeCompare(b.created_at ?? "");
 			}
-			// default: priority → age
-			const pa = a.priority ?? 99, pb = b.priority ?? 99;
-			if (pa !== pb) return pa - pb;
-			return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+			return cmp * dirMul;
 		});
 
 		return filtered;
@@ -220,13 +259,13 @@
 
 	const hasActiveFilters = $derived.by(() => {
 		const statusDefault =
-			filterStatuses.size === DEFAULT_STATUSES.size &&
-			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+			filterStatuses.length === DEFAULT_STATUSES.size &&
+			filterStatuses.every((s) => DEFAULT_STATUSES.has(s));
 		return (
 			!statusDefault ||
-			filterPriorities.size > 0 ||
+			filterPriorities.length > 0 ||
 			filterProject !== "" ||
-			filterTypes.size > 0 ||
+			filterTypes.length > 0 ||
 			filterAssignee.trim() !== "" ||
 			filterSearch.trim() !== "" ||
 			sortBy !== "priority"
@@ -239,16 +278,16 @@
 	const filterSummaryChips = $derived.by<string[]>(() => {
 		const chips: string[] = [];
 		const statusDefault =
-			filterStatuses.size === DEFAULT_STATUSES.size &&
-			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+			filterStatuses.length === DEFAULT_STATUSES.size &&
+			filterStatuses.every((s) => DEFAULT_STATUSES.has(s));
 		if (!statusDefault) {
 			chips.push(
-				filterStatuses.size === 0
+				filterStatuses.length === 0
 					? "status: none"
 					: `status: ${[...filterStatuses].sort().map(displayStatus).join(",")}`,
 			);
 		}
-		if (filterPriorities.size > 0) {
+		if (filterPriorities.length > 0) {
 			chips.push(
 				`priority: ${[...filterPriorities]
 					.sort((a, b) => a - b)
@@ -257,7 +296,7 @@
 			);
 		}
 		if (filterProject) chips.push(`project: ${filterProject}`);
-		if (filterTypes.size > 0) {
+		if (filterTypes.length > 0) {
 			chips.push(`type: ${[...filterTypes].sort().join(",")}`);
 		}
 		if (filterAssignee.trim()) {
@@ -439,9 +478,7 @@
 	// detail panel reflect it instantly. If the updated task drops out of the
 	// active filter, the $effect above will clamp selectedIdx on the next tick.
 	function handleTaskUpdated(patch: Partial<Task> & { id: string }) {
-		const idx = tasks.findIndex((t) => t.id === patch.id);
-		if (idx < 0) return;
-		tasks[idx] = { ...tasks[idx], ...patch };
+		tasks = tasks.map((t) => (t.id === patch.id ? { ...t, ...patch } : t));
 	}
 
 	// When a task is dismissed (closed), drop it from the list and advance to
@@ -705,13 +742,13 @@
 		const statusRaw = searchParams.get("status");
 		// Distinguish "no param" (use defaults) from "empty param" (no statuses).
 		if (statusRaw === null) {
-			filterStatuses = new Set(DEFAULT_STATUSES);
+			filterStatuses = [...DEFAULT_STATUSES];
 		} else {
-			filterStatuses = parseSet(statusRaw, FETCH_STATUSES);
+			filterStatuses = [...parseSet(statusRaw, FETCH_STATUSES)];
 		}
-		filterPriorities = parsePrioritySet(searchParams.get("priority"));
+		filterPriorities = [...parsePrioritySet(searchParams.get("priority"))];
 		filterProject = searchParams.get("project") ?? "";
-		filterTypes = parseSet(searchParams.get("type"), TYPE_OPTIONS);
+		filterTypes = [...parseSet(searchParams.get("type"), TYPE_OPTIONS)];
 		filterAssignee = searchParams.get("assignee") ?? "";
 		const rawSort = searchParams.get("sort");
 		sortBy = (["priority", "age", "updated", "status"].includes(rawSort ?? "") ? rawSort : "priority") as SortBy;
@@ -724,12 +761,12 @@
 		// Only encode status when it diverges from the default set, so a clean URL
 		// stays clean and shared URLs only carry user intent.
 		const statusEqualsDefault =
-			filterStatuses.size === DEFAULT_STATUSES.size &&
-			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+			filterStatuses.length === DEFAULT_STATUSES.size &&
+			filterStatuses.every((s) => DEFAULT_STATUSES.has(s));
 		if (!statusEqualsDefault) {
 			sp.set("status", [...filterStatuses].sort().join(","));
 		}
-		if (filterPriorities.size > 0) {
+		if (filterPriorities.length > 0) {
 			sp.set(
 				"priority",
 				[...filterPriorities].sort((a, b) => a - b).join(","),
@@ -737,7 +774,7 @@
 		}
 		if (filterProject) sp.set("project", filterProject);
 		if (sortBy !== "priority") sp.set("sort", sortBy);
-		if (filterTypes.size > 0) {
+		if (filterTypes.length > 0) {
 			sp.set("type", [...filterTypes].sort().join(","));
 		}
 		if (filterAssignee.trim()) sp.set("assignee", filterAssignee.trim());
@@ -748,41 +785,47 @@
 
 	// Sync filter state → URL after hydration. replaceState avoids piling each
 	// keystroke onto history.
+	//
+	// IMPORTANT: $page.url is read inside untrack() so this effect only depends
+	// on filter state, not on URL. Depending on both caused an infinite loop:
+	// goto() updated $page.url, the effect re-fired, and with URL param order
+	// drift from layout-level gotos (e.g. project restoration) the comparison
+	// never settled — the browser would throw "Too many calls to Location or
+	// History APIs" and the whole reactive flush would stall, preventing
+	// $derived.by(filteredTasks) from running on subsequent filter changes.
 	$effect(() => {
 		if (!hydrated || !browser) return;
 		const next = buildSearchParams().toString();
-		const current = $page.url.searchParams.toString();
+		const pathname = untrack(() => $page.url.pathname);
+		const current = untrack(() => $page.url.searchParams.toString());
 		if (next === current) return;
-		const target = next
-			? `${$page.url.pathname}?${next}`
-			: $page.url.pathname;
+		const target = next ? `${pathname}?${next}` : pathname;
 		goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 	});
 
 	// ---- Filter toggle helpers ----
 
-	function toggleSetItem<T>(set: Set<T>, item: T): Set<T> {
-		const next = new Set(set);
-		if (next.has(item)) next.delete(item);
-		else next.add(item);
-		return next;
-	}
-
 	function toggleStatus(s: string) {
-		filterStatuses = toggleSetItem(filterStatuses, s);
+		filterStatuses = filterStatuses.includes(s)
+			? filterStatuses.filter((x) => x !== s)
+			: [...filterStatuses, s];
 	}
 	function togglePriority(p: number) {
-		filterPriorities = toggleSetItem(filterPriorities, p);
+		filterPriorities = filterPriorities.includes(p)
+			? filterPriorities.filter((x) => x !== p)
+			: [...filterPriorities, p];
 	}
 	function toggleType(t: string) {
-		filterTypes = toggleSetItem(filterTypes, t);
+		filterTypes = filterTypes.includes(t)
+			? filterTypes.filter((x) => x !== t)
+			: [...filterTypes, t];
 	}
 
 	function clearAllFilters() {
-		filterStatuses = new Set(DEFAULT_STATUSES);
-		filterPriorities = new Set();
+		filterStatuses = [...DEFAULT_STATUSES];
+		filterPriorities = [];
 		filterProject = "";
-		filterTypes = new Set();
+		filterTypes = [];
 		filterAssignee = "";
 		filterSearch = "";
 		sortBy = "priority";
@@ -873,7 +916,7 @@
 				<div class="chip-group" aria-label="Status">
 					<span class="filter-label">Status</span>
 					{#each STATUS_OPTIONS as status}
-						{@const active = filterStatuses.has(status)}
+						{@const active = filterStatuses.includes(status)}
 						<button
 							type="button"
 							class="chip"
@@ -890,7 +933,7 @@
 				<div class="chip-group" aria-label="Priority">
 					<span class="filter-label">Priority</span>
 					{#each PRIORITY_OPTIONS as p}
-						{@const active = filterPriorities.has(p)}
+						{@const active = filterPriorities.includes(p)}
 						<button
 							type="button"
 							class="chip chip-priority"
@@ -909,7 +952,7 @@
 				<div class="chip-group chip-group-types" aria-label="Type">
 					<span class="filter-label">Type</span>
 					{#each TYPE_OPTIONS as type}
-						{@const active = filterTypes.has(type)}
+						{@const active = filterTypes.includes(type)}
 						<button
 							type="button"
 							class="chip chip-type"
@@ -986,8 +1029,9 @@
 				</button>
 			</div>
 		{:else if tasks.length === 0}
-			<div class="state-message">
-				Your inbox is empty.
+			<div class="state-message inbox-zero" transition:fly={{ y: -8, duration: 350 }}>
+				<span class="inbox-zero-check" aria-hidden="true">✓</span>
+				<span class="inbox-zero-label">all clear</span>
 			</div>
 		{:else if filteredTasks.length === 0}
 			<div class="state-message state-muted">
@@ -1100,7 +1144,7 @@
 								<button
 									class="inbox-stat-row"
 									class:inbox-stat-submitted={s === "submitted"}
-									onclick={() => { filterStatuses = new Set([s]); }}
+									onclick={() => { filterStatuses = [s]; }}
 									title="Filter to {displayStatus(s)}"
 									type="button"
 								>
@@ -1370,11 +1414,12 @@
 		text-align: left;
 		font-size: 0.8125rem;
 		color: inherit;
-		transition: background-color 0.1s ease;
+		transition: background-color 0.1s ease, border-left-color 0.15s ease;
 	}
 
 	.task-row:hover {
 		background: oklch(0.22 0.02 250 / 0.5);
+		border-left-color: oklch(0.70 0.18 240 / 0.22);
 	}
 
 	.task-row.selected {
@@ -1397,14 +1442,20 @@
 		0% {
 			background: oklch(0.65 0.20 145 / 0.35);
 			border-left-color: oklch(0.70 0.22 145);
+			box-shadow: inset 5px 0 14px oklch(0.70 0.22 145 / 0.30);
+		}
+		40% {
+			box-shadow: inset 3px 0 8px oklch(0.70 0.22 145 / 0.15);
 		}
 		60% {
 			background: oklch(0.65 0.20 145 / 0.15);
 			border-left-color: oklch(0.70 0.22 145 / 0.7);
+			box-shadow: none;
 		}
 		100% {
 			background: transparent;
 			border-left-color: transparent;
+			box-shadow: none;
 		}
 	}
 
@@ -1532,6 +1583,40 @@
 
 	.state-error .btn {
 		margin-top: 0.75rem;
+	}
+
+	.inbox-zero {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.inbox-zero-check {
+		font-size: 1.5rem;
+		line-height: 1;
+		color: oklch(0.70 0.22 145);
+		animation: inbox-zero-arrive 0.45s cubic-bezier(0.25, 1, 0.5, 1) both;
+	}
+
+	.inbox-zero-label {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.15em;
+		text-transform: uppercase;
+		color: oklch(0.70 0.22 145);
+		opacity: 0.65;
+	}
+
+	@keyframes inbox-zero-arrive {
+		0%   { transform: scale(0.5); opacity: 0; }
+		70%  { transform: scale(1.2); }
+		100% { transform: scale(1);   opacity: 1; }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.inbox-zero-check { animation: none; }
 	}
 
 	/* ---- Undo toast ---- */

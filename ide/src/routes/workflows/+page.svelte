@@ -16,6 +16,10 @@
 	import RunHistory from '$lib/components/workflows/RunHistory.svelte';
 	import RunDetail from '$lib/components/workflows/RunDetail.svelte';
 	import { getCategorizedNodes, getNodeMeta, type NodeTypeMeta } from '$lib/config/workflowNodes';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay, {
+		type ShortcutSection
+	} from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// =========================================================================
 	// STATE
@@ -585,11 +589,43 @@
 	// KEYBOARD SHORTCUTS
 	// =========================================================================
 
+	// Keyboard nav for list view — j/k walk the filtered workflow rows.
+	let shortcutsOpen = $state(false);
+	const listNavController = createListNav({
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		onSelect: (el) => {
+			const id = el.dataset.navId;
+			if (id) loadWorkflow(id);
+		},
+		wraparound: true
+	});
+
+	// Cycle node selection in editor view — Tab forward, Shift+Tab back.
+	function cycleNodeSelection(direction: 1 | -1) {
+		if (nodes.length === 0) return;
+		const currentIdx =
+			selectedNodeIds.size === 1
+				? nodes.findIndex((n) => selectedNodeIds.has(n.id))
+				: -1;
+		const len = nodes.length;
+		const nextIdx = currentIdx < 0
+			? (direction === 1 ? 0 : len - 1)
+			: (currentIdx + direction + len) % len;
+		const nextNode = nodes[nextIdx];
+		if (!nextNode) return;
+		selectedNodeIds = new Set([nextNode.id]);
+		selectedEdgeIds = new Set();
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		const tag = (e.target as HTMLElement)?.tagName;
+		const typing =
+			tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+			(e.target instanceof HTMLElement && e.target.isContentEditable);
 
-		// Ctrl+S and Ctrl+Enter should work even from inputs
+		// Ctrl+S and Ctrl+Enter work even from inputs (editor view only for Ctrl+Enter).
 		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+			if (!currentId) return; // no workflow open — let browser handle
 			e.preventDefault();
 			if (autoSaveTimer) clearTimeout(autoSaveTimer);
 			saveWorkflow();
@@ -601,9 +637,39 @@
 			return;
 		}
 
-		// Ignore other shortcuts if typing in an input
-		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+		if (typing) return;
+		if (shortcutsOpen) return; // overlay swallows its own keys
 
+		// --- LIST VIEW ------------------------------------------------------
+		if (!currentId) {
+			// j/k/Arrow/Enter handled by listNav; Escape clears focus (default).
+			if (listNavController.handleKeydown(e)) return;
+			if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key === 'n') {
+				e.preventDefault();
+				createWorkflow();
+			}
+			return;
+		}
+
+		// --- EDITOR VIEW ----------------------------------------------------
+		// Escape returns to list (but not while a modal or config panel is open).
+		if (e.key === 'Escape') {
+			if (showDeleteConfirm) { e.preventDefault(); showDeleteConfirm = false; return; }
+			if (configPanelOpen) { e.preventDefault(); configPanelOpen = false; return; }
+			e.preventDefault();
+			backToList();
+			return;
+		}
+
+		// Tab cycles through nodes (treat as ordered list).
+		if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			if (nodes.length === 0) return;
+			e.preventDefault();
+			cycleNodeSelection(e.shiftKey ? -1 : 1);
+			return;
+		}
+
+		// Undo/redo/delete (editor only, no modifier means plain key).
 		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
 			e.preventDefault();
 			undo();
@@ -629,6 +695,39 @@
 			}
 		}
 	}
+
+	// Keep the listNav focus class in sync after filtered list changes.
+	$effect(() => {
+		if (!currentId && workflows.length > 0) {
+			// Re-query items after DOM updates.
+			queueMicrotask(() => listNavController.refresh());
+		}
+	});
+
+	const shortcutSections: ShortcutSection[] = [
+		{
+			title: 'Workflow List',
+			shortcuts: [
+				{ key: 'j / ↓', description: 'Focus next workflow' },
+				{ key: 'k / ↑', description: 'Focus previous workflow' },
+				{ key: 'Enter', description: 'Open focused workflow' },
+				{ key: 'n', description: 'Create new workflow' }
+			]
+		},
+		{
+			title: 'Workflow Editor',
+			shortcuts: [
+				{ key: 'Tab', description: 'Select next node' },
+				{ key: 'Shift+Tab', description: 'Select previous node' },
+				{ key: 'Esc', description: 'Back to workflow list' },
+				{ key: 'Del / ⌫', description: 'Delete selected node(s) or edge(s)' },
+				{ key: 'Ctrl+S', description: 'Save workflow' },
+				{ key: 'Ctrl+Enter', description: 'Run workflow' },
+				{ key: 'Ctrl+Z', description: 'Undo' },
+				{ key: 'Ctrl+Y / Ctrl+Shift+Z', description: 'Redo' }
+			]
+		}
+	];
 
 	// =========================================================================
 	// EXECUTION LOG HELPERS
@@ -1289,6 +1388,7 @@
 			{#each workflows as wf}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
+					data-nav-id={wf.id}
 					class="wf-list-row grid wf-list-grid px-4 py-2 cursor-pointer"
 					onclick={() => loadWorkflow(wf.id)}
 					oncontextmenu={(e) => handleCardContextMenu(wf, e)}
@@ -1413,6 +1513,9 @@
 </div>
 {/if}
 
+<!-- ===== KEYBOARD SHORTCUTS OVERLAY ===== -->
+<KeyboardShortcutsOverlay bind:open={shortcutsOpen} sections={shortcutSections} />
+
 <!-- ===== DELETE CONFIRMATION MODAL ===== -->
 {#if showDeleteConfirm}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1474,6 +1577,15 @@
 
 	.wf-list-row:hover {
 		background: oklch(0.17 0.01 250);
+	}
+
+	.wf-list-row.jk-focused {
+		background: oklch(0.19 0.02 250);
+		box-shadow: inset 2px 0 0 oklch(0.60 0.15 200);
+	}
+
+	.wf-list-row.jk-focused .wf-row-actions {
+		opacity: 1;
 	}
 
 	.wf-row-actions {

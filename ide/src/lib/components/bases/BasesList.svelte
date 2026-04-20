@@ -354,6 +354,7 @@
 					{#each systemBases as base (base.id)}
 						<button
 							type="button"
+							data-nav-id={base.id}
 							class="flex items-center gap-2 px-3 py-2 rounded w-full text-left transition-all duration-150"
 							style="
 								background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};
@@ -407,6 +408,7 @@
 
 {#snippet baseItem(base: KnowledgeBase)}
 	<button type="button"
+		data-nav-id={base.id}
 		class="group flex items-start gap-2 px-2 py-2 rounded cursor-pointer w-full text-left transition-all duration-150"
 		style="
 			background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};

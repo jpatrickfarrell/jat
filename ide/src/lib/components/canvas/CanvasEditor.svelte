@@ -466,6 +466,8 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="canvas-block-wrapper group"
+							data-canvas-block={block.id}
+							tabindex="-1"
 							class:dragging={draggedIndex === i}
 							class:drop-above={dropTargetIndex === i && draggedIndex !== null && draggedIndex > i}
 							class:drop-below={dropTargetIndex === i && draggedIndex !== null && draggedIndex < i}
@@ -589,6 +591,13 @@
 	.canvas-block-wrapper.dragging {
 		opacity: 0.4;
 		transform: scale(0.98);
+	}
+
+	/* Keyboard focus ring for Tab navigation */
+	.canvas-block-wrapper:focus-visible,
+	.canvas-block-wrapper.jk-focused {
+		outline: 2px solid oklch(0.70 0.18 240 / 0.6);
+		outline-offset: 2px;
 	}
 
 	/* Drop indicators on blocks */

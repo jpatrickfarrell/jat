@@ -28,6 +28,7 @@
 	import { getCellStyle, cellStyleToCSS, computeColumnRange } from '$lib/utils/conditionalFormat';
 	import ConditionalFormatPanel from '$lib/components/data/ConditionalFormatPanel.svelte';
 	import { swipe } from '$lib/actions/swipe';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	interface TableInfo {
 		name: string;
@@ -1466,17 +1467,37 @@
 		if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
 	}
 
-	// Ctrl+\ toggles the table list panel
+	// Ctrl+\ toggles the table list panel; Tab cycles through project tables
+	// (only when not editing a cell, not typing, and no cell is selected —
+	// preserves existing cell-level Tab behavior inside the table).
 	onMount(() => {
-		function handlePanelToggle(e: KeyboardEvent) {
+		function isTypingTarget(target: EventTarget | null): boolean {
+			if (!(target instanceof HTMLElement)) return false;
+			const tag = target.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+			return target.isContentEditable;
+		}
+		function handleGlobalKeydown(e: KeyboardEvent) {
 			if (e.ctrlKey && e.key === '\\') {
 				e.preventDefault();
 				sidebarCollapsed = !sidebarCollapsed;
 				if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+				return;
+			}
+			if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+				if (isTypingTarget(e.target)) return;
+				if (selectedCell) return; // inside table cell navigation
+				if (sortedTables.length === 0) return;
+				e.preventDefault();
+				const names = sortedTables.map((t) => t.name);
+				const idx = selectedTable ? names.indexOf(selectedTable) : -1;
+				const delta = e.shiftKey ? -1 : 1;
+				const next = names[(idx + delta + names.length) % names.length];
+				if (next) selectTable(next);
 			}
 		}
-		window.addEventListener('keydown', handlePanelToggle, true);
-		return () => window.removeEventListener('keydown', handlePanelToggle, true);
+		window.addEventListener('keydown', handleGlobalKeydown, true);
+		return () => window.removeEventListener('keydown', handleGlobalKeydown, true);
 	});
 
 	function setTableSort(mode: TableSortMode) {
@@ -2037,12 +2058,14 @@
 
 		switch (e.key) {
 			case 'ArrowUp':
+			case 'k':
 				e.preventDefault();
 				if (selectedCell.rowIdx > 0) {
 					selectedCell = { rowIdx: selectedCell.rowIdx - 1, colIdx: selectedCell.colIdx };
 				}
 				break;
 			case 'ArrowDown':
+			case 'j':
 				e.preventDefault();
 				if (selectedCell.rowIdx < maxRow) {
 					selectedCell = { rowIdx: selectedCell.rowIdx + 1, colIdx: selectedCell.colIdx };
@@ -5665,6 +5688,40 @@
 	</button>
 </div>
 {/if}
+
+<KeyboardShortcutsOverlay
+	sections={[
+		{
+			title: 'Row navigation',
+			shortcuts: [
+				{ key: 'j / ↓', description: 'Move to next row' },
+				{ key: 'k / ↑', description: 'Move to previous row' },
+				{ key: '← / →', description: 'Move between columns' },
+				{ key: 'Enter', description: 'Edit the focused cell' },
+				{ key: 'Escape', description: 'Exit cell editing / clear selection' }
+			]
+		},
+		{
+			title: 'Tables',
+			shortcuts: [
+				{ key: 'Tab', description: 'Switch to next project table' },
+				{ key: 'Shift+Tab', description: 'Switch to previous project table' },
+				{ key: 'Ctrl+\\', description: 'Toggle table list panel' }
+			]
+		},
+		{
+			title: 'Editing',
+			shortcuts: [
+				{ key: 'Type', description: 'Overwrite focused cell with typed character' },
+				{ key: 'Space', description: 'Edit cell (or toggle boolean)' },
+				{ key: '=', description: 'Open formula editor (formula columns)' },
+				{ key: 'Ctrl+Enter', description: 'Add a new row' },
+				{ key: 'Ctrl+C', description: 'Copy cell value' },
+				{ key: 'Ctrl+Z', description: 'Undo last change' }
+			]
+		}
+	]}
+/>
 
 <style>
 	/* Searchable table dropdown */

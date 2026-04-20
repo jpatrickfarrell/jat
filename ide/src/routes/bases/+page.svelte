@@ -8,7 +8,7 @@
 	 * Replaces both old /bases and /canvas routes.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
@@ -18,6 +18,8 @@
 	import BasesList from '$lib/components/bases/BasesList.svelte';
 	import CanvasEditor from '$lib/components/canvas/CanvasEditor.svelte';
 	import { swipe } from '$lib/actions/swipe';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	// Get project and page ID from URL
 	const project = $derived($page.url.searchParams.get('project'));
@@ -116,6 +118,117 @@
 		window.addEventListener('keydown', handlePanelToggle, true);
 		return () => window.removeEventListener('keydown', handlePanelToggle, true);
 	});
+
+	// --- Keyboard navigation ---------------------------------------------------
+	// j/k navigates the bases list (left panel), Enter loads the base canvas.
+	// Tab/Shift+Tab cycles through canvas blocks in the right panel.
+	// Escape from canvas returns focus to the bases list. `?` opens the overlay.
+
+	const listNav = createListNav({
+		getItems: () =>
+			Array.from(document.querySelectorAll<HTMLElement>('.bases-panel-left [data-nav-id]')),
+		onSelect: (el) => {
+			const id = el.dataset.navId;
+			if (!id) return;
+			const target = bases.find(b => b.id === id);
+			if (target) handleSelect(target);
+		},
+		onEscape: () => listNav.clear(),
+	});
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		return target.isContentEditable;
+	}
+
+	function getCanvasBlocks(): HTMLElement[] {
+		return Array.from(
+			document.querySelectorAll<HTMLElement>('.bases-panel-right [data-canvas-block]')
+		);
+	}
+
+	function isFocusInCanvas(): boolean {
+		const active = document.activeElement as HTMLElement | null;
+		if (!active) return false;
+		return !!active.closest('.bases-panel-right');
+	}
+
+	function focusCanvasBlock(direction: 'next' | 'prev' | 'first') {
+		const blocks = getCanvasBlocks();
+		if (blocks.length === 0) return false;
+		const active = document.activeElement as HTMLElement | null;
+		const currentBlock = active?.closest('[data-canvas-block]') as HTMLElement | null;
+		const currentIdx = currentBlock ? blocks.indexOf(currentBlock) : -1;
+
+		let nextIdx: number;
+		if (direction === 'first' || currentIdx === -1) {
+			nextIdx = 0;
+		} else if (direction === 'next') {
+			nextIdx = (currentIdx + 1) % blocks.length;
+		} else {
+			nextIdx = (currentIdx - 1 + blocks.length) % blocks.length;
+		}
+		blocks[nextIdx].focus({ preventScroll: false });
+		return true;
+	}
+
+	function focusBasesList() {
+		const firstItem = document.querySelector<HTMLElement>('.bases-panel-left [data-nav-id]');
+		firstItem?.focus({ preventScroll: true });
+		// Bring jk-focused back so subsequent j/k has a baseline
+		listNav.refresh();
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		// Never interfere with browser/system shortcuts
+		if (e.ctrlKey || e.metaKey) return;
+
+		// Tab / Shift+Tab cycles canvas blocks (when a base is selected)
+		if (e.key === 'Tab' && !e.altKey) {
+			if (isTypingTarget(e.target)) return;
+			if (!selectedBase) return;
+			if (focusCanvasBlock(e.shiftKey ? 'prev' : 'next')) {
+				e.preventDefault();
+			}
+			return;
+		}
+
+		// Escape from the canvas panel returns focus to bases list
+		if (e.key === 'Escape' && isFocusInCanvas() && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			focusBasesList();
+			return;
+		}
+
+		// Delegate j/k/Enter/Arrow/Escape to listNav for the bases list
+		if (!isTypingTarget(e.target)) {
+			listNav.handleKeydown(e);
+		}
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', handleWindowKeydown);
+		return () => window.removeEventListener('keydown', handleWindowKeydown);
+	});
+
+	// Refresh nav controller when the list changes (e.g. after fetch)
+	$effect(() => {
+		if (bases.length >= 0) tick().then(() => listNav.refresh());
+	});
+
+	const shortcuts = [
+		{ key: 'j / ↓', description: 'Focus next base' },
+		{ key: 'k / ↑', description: 'Focus previous base' },
+		{ key: 'Enter', description: 'Open base in canvas' },
+		{ key: 'Tab', description: 'Cycle canvas blocks (right panel)' },
+		{ key: 'Shift+Tab', description: 'Cycle canvas blocks backwards' },
+		{ key: 'Escape', description: 'Return focus to bases list' },
+		{ key: 'n', description: 'New base' },
+		{ key: 'Ctrl+\\', description: 'Toggle bases panel' },
+		{ key: '?', description: 'Show shortcuts' },
+	];
 
 	// Fetch all bases
 	async function fetchBases() {
@@ -511,6 +624,8 @@
 	<meta name="description" content="Manage knowledge bases for agent context injection. Create interactive pages with controls, table views, and formulas." />
 	<link rel="icon" href="/favicons/bases.svg" />
 </svelte:head>
+
+<KeyboardShortcutsOverlay {shortcuts} title="Bases Shortcuts" />
 
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.14 0.01 250);">
 	{#if isLoading}

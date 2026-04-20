@@ -39,6 +39,8 @@
 	import { SessionPanelSkeleton, ProjectsTableSkeleton } from '$lib/components/skeleton';
 	import { openProjectDrawer, projectCreatedSignal } from '$lib/stores/drawerStore';
 	import { updateProjectColorCache, initProjectColors } from '$lib/utils/projectColors';
+	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	interface Project {
 		name: string;
@@ -81,6 +83,36 @@
 
 	// Animation state for visibility toggles
 	let animatingVisibility = $state<string | null>(null);
+
+	// Keyboard navigation for server session cards (top panel)
+	let focusedSessionName = $state<string | null>(null);
+	let shortcutsOpen = $state(false);
+	const sessionsNav = createListNav({
+		getItems: () => Array.from(
+			document.querySelectorAll<HTMLElement>('[data-session-name]')
+		),
+		focusedClass: 'server-card-focused',
+		onFocusChange: (el) => {
+			focusedSessionName = el?.dataset.sessionName ?? null;
+		},
+		onSelect: (el) => {
+			const name = el.dataset.sessionName;
+			if (name) scrollToSession(name);
+		}
+	});
+
+	function toggleFocusedServer() {
+		const name = focusedSessionName;
+		if (!name) return false;
+		const session = serverSessionsState.sessions.find(s => s.sessionName === name);
+		if (!session) return false;
+		if (session.status === 'running') {
+			handleStopServer(session.sessionName);
+		} else {
+			handleStartServer(session.projectName);
+		}
+		return true;
+	}
 
 	// Column sorting state
 	type SortColumn = 'name' | 'port' | 'status' | 'activity' | 'tasks' | 'agents';
@@ -647,7 +679,20 @@
 	function handleKeydown(e: KeyboardEvent) {
 		// Ignore if typing in an input
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-		// Ignore if no project is hovered
+		// Ignore modifier combos so browser/app shortcuts still work
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// Space toggles start/stop for the focused server card (before listNav consumes it).
+		if (e.key === ' ' && focusedSessionName) {
+			e.preventDefault();
+			toggleFocusedServer();
+			return;
+		}
+
+		// Let listNav handle j/k/Arrow/Enter/Escape for server session cards.
+		if (sessionsNav.handleKeydown(e)) return;
+
+		// r/s/o still target the hovered project row in the table below.
 		if (!hoveredProject) return;
 
 		const project = projects.find(p => p.name === hoveredProject)
@@ -1479,6 +1524,31 @@
 	</div>
 </div>
 
+<KeyboardShortcutsOverlay
+	bind:open={shortcutsOpen}
+	title="Servers Keyboard Shortcuts"
+	sections={[
+		{
+			title: 'Server Session Cards',
+			shortcuts: [
+				{ key: 'j / ↓', description: 'Focus next server card' },
+				{ key: 'k / ↑', description: 'Focus previous server card' },
+				{ key: 'Enter', description: 'Scroll focused card into view' },
+				{ key: 'Space', description: 'Toggle start/stop for focused card' },
+				{ key: 'Esc', description: 'Clear focus' }
+			]
+		},
+		{
+			title: 'Project Row (on hover)',
+			shortcuts: [
+				{ key: 'R', description: 'Restart / start server' },
+				{ key: 'S', description: 'Stop server' },
+				{ key: 'O', description: 'Open http://localhost:port' }
+			]
+		}
+	]}
+/>
+
 <style>
 	/* Visibility toggle knob animation - scale pulse (cannot be done with Tailwind) */
 	.visibility-toggle-knob-animate {
@@ -1495,5 +1565,13 @@
 		100% {
 			transform: scale(1);
 		}
+	}
+
+	/* j/k focus indicator for server session cards — tied to [data-session-name] wrapper. */
+	:global([data-session-name].server-card-focused) {
+		outline: 2px solid oklch(0.70 0.18 220);
+		outline-offset: -2px;
+		border-radius: 0.5rem;
+		box-shadow: 0 0 16px oklch(0.70 0.18 220 / 0.3);
 	}
 </style>

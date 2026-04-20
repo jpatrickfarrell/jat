@@ -361,7 +361,7 @@
 			<section class="detail-context">
 				<h3 class="section-label">Context</h3>
 				<div class="context-items">
-					{#if feedbackContext.recording_url || feedbackContext.db_id}
+					{#if feedbackContext.recording_url}
 						<a
 							href={`/feedback/replay/${encodeURIComponent(task.id)}`}
 							target="_blank"

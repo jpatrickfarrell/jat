@@ -805,6 +805,17 @@
 
 	// ---- Filter toggle helpers ----
 
+	function handleSortClick(val: SortBy) {
+		if (sortBy === val) {
+			// Clicking the active sort chip inverts direction.
+			sortDir = sortDir === "asc" ? "desc" : "asc";
+		} else {
+			// Switching to a new sort type resets to that type's natural default.
+			sortBy = val;
+			sortDir = DEFAULT_SORT_DIR[val];
+		}
+	}
+
 	function toggleStatus(s: string) {
 		filterStatuses = filterStatuses.includes(s)
 			? filterStatuses.filter((x) => x !== s)
@@ -968,14 +979,16 @@
 
 				<div class="chip-group chip-group-sort" aria-label="Sort by">
 					<span class="filter-label">Sort</span>
-					{#each ([["priority","Priority"],["age","Age ↑"],["updated","Updated"],["status","Status"]] as const) as [val, label]}
+					{#each ([["priority","Priority"],["age","Age"],["updated","Updated"],["status","Status"]] as const) as [val, label]}
+						{@const active = sortBy === val}
 						<button
 							type="button"
 							class="chip chip-sort"
-							class:active={sortBy === val}
-							onclick={() => sortBy = val}
-							aria-pressed={sortBy === val}
-						>{label}</button>
+							class:active
+							onclick={() => handleSortClick(val)}
+							aria-pressed={active}
+							title={active ? `Click to invert direction (currently ${sortDir})` : `Sort by ${label.toLowerCase()}`}
+						>{label}{active ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
 					{/each}
 				</div>
 

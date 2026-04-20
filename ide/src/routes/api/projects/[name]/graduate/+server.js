@@ -17,6 +17,10 @@
 import { json, error } from '@sveltejs/kit';
 import { execSync } from 'child_process';
 import { graduateProject } from '../../../../../../../lib/tasks-graduate.js';
+import {
+	resolveIdentity,
+	syncIdentityForProject
+} from '../../../../../../../lib/identity-sync.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -98,6 +102,35 @@ export async function POST({ params, request }) {
 			importStatus,
 			targetTable,
 		});
+
+		// Trailing step: if the project just graduated (or was already graduated
+		// and the user is re-running), propagate the operator's JAT identity
+		// into the project's Supabase so comment/assignee UUID resolution works
+		// out of the box. Best-effort — a failure here does NOT fail the
+		// graduation; the result is returned under `identitySync` so the
+		// wizard can surface it.
+		if (action === 'graduate' && (result?.status === 'graduated' || result?.status === 'already_graduated')) {
+			try {
+				const identity = resolveIdentity();
+				if (identity.email) {
+					result.identitySync = await syncIdentityForProject(
+						projectName.toLowerCase(),
+						identity,
+						{ apply: true }
+					);
+				} else {
+					result.identitySync = {
+						project: projectName,
+						status: 'skip',
+						reason: 'no JAT identity resolved (set one in the UserProfile dropdown or git config)'
+					};
+				}
+			} catch (err) {
+				const m = err instanceof Error ? err.message : String(err);
+				result.identitySync = { project: projectName, status: 'error', reason: m };
+			}
+		}
+
 		return json(result);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

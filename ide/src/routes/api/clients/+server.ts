@@ -172,13 +172,13 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 		return { name: projectName, projectKey, contracts: [] };
 	}
 
-	// Fetch milestones for all contracts
+	// Fetch milestones for all contracts (include client_visible for show/hide toggle)
 	const contractIds = contracts.map(c => c.id);
 	const milestonesResult = await supabaseQuery(
 		supabaseUrl,
 		serviceRoleKey,
 		'milestones',
-		`select=*&contract_id=in.(${contractIds.join(',')})&order=sort_order.asc`
+		`select=*,client_visible&contract_id=in.(${contractIds.join(',')})&order=sort_order.asc`
 	);
 
 	const milestones = (milestonesResult.data || []) as Milestone[];
@@ -522,6 +522,36 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		cache = null;
 		return json({ success: true });
+	}
+
+	// Toggle milestone visibility (internal ↔ client-visible)
+	if (body.action === 'toggleMilestoneVisibility') {
+		const { projectKey, milestoneId, clientVisible } = body;
+
+		if (!projectKey || !milestoneId || clientVisible == null) {
+			return json({ error: 'projectKey, milestoneId, and clientVisible are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		const result = await supabaseUpdate(
+			supabaseUrl, serviceRoleKey,
+			'milestones',
+			`id=eq.${milestoneId}`,
+			{ client_visible: clientVisible }
+		);
+
+		if (result.error) {
+			return json({ error: result.error }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true, milestoneId, clientVisible });
 	}
 
 	// Handle addMilestone action — add a milestone to an existing contract

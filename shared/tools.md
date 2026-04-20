@@ -52,6 +52,7 @@ Database, monitoring, credentials, and task review tools.
 | `backup-jat.sh` | Backup task database |
 | `rollback-jat.sh` | Rollback task database to backup |
 | `jat-skills` | Skill catalog, installer, and local management |
+| `jat-identity-sync` | Propagate your JAT identity (name + email) to every Supabase-backed project as an `auth.users` + `profiles` row, so comments resolve to the right UUID everywhere. See [identity.md](identity.md). |
 | `coda-import` | Fetch Coda.io tables via API and import into JAT data tables |
 | `jt-quick-task` | Desktop quick task capture — pick project + type title |
 

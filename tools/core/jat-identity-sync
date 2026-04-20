@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+/**
+ * jat-identity-sync — propagate your JAT identity (name + email) into every
+ * JST-derived Supabase project, using each project's service role key.
+ *
+ * Source of truth: `~/.config/jat/identity.json` (JAT override) with fallback
+ * to global git config. Same resolution the IDE uses.
+ *
+ * Core logic lives in `lib/identity-sync.js` so the IDE's graduate endpoint
+ * can call the same code.
+ *
+ * Usage:
+ *   jat-identity-sync                  # dry-run, report-only
+ *   jat-identity-sync --apply          # actually write
+ *   jat-identity-sync --project X      # restrict to one project
+ *
+ * Exit code 0 if every reachable project is in the desired state (or was
+ * updated successfully); 1 if any project failed or identity is unresolved.
+ */
+
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+// Resolve the lib path relative to this script's real location (works through
+// the ~/.local/bin symlink because Node resolves symlinks via import.meta.url).
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const libPath = resolve(__dirname, '..', '..', 'lib', 'identity-sync.js');
+const { resolveIdentity, listProjectsWithServiceRoleKey, syncIdentityForProject } =
+	await import(libPath);
+
+const APPLY = process.argv.includes('--apply');
+const PROJECT_FILTER = (() => {
+	const i = process.argv.indexOf('--project');
+	return i >= 0 ? process.argv[i + 1] : null;
+})();
+
+async function main() {
+	const identity = resolveIdentity();
+	if (!identity.email) {
+		console.error('❌ Identity has no email. Set one via:');
+		console.error('   • JAT IDE → avatar → Edit  (writes ~/.config/jat/identity.json)');
+		console.error('   • git config --global user.email <addr>');
+		process.exit(1);
+	}
+	if (!identity.name) {
+		console.error('⚠ Identity has no name — will use email as display name.');
+	}
+
+	let projects = listProjectsWithServiceRoleKey();
+	if (PROJECT_FILTER) projects = projects.filter((p) => p === PROJECT_FILTER);
+	if (!projects.length) {
+		console.error('No projects with supabase-service-role-key found.');
+		process.exit(1);
+	}
+
+	console.log(`\nIdentity: ${identity.name || identity.email} <${identity.email}>`);
+	console.log(`Mode:     ${APPLY ? 'APPLY' : 'dry-run (use --apply to write)'}`);
+	console.log(`Projects: ${projects.join(', ')}\n`);
+
+	const results = await Promise.all(
+		projects.map((p) => syncIdentityForProject(p, identity, { apply: APPLY }))
+	);
+
+	let anyError = false;
+	for (const r of results) {
+		const marker =
+			r.status === 'ok'
+				? '✅'
+				: r.status === 'updated'
+				? '✨'
+				: r.status === 'pending'
+				? '•'
+				: r.status === 'skip'
+				? '↷'
+				: '❌';
+		console.log(
+			`${marker}  ${r.project.padEnd(14)} ${r.status}${r.userId ? '  uid=' + r.userId.slice(0, 8) : ''}${r.reason ? '  ' + r.reason : ''}`
+		);
+		for (const a of r.actions || []) console.log(`        ${a}`);
+		if (r.status === 'error') anyError = true;
+	}
+
+	console.log('');
+	if (!APPLY && results.some((r) => r.actions && r.actions.length)) {
+		console.log('Re-run with --apply to commit these changes.');
+	}
+	process.exit(anyError ? 1 : 0);
+}
+
+main().catch((err) => {
+	console.error('Fatal:', err.message);
+	process.exit(1);
+});

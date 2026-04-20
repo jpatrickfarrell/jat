@@ -64,6 +64,14 @@
 	let graduatedInserted = $state(0);
 	let graduatedSkipped = $state(0);
 	let importStatus = $state<string>('dev');
+	// Identity sync result — populated from the graduate endpoint's trailing
+	// step. Null until graduation completes; see shared/identity.md.
+	let identitySync = $state<{
+		status: 'ok' | 'updated' | 'pending' | 'skip' | 'error';
+		userId?: string | null;
+		actions?: string[];
+		reason?: string;
+	} | null>(null);
 
 	// Reset state whenever the modal is opened for a new project
 	$effect(() => {
@@ -80,6 +88,7 @@
 			graduatedInserted = 0;
 			graduatedSkipped = 0;
 			importStatus = 'dev';
+			identitySync = null;
 			progress = { phase: 'idle', message: '', percent: 0 };
 
 			// Try to auto-fill the Postgres URL from stored credentials
@@ -237,6 +246,7 @@
 			graduatedTaskCount = result?.summary?.tasks ?? previewSummary.tasks;
 			graduatedInserted = result?.summary?.inserted ?? graduatedTaskCount;
 			graduatedSkipped = result?.summary?.skipped ?? 0;
+			identitySync = result?.identitySync ?? null;
 			progress = { phase: 'complete', message: 'Graduation complete.', percent: 100 };
 			phase = 'done';
 			successToast(
@@ -560,6 +570,52 @@
 								<div>Local backup: <code class="font-mono text-[0.7rem] break-all">{archivePath}</code></div>
 							{/if}
 						</div>
+
+						<!-- Identity sync — trailing step that links the current JAT
+						     operator to this project's auth.users + profiles. -->
+						{#if identitySync}
+							<div
+								class="rounded-lg border p-3 flex items-start gap-3"
+								class:border-success={identitySync.status === 'ok' || identitySync.status === 'updated'}
+								class:bg-success={false}
+								class:border-warning={identitySync.status === 'skip' || identitySync.status === 'error'}
+							>
+								<div class="shrink-0 mt-0.5">
+									{#if identitySync.status === 'updated' || identitySync.status === 'ok'}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+										</svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 110 18 9 9 0 010-18z" />
+										</svg>
+									{/if}
+								</div>
+								<div class="flex-1 min-w-0 text-xs">
+									{#if identitySync.status === 'updated'}
+										<div class="font-semibold">Your JAT identity was linked to this project</div>
+										{#if identitySync.actions?.length}
+											<ul class="mt-1 space-y-0.5 text-base-content/70">
+												{#each identitySync.actions as a}
+													<li>• {a}</li>
+												{/each}
+											</ul>
+										{/if}
+									{:else if identitySync.status === 'ok'}
+										<div class="font-semibold">Your JAT identity was already linked</div>
+										<div class="text-base-content/60 mt-0.5">No changes needed.</div>
+									{:else if identitySync.status === 'skip'}
+										<div class="font-semibold">Identity sync skipped</div>
+										<div class="text-base-content/60 mt-0.5">{identitySync.reason}</div>
+										<div class="text-base-content/50 mt-1 text-[0.7rem]">Run <code class="font-mono bg-base-200 px-1 py-0.5 rounded">jat-identity-sync --apply</code> later to link your identity.</div>
+									{:else}
+										<div class="font-semibold">Identity sync failed (non-blocking)</div>
+										<div class="text-base-content/60 mt-0.5 break-words">{identitySync.reason || 'Unknown error'}</div>
+										<div class="text-base-content/50 mt-1 text-[0.7rem]">Re-run with <code class="font-mono bg-base-200 px-1 py-0.5 rounded">jat-identity-sync --project {projectKey} --apply</code>.</div>
+									{/if}
+								</div>
+							</div>
+						{/if}
 
 						<!-- Teammate setup — collapsible next step -->
 						<details class="rounded-lg border border-base-300">

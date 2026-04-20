@@ -244,7 +244,10 @@
 					(p.projectKey || "").toLowerCase() === pLower ||
 					(p.name || "").toLowerCase() === pLower,
 			);
-			const milestones: MilestoneOption[] = projectData?.milestones || [];
+			// Milestones are nested inside each contract, flatten them all
+			const milestones: MilestoneOption[] = (projectData?.contracts || []).flatMap(
+				(c: any) => c.milestones || [],
+			);
 			milestoneList = milestones;
 			// Detect current milestone from linked_tasks
 			const linked = milestones.find((m) =>

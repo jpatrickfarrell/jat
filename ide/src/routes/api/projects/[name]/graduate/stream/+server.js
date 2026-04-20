@@ -26,6 +26,10 @@
 
 import { error } from '@sveltejs/kit';
 import { graduateProject } from '../../../../../../../../lib/tasks-graduate.js';
+import {
+	resolveIdentity,
+	syncIdentityForProject
+} from '../../../../../../../../lib/identity-sync.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -77,6 +81,39 @@ export async function POST({ params, request }) {
 					targetTable,
 					onProgress: (event) => send({ type: 'progress', ...event }),
 				});
+
+				// Trailing identity sync — mirrors the non-streaming endpoint.
+				// Streamed as its own progress phase so the wizard can render it
+				// on the success screen. Never blocks or fails the graduation.
+				if (result?.status === 'graduated' || result?.status === 'already_graduated') {
+					send({
+						type: 'progress',
+						phase: 'identity-sync',
+						message: 'Linking your JAT identity to this project…',
+						percent: 98
+					});
+					try {
+						const identity = resolveIdentity();
+						if (identity.email) {
+							result.identitySync = await syncIdentityForProject(
+								projectName.toLowerCase(),
+								identity,
+								{ apply: true }
+							);
+						} else {
+							result.identitySync = {
+								project: projectName,
+								status: 'skip',
+								reason:
+									'no JAT identity resolved (set one in the UserProfile dropdown or git config)'
+							};
+						}
+					} catch (err) {
+						const m = err instanceof Error ? err.message : String(err);
+						result.identitySync = { project: projectName, status: 'error', reason: m };
+					}
+				}
+
 				send({ type: 'done', result });
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);

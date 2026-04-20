@@ -28,6 +28,7 @@
 		amount: number;
 		status: string;
 		client_status?: string;
+		client_visible: boolean;
 		sort_order: number;
 		delivered_at: string | null;
 		accepted_at: string | null;
@@ -526,7 +527,7 @@
 	async function createMilestone(projectKey: string, contractId: string, totalAmount: number) {
 		const name = newMilestoneName.trim();
 		const pct = parseFloat(newMilestonePct);
-		if (!name || isNaN(pct) || pct <= 0 || pct > 100) return;
+		if (!name || isNaN(pct) || pct < 0 || pct > 100) return;
 		savingNewMilestone = true;
 		try {
 			const res = await fetch('/api/clients', {
@@ -690,6 +691,37 @@
 	let invoiceError = $state<string | null>(null);
 	let invoiceSuccess = $state<string | null>(null);
 	let invoiceSuccessTimer: ReturnType<typeof setTimeout> | null = null;
+
+	let togglingVisibility = $state<string | null>(null);
+
+	async function toggleMilestoneVisibility(projectKey: string, milestoneId: string, currentlyVisible: boolean) {
+		togglingVisibility = milestoneId;
+		try {
+			const res = await fetch('/api/clients', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'toggleMilestoneVisibility',
+					projectKey,
+					milestoneId,
+					clientVisible: !currentlyVisible
+				})
+			});
+			if (!res.ok) return;
+			// Update local state instantly — find and flip the flag
+			for (const project of projects) {
+				for (const contract of (project.contracts || [])) {
+					const m = (contract.milestones || []).find((m: any) => m.id === milestoneId);
+					if (m) { (m as any).client_visible = !currentlyVisible; break; }
+				}
+			}
+			projects = [...projects]; // trigger reactivity
+		} catch {
+			// ignore
+		} finally {
+			togglingVisibility = null;
+		}
+	}
 
 	async function generateInvoice(projectKey: string, milestoneId: string, contractId: string, force = false) {
 		invoicingMilestone = milestoneId;
@@ -1423,6 +1455,7 @@
 																								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																								<div class="min-w-0 flex-1 {editable ? 'cursor-pointer' : ''}" onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }} role={editable ? 'button' : undefined} tabindex={editable ? 0 : undefined} onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}>
 																									<span class="font-medium text-sm">{milestone.name}</span>
+																									{#if milestone.client_visible === false}<span class="badge badge-xs badge-ghost opacity-60 ml-1.5">internal</span>{/if}
 																									{#if milestone.description}<p class="text-xs opacity-50 mt-0.5">{milestone.description}</p>{/if}
 																								</div>
 																								<div class="dropdown dropdown-end dropdown-top shrink-0">
@@ -1452,7 +1485,22 @@
 																										Invoice
 																									</button>
 																								{/if}
-																								{#if editable}<button class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100 p-1" onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }} title="Delete milestone"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>{/if}
+																								{#if editable}
+									<button
+										class="btn btn-ghost btn-xs p-1 opacity-50 hover:opacity-100"
+										class:text-warning={milestone.client_visible === false}
+										onclick={(e) => { e.stopPropagation(); toggleMilestoneVisibility(project.projectKey, milestone.id, milestone.client_visible !== false); }}
+										disabled={togglingVisibility === milestone.id}
+										title={milestone.client_visible === false ? 'Show to client' : 'Hide from client (internal)'}
+									>
+										{#if milestone.client_visible === false}
+											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+										{:else}
+											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+										{/if}
+									</button>
+									<button class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100 p-1" onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }} title="Delete milestone"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+								{/if}
 																							</div>
 																							{#if (milestone.linked_tasks && milestone.linked_tasks.length > 0) || editable}
 																								<div class="flex flex-wrap gap-1 items-center pl-5">
@@ -1595,7 +1643,7 @@
 																									</td>
 																								</tr>
 																							{:else}
-																							<tr data-milestone-row={milestone.id} data-contract-id={contract.id} class="hover:bg-base-300/30 transition-colors duration-500 {savedItemId === milestone.id ? 'bg-success/5' : ''}">
+																							<tr data-milestone-row={milestone.id} data-contract-id={contract.id} class="hover:bg-base-300/30 transition-colors duration-500 {savedItemId === milestone.id ? 'bg-success/5' : ''} {milestone.client_visible === false ? 'opacity-50' : ''}">
 																								<td class="opacity-40">{mi + 1}</td>
 																								<td>
 																										<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -1608,6 +1656,7 @@
 																										>
 																											<div class="min-w-0 flex-1">
 																												<span class="font-medium">{milestone.name}</span>
+																												{#if milestone.client_visible === false}<span class="badge badge-xs badge-ghost opacity-60 ml-1.5">internal</span>{/if}
 																												{#if milestone.description}
 																													<p class="text-xs opacity-50 mt-0.5">{milestone.description}</p>
 																												{/if}
@@ -1692,15 +1741,30 @@
 																								</td>
 																								{#if editable}
 																									<td>
-																										<button
-																											class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100"
-																											onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }}
-																											title="Delete milestone"
-																										>
-																											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-																											</svg>
-																										</button>
+																										<div class="flex items-center gap-0.5">
+																											<button
+																												class="btn btn-ghost btn-xs opacity-40 hover:opacity-100"
+																												class:text-warning={milestone.client_visible === false}
+																												onclick={(e) => { e.stopPropagation(); toggleMilestoneVisibility(project.projectKey, milestone.id, milestone.client_visible !== false); }}
+																												disabled={togglingVisibility === milestone.id}
+																												title={milestone.client_visible === false ? 'Show to client' : 'Hide from client (internal)'}
+																											>
+																												{#if milestone.client_visible === false}
+																													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+																												{:else}
+																													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+																												{/if}
+																											</button>
+																											<button
+																												class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100"
+																												onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }}
+																												title="Delete milestone"
+																											>
+																												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+																												</svg>
+																											</button>
+																										</div>
 																									</td>
 																								{/if}
 																							</tr>
@@ -1852,7 +1916,7 @@
 																					</div>
 																				</div>
 																				<div class="flex gap-2">
-																					<button class="btn btn-success btn-xs" disabled={savingNewMilestone || !newMilestoneName.trim() || !newMilestonePct} onclick={() => createMilestone(project.projectKey, contract.id, contract.total_amount)}>
+																					<button class="btn btn-success btn-xs" disabled={savingNewMilestone || !newMilestoneName.trim() || newMilestonePct === ''} onclick={() => createMilestone(project.projectKey, contract.id, contract.total_amount)}>
 																						{#if savingNewMilestone}<span class="loading loading-spinner loading-xs"></span>{:else}Add{/if}
 																					</button>
 																					<button class="btn btn-ghost btn-xs" onclick={() => { addingMilestoneContractId = null; newMilestoneName = ''; newMilestonePct = ''; newMilestoneDesc = ''; }}>Cancel</button>

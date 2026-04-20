@@ -502,7 +502,7 @@
 
 	function activeTabResultCount(): number {
 		switch (activeTab) {
-			case 'routes': return routeResults.length;
+			case 'routes': return routeResults.length + cmdTaskResults.length;
 			case 'tasks': return taskResults.length;
 			case 'memory': return memoryResults.length;
 			case 'filenames': return filenameResults.length;
@@ -513,11 +513,19 @@
 
 	function openSelectedResult(): boolean {
 		if (selectedResultIndex < 0) return false;
-		if (activeTab === 'routes' && selectedResultIndex < routeResults.length) {
-			const action = routeResults[selectedResultIndex];
-			if (action.execute) { action.execute(); closeModal(); }
-			else if (action.path) { goto(action.path); closeModal(); }
-			return true;
+		if (activeTab === 'routes') {
+			if (selectedResultIndex < routeResults.length) {
+				const action = routeResults[selectedResultIndex];
+				if (action.execute) { action.execute(); closeModal(); }
+				else if (action.path) { goto(action.path); closeModal(); }
+				return true;
+			}
+			// Inline cmd task results follow routes in the list
+			const cmdIdx = selectedResultIndex - routeResults.length;
+			if (cmdIdx >= 0 && cmdIdx < cmdTaskResults.length) {
+				openTask(cmdTaskResults[cmdIdx].id);
+				return true;
+			}
 		}
 		if (activeTab === 'tasks' && selectedResultIndex < taskResults.length) {
 			openTask(taskResults[selectedResultIndex].id);
@@ -592,10 +600,13 @@
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			if (debounceTimer) clearTimeout(debounceTimer);
-			// Routes tab: directly execute selected (or first) action — don't go through state update cycle
-			if (activeTab === 'routes' && routeResults.length > 0) {
-				const idx = selectedResultIndex >= 0 ? Math.min(selectedResultIndex, routeResults.length - 1) : 0;
-				const action = routeResults[idx];
+			// Routes tab: if a result is explicitly selected, open it (could be route or cmd task)
+			if (activeTab === 'routes' && selectedResultIndex >= 0) {
+				if (openSelectedResult()) return;
+			}
+			// Routes tab with no selection: execute first route
+			if (activeTab === 'routes' && routeResults.length > 0 && selectedResultIndex < 0) {
+				const action = routeResults[0];
 				if (action?.execute) { action.execute(); closeModal(); }
 				else if (action.path) { goto(action.path); closeModal(); }
 				return;

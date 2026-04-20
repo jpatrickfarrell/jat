@@ -123,7 +123,42 @@
 	let redoStack = $state<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
 
 	// Canvas ref
-	let canvasRef: { fitView: (padding?: number) => void } | undefined = $state();
+	let canvasRef:
+		| {
+				fitView: (padding?: number) => void;
+				getZoom: () => number;
+				setZoom: (level: number) => void;
+		  }
+		| undefined = $state();
+
+	// Zoom controls (displayed in toolbar). Kept in sync with canvas via $effect
+	// below; updated eagerly when the user clicks toolbar buttons.
+	const ZOOM_STEP = 0.1;
+	const ZOOM_MIN = 0.25;
+	const ZOOM_MAX = 2.0;
+	let zoomDisplay = $state(1);
+
+	function clampZoom(z: number): number {
+		return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+	}
+
+	function applyZoom(target: number) {
+		const next = clampZoom(Math.round(target * 100) / 100);
+		canvasRef?.setZoom(next);
+		zoomDisplay = canvasRef?.getZoom() ?? next;
+	}
+
+	function zoomIn() {
+		applyZoom((canvasRef?.getZoom() ?? zoomDisplay) + ZOOM_STEP);
+	}
+
+	function zoomOut() {
+		applyZoom((canvasRef?.getZoom() ?? zoomDisplay) - ZOOM_STEP);
+	}
+
+	function resetZoom() {
+		applyZoom(1);
+	}
 
 	// Confirm delete
 	let showDeleteConfirm = $state(false);

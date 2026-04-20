@@ -708,6 +708,27 @@
 	// FIT VIEW
 	// =========================================================================
 
+	// =========================================================================
+	// ZOOM API (used by toolbar controls)
+	// =========================================================================
+
+	export function getZoom(): number {
+		return zoom;
+	}
+
+	export function setZoom(level: number) {
+		if (!containerEl) return;
+		updateContainerRect();
+		const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, level));
+		// Zoom toward viewport center so panning stays intuitive.
+		const centerX = containerRect.width / 2;
+		const centerY = containerRect.height / 2;
+		const scale = newZoom / zoom;
+		panX = centerX - (centerX - panX) * scale;
+		panY = centerY - (centerY - panY) * scale;
+		zoom = newZoom;
+	}
+
 	export function fitView(padding = 60) {
 		if (nodes.length === 0 || !containerEl) return;
 		updateContainerRect();

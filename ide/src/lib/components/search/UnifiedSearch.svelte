@@ -165,6 +165,10 @@
 	let memoryResults = $state<MemoryResult[]>([]);
 	let meta = $state<SearchMeta | null>(null);
 
+	// Inline task results shown on the Cmd tab (separate from Tasks tab results)
+	let cmdTaskResults = $state<TaskResult[]>([]);
+	let cmdTaskLoading = $state(false);
+
 	// Filenames tab results (from /api/files/search)
 	let filenameResults = $state<FilenameResult[]>([]);
 	let filenameLoading = $state(false);
@@ -213,6 +217,9 @@
 			const action = routeResults.find(r => r.id === navId);
 			if (action?.execute) { action.execute(); closeModal(); }
 			else if (action?.path) { goto(action.path); closeModal(); }
+			// Also handle inline cmd task results
+			const cmdTask = cmdTaskResults.find(t => t.id === navId);
+			if (cmdTask) openTask(cmdTask.id);
 		} else if (activeTab === 'tasks') {
 			const task = taskResults.find(t => t.id === navId);
 			if (task) openTask(task.id);
@@ -230,7 +237,7 @@
 
 	// Refresh nav index when results change
 	$effect(() => {
-		taskResults; memoryResults; filenameResults; contentResults; routeResults;
+		taskResults; memoryResults; filenameResults; contentResults; routeResults; cmdTaskResults;
 		nav.refresh();
 	});
 
@@ -247,6 +254,7 @@
 			memoryResults = [];
 			filenameResults = [];
 			contentResults = [];
+			cmdTaskResults = [];
 			meta = null;
 			activeTab = 'routes';
 			untrack(() => filterRoutes(''));
@@ -274,6 +282,7 @@
 	const hasSearched = $derived(meta !== null || filenameResults.length > 0 || contentResults.length > 0 || (activeTab === 'routes'));
 	const currentTabHasResults = $derived(
 		tabCount(activeTab) > 0 ||
+		(activeTab === 'routes' && (cmdTaskResults.length > 0 || cmdTaskLoading)) ||
 		(activeTab === 'filenames' && filenameLoading) ||
 		(activeTab === 'content' && contentLoading)
 	);
@@ -321,6 +330,39 @@
 			memoryResults = [];
 		} finally {
 			loading = false;
+		}
+	}
+
+	// Search tasks shown inline on the Cmd tab.
+	// When query matches "project-fragment", scopes search to that project.
+	// Always passes the full query so the API's direct task-ID lookup fires first.
+	async function doCmdTaskSearch() {
+		const q = query.trim();
+		if (!q) { cmdTaskResults = []; return; }
+
+		cmdTaskLoading = true;
+		try {
+			const params = new URLSearchParams({ sources: 'tasks', limit: '5', q });
+
+			// "meadow-abc" → add project=meadow so search scopes to that project.
+			// Full query is kept so the API's getTaskById fallback can match exact IDs.
+			const match = q.match(/^([a-z][a-z0-9_-]+)-/i);
+			const projName = match?.[1]?.toLowerCase();
+			if (projName && projects.includes(projName)) {
+				params.set('project', projName);
+			}
+
+			const res = await fetch(`/api/search?${params}`);
+			if (res.ok) {
+				const data = await res.json();
+				cmdTaskResults = data.tasks || [];
+			} else {
+				cmdTaskResults = [];
+			}
+		} catch {
+			cmdTaskResults = [];
+		} finally {
+			cmdTaskLoading = false;
 		}
 	}
 
@@ -419,6 +461,7 @@
 		selectedResultIndex = -1;
 		if (activeTab === 'routes') {
 			filterRoutes(query);
+			doCmdTaskSearch();
 			return;
 		} else if (activeTab === 'filenames') {
 			doFilenameSearch();
@@ -453,7 +496,7 @@
 		if (debounceTimer) clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(() => {
 			if (mode === 'route') updateUrl();
-			if (activeTab !== 'routes') doSearchForActiveTab();
+			doSearchForActiveTab();
 		}, 300);
 	}
 
@@ -1037,6 +1080,42 @@
 						{/if}
 					</button>
 				{/each}
+			</div>
+		{/if}
+
+		<!-- Inline task results below routes -->
+		{#if cmdTaskLoading}
+			<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.22 0.02 250);">
+				<p class="text-[10px] uppercase tracking-wider px-1 mb-1" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Tasks</p>
+				<div class="space-y-1">
+					{#each [1,2,3] as _}
+						<div class="rounded px-3 py-2" style="background: oklch(0.20 0.01 250);">
+							<div class="skeleton h-2.5 w-2/3 rounded" style="background: oklch(0.25 0.02 250);"></div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{:else if cmdTaskResults.length > 0}
+			<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.22 0.02 250);">
+				<p class="text-[10px] uppercase tracking-wider px-1 mb-1" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Tasks</p>
+				<div class="space-y-0.5">
+					{#each cmdTaskResults as task, i}
+						{@const idx = routeResults.length + i}
+						{@const isSelected = selectedResultIndex === idx}
+						<button
+							data-nav-id={task.id}
+							onclick={() => openTask(task.id)}
+							onmouseenter={() => nav.focus(idx)}
+							class="us-result-card w-full"
+							class:result-selected={isSelected}
+						>
+							<div class="flex items-center gap-2 min-w-0">
+								<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
+								<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);">{task.title}</p>
+							</div>
+						</button>
+					{/each}
+				</div>
 			</div>
 		{/if}
 	</div>

@@ -22,6 +22,8 @@ import { searchTasks } from '../../../../../tools/search/lib/tasks.js';
 import { searchMemory } from '../../../../../tools/search/lib/memory.js';
 // @ts-ignore - JS module without type declarations
 import { searchFiles } from '../../../../../tools/search/lib/files.js';
+// @ts-ignore - JS module without type declarations
+import { getTaskById } from '../../../../../lib/tasks.js';
 
 const VALID_SOURCES = ['tasks', 'memory', 'files'] as const;
 type Source = (typeof VALID_SOURCES)[number];
@@ -73,6 +75,18 @@ export const GET: RequestHandler = async ({ url }) => {
 						(t: { issue_type?: string }) => t.issue_type === type
 					);
 				}
+
+				// Direct task ID lookup: if q looks like a task id (e.g. "jat-zdw7r" or "zdw7r"),
+				// prepend the exact match so it surfaces first regardless of FTS scoring.
+				const idCandidate = q.replace(/^[a-z][a-z0-9_-]*-/, '').toLowerCase();
+				const exactById = (() => {
+					try { return getTaskById(q) || (idCandidate !== q ? getTaskById(idCandidate) : null); }
+					catch { return null; }
+				})();
+				if (exactById && !filtered.some((t: { id?: string }) => t.id === exactById.id)) {
+					filtered = [exactById, ...filtered].slice(0, limit);
+				}
+
 				return filtered;
 			});
 		}

@@ -1435,7 +1435,7 @@
 	mode="modal"
 	bind:isOpen={globalSearchOpen}
 	projects={configProjects}
-	selectedProject={getActiveProject() || configProjects[0] || ''}
+	selectedProject=""
 	onClose={() => { globalSearchOpen = false; }}
 	onFileSelect={handleGlobalSearchResult}
 	onProjectChange={handleProjectChange}

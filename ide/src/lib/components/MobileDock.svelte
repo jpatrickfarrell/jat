@@ -5,7 +5,7 @@
 	 * Uses DaisyUI dock component. Visible only below md breakpoint (768px).
 	 * Replaces sidebar navigation on mobile with thumb-friendly bottom icons.
 	 *
-	 * Items: Tasks | Inbox | Files | History | New Task
+	 * Items: Tasks | Inbox | Files | Bases | New Task
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
@@ -113,12 +113,12 @@
 		<span class="dock-label">Files</span>
 	</button>
 
-	<!-- History (completed tasks) -->
-	<button class:dock-active={isActive('/history')} onclick={() => navigate('/history')}>
+	<!-- Bases -->
+	<button class:dock-active={isActive('/bases')} onclick={() => navigate('/bases')}>
 		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+			<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
 		</svg>
-		<span class="dock-label">History</span>
+		<span class="dock-label">Bases</span>
 	</button>
 
 	<!-- New Task (action) -->

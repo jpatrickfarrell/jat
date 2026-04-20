@@ -1378,8 +1378,8 @@
 			<!-- Review notification bar — slim strip below TopBar, visible on all pages -->
 			<ReviewNotificationBar {reviewSessions} />
 
-			<!-- Page content (pb-14 on mobile for dock clearance) -->
-			<main class="flex-1 min-h-0 overflow-y-auto pb-14 md:pb-0 flex flex-col" style="scrollbar-gutter: stable;">
+			<!-- Page content (pb-24 on mobile for dock clearance — dock-xl is 80px) -->
+			<main class="flex-1 min-h-0 overflow-y-auto pb-24 md:pb-0 flex flex-col" style="scrollbar-gutter: stable;">
 				{@render children()}
 			</main>
 

@@ -29,6 +29,46 @@
 	let workflows = $state<WorkflowSummary[]>([]);
 	let loadingList = $state(true);
 
+	// Column sort (component-local, no URL param; null = server order)
+	type WfSortKey = 'name' | 'status' | 'lastRun';
+	let sortBy = $state<WfSortKey | null>(null);
+	let sortDir = $state<'asc' | 'desc'>('asc');
+
+	function toggleSort(key: WfSortKey) {
+		if (sortBy === key) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = key;
+			sortDir = 'asc';
+		}
+	}
+
+	const sortedWorkflows = $derived.by(() => {
+		if (!sortBy) return workflows;
+		const list = [...workflows];
+		const key = sortBy;
+		const mult = sortDir === 'asc' ? 1 : -1;
+		list.sort((a, b) => {
+			let cmp = 0;
+			if (key === 'name') {
+				cmp = (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' });
+			} else if (key === 'status') {
+				cmp = (a.enabled === b.enabled) ? 0 : a.enabled ? -1 : 1;
+			} else if (key === 'lastRun') {
+				const aT = a.lastRunAt ? Date.parse(a.lastRunAt) : NaN;
+				const bT = b.lastRunAt ? Date.parse(b.lastRunAt) : NaN;
+				const aMissing = Number.isNaN(aT);
+				const bMissing = Number.isNaN(bT);
+				if (aMissing && bMissing) cmp = 0;
+				else if (aMissing) return 1;
+				else if (bMissing) return -1;
+				else cmp = bT - aT;
+			}
+			return cmp * mult;
+		});
+		return list;
+	});
+
 	// Current workflow
 	let currentId = $state<string | null>(null);
 	let workflowName = $state('Untitled Workflow');
@@ -1503,15 +1543,66 @@
 				class="grid wf-list-grid px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
 				style="color: oklch(0.38 0.02 250); border-bottom: 1px solid oklch(0.20 0.02 250)"
 			>
-				<span>Name</span>
-				<span>Status</span>
+				<button
+					type="button"
+					class="wf-sort-header"
+					class:wf-sort-active={sortBy === 'name'}
+					onclick={() => toggleSort('name')}
+					title="Sort by name"
+				>
+					<span>Name</span>
+					{#if sortBy === 'name'}
+						<svg class="wf-sort-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							{#if sortDir === 'asc'}
+								<path d="M6 15l6-6 6 6" />
+							{:else}
+								<path d="M6 9l6 6 6-6" />
+							{/if}
+						</svg>
+					{/if}
+				</button>
+				<button
+					type="button"
+					class="wf-sort-header"
+					class:wf-sort-active={sortBy === 'status'}
+					onclick={() => toggleSort('status')}
+					title="Sort by status"
+				>
+					<span>Status</span>
+					{#if sortBy === 'status'}
+						<svg class="wf-sort-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							{#if sortDir === 'asc'}
+								<path d="M6 15l6-6 6 6" />
+							{:else}
+								<path d="M6 9l6 6 6-6" />
+							{/if}
+						</svg>
+					{/if}
+				</button>
 				<span>Nodes</span>
-				<span>Last Run</span>
+				<button
+					type="button"
+					class="wf-sort-header"
+					class:wf-sort-active={sortBy === 'lastRun'}
+					onclick={() => toggleSort('lastRun')}
+					title="Sort by last run"
+				>
+					<span>Last Run</span>
+					{#if sortBy === 'lastRun'}
+						<svg class="wf-sort-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							{#if sortDir === 'asc'}
+								<path d="M6 15l6-6 6 6" />
+							{:else}
+								<path d="M6 9l6 6 6-6" />
+							{/if}
+						</svg>
+					{/if}
+				</button>
 				<span></span>
 			</div>
 
 			<!-- Workflow rows -->
-			{#each workflows as wf}
+			{#each sortedWorkflows as wf (wf.id)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					data-nav-id={wf.id}
@@ -1750,6 +1841,43 @@
 	.wf-row-action-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* ===== SORT HEADERS ===== */
+
+	.wf-sort-header {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0;
+		background: transparent;
+		border: none;
+		color: inherit;
+		font: inherit;
+		text-transform: inherit;
+		letter-spacing: inherit;
+		cursor: pointer;
+		text-align: left;
+		transition: color 0.1s;
+	}
+
+	.wf-sort-header:hover {
+		color: oklch(0.70 0.02 250);
+	}
+
+	.wf-sort-header:focus-visible {
+		outline: none;
+		color: oklch(0.80 0.02 250);
+	}
+
+	.wf-sort-active {
+		color: oklch(0.85 0.02 250);
+	}
+
+	.wf-sort-arrow {
+		width: 10px;
+		height: 10px;
+		flex-shrink: 0;
 	}
 
 	/* ===== PALETTE ITEMS ===== */

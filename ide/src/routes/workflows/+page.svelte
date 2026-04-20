@@ -821,6 +821,7 @@
 				{ key: 'Shift+Tab', description: 'Select previous node' },
 				{ key: 'Esc', description: 'Back to workflow list' },
 				{ key: 'Del / ⌫', description: 'Delete selected node(s) or edge(s)' },
+				{ key: 'Ctrl+D', description: 'Duplicate selected node(s)' },
 				{ key: 'Ctrl+S', description: 'Save workflow' },
 				{ key: 'Ctrl+Enter', description: 'Run workflow' },
 				{ key: 'Ctrl+Z', description: 'Undo' },

@@ -33,6 +33,7 @@
 		title: string;
 		status: string;
 		priority: number;
+		issue_type?: string;
 		assignee?: string | null;
 		requester?: RequesterActor | null;
 	}
@@ -58,6 +59,7 @@
 	let assignWrapEl = $state<HTMLDivElement | null>(null);
 	let statusWrapEl = $state<HTMLDivElement | null>(null);
 	let priorityWrapEl = $state<HTMLDivElement | null>(null);
+	let typeWrapEl = $state<HTMLDivElement | null>(null);
 
 	function clickTrigger(wrap: HTMLElement | null) {
 		if (!wrap) return;
@@ -81,6 +83,15 @@
 		{ value: "2", label: "P2 — medium" },
 		{ value: "3", label: "P3 — low" },
 		{ value: "4", label: "P4 — lowest" },
+	];
+
+	const TYPE_OPTIONS = [
+		{ value: "bug", label: "bug" },
+		{ value: "feature", label: "feature" },
+		{ value: "task", label: "task" },
+		{ value: "epic", label: "epic" },
+		{ value: "chore", label: "chore" },
+		{ value: "chat", label: "chat" },
 	];
 
 	// ---- Assignee groups (@me, known assignees) ----
@@ -128,11 +139,11 @@
 
 	// ---- PUT helper ----
 
-	let saving = $state<"assignee" | "status" | "priority" | null>(null);
+	let saving = $state<"assignee" | "status" | "priority" | "issue_type" | null>(null);
 	let errorMessage = $state<string | null>(null);
 
 	async function patchTask(
-		field: "assignee" | "status" | "priority",
+		field: "assignee" | "status" | "priority" | "issue_type",
 		value: string | number | null,
 	) {
 		saving = field;
@@ -178,6 +189,11 @@
 		const n = Number(value);
 		if (!Number.isInteger(n) || n === task.priority) return;
 		patchTask("priority", n);
+	}
+
+	function handleTypeChange(value: string) {
+		if (value === (task.issue_type ?? "task")) return;
+		patchTask("issue_type", value);
 	}
 
 	// ---- Spawn ----
@@ -259,6 +275,9 @@
 	export function openPriority() {
 		clickTrigger(priorityWrapEl);
 	}
+	export function openType() {
+		clickTrigger(typeWrapEl);
+	}
 	export function spawn() {
 		spawnAgent();
 	}
@@ -277,6 +296,7 @@
 
 	const assigneeDisplay = $derived(task.assignee || "— unassigned —");
 	const priorityDisplay = $derived(`P${task.priority ?? "?"}`);
+	const typeDisplay = $derived(task.issue_type || "task");
 </script>
 
 <div class="action-bar" aria-label="Quick actions">
@@ -323,6 +343,22 @@
 			onChange={handlePriorityChange}
 		/>
 		{#if saving === "priority"}
+			<span class="saving">…</span>
+		{/if}
+	</div>
+
+	<div class="slot slot-picker" bind:this={typeWrapEl}>
+		<span class="kbd-label"><kbd>t</kbd> Type</span>
+		<SearchDropdown
+			value={task.issue_type ?? "task"}
+			groups={[{ label: "Type", options: TYPE_OPTIONS }]}
+			placeholder={typeDisplay}
+			displayValue={typeDisplay}
+			size="sm"
+			dropup={true}
+			onChange={handleTypeChange}
+		/>
+		{#if saving === "issue_type"}
 			<span class="saving">…</span>
 		{/if}
 	</div>

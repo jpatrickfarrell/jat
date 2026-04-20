@@ -43,17 +43,19 @@
 
 	onMount(async () => {
 		try {
-			taskId = window.location.pathname.split('/').pop() ?? '';
+			// Support both path-based (/feedback/replay/jat-abc) and query-based (?id=jat-abc)
+			const searchParams = new URLSearchParams(window.location.search);
+			taskId = searchParams.get('id') || window.location.pathname.split('/').pop() || '';
 			// Inject CSS
 			if (!document.querySelector('#rrweb-css')) {
 				const link = document.createElement('link');
 				link.id = 'rrweb-css';
 				link.rel = 'stylesheet';
-				link.href = '/rrweb-replay.min.css';
+				link.href = '/feedback/rrweb-replay.min.css';
 				document.head.appendChild(link);
 			}
 			// Load rrweb replay bundle — exposes window.rrwebReplay
-			await loadScript('/rrweb-replay.min.js');
+			await loadScript('/feedback/rrweb-replay.min.js');
 			await fetchReport();
 		} catch (err: unknown) {
 			error = err instanceof Error ? err.message : String(err) || 'Failed to initialize replay';
@@ -65,28 +67,74 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await fetch('/api/feedback/reports');
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			// Fetch task data directly — works for both SQLite (jat/*) and Postgres-backed projects
+			// This avoids the /api/feedback/reports endpoint which only checks the local JAT tasks.db
+			const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+			if (!res.ok) {
+				if (res.status === 404) {
+					error = `Report ${taskId} not found`;
+				} else {
+					error = `Failed to load report (HTTP ${res.status})`;
+				}
+				loading = false;
+				return;
+			}
 			const data = await res.json();
-			const report = (data.reports || []).find((r: any) => r.id === taskId);
-			if (!report) {
+			const task = data.task;
+			if (!task) {
 				error = `Report ${taskId} not found`;
 				loading = false;
 				return;
 			}
-			reportTitle = report.title || taskId;
-			pageUrl = report.page_url || '';
-			consoleLogs = report.console_logs || null;
-			networkRequests = report.network_requests || null;
 
-			const recordingUrl = report.recording_url;
+			reportTitle = task.title || taskId;
+			pageUrl = task.page_url || '';
+
+			// Parse console_logs and network_requests from task metadata
+			if (task.metadata) {
+				try {
+					const meta = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata;
+					consoleLogs = meta?.console_logs ?? null;
+					networkRequests = meta?.network_requests ?? null;
+				} catch {
+					// non-fatal
+				}
+			}
+
+			// Get recording URL — from task field (Postgres) or parsed from description (SQLite)
+			let recordingUrl: string | null = task.recording_url || null;
+			if (!recordingUrl && task.description) {
+				const match = (task.description as string).match(/\*\*Session Recording:\*\*\s*(\S+)/);
+				if (match) {
+					const raw = match[1];
+					if (raw.startsWith('/api/')) {
+						recordingUrl = raw;
+					} else {
+						const filename = raw.split('/').pop();
+						if (filename) recordingUrl = `/api/feedback/recordings?file=${filename}`;
+					}
+				}
+			}
+
 			if (!recordingUrl) {
 				error = 'No recording available for this report';
 				loading = false;
 				return;
 			}
 
-			const recRes = await fetch(recordingUrl);
+			// Resolve relative recording URL against the task's page origin (for consumer-app recordings
+			// stored in Supabase Storage — e.g. /api/feedback/recordings?file=... on meadow.clinic)
+			let fetchUrl = recordingUrl;
+			if (!recordingUrl.startsWith('http') && pageUrl) {
+				try {
+					const origin = new URL(pageUrl).origin;
+					fetchUrl = `${origin}${recordingUrl}`;
+				} catch {
+					// Keep relative — will resolve against IDE origin (local recordings)
+				}
+			}
+
+			const recRes = await fetch(fetchUrl);
 			if (!recRes.ok) throw new Error(`Recording fetch failed: HTTP ${recRes.status}`);
 			const recData = await recRes.json();
 

@@ -30,6 +30,9 @@
 	import { RULE_CATEGORY_META } from '$lib/config/automationConfig';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { fly, fade } from 'svelte/transition';
+
+	// Multiplier for all transition durations — collapses to 0 when reduced motion is preferred
+	const _dur = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
 	import { richPaste } from '$lib/actions/richPaste';
 
 	// =============================================================================
@@ -434,25 +437,37 @@
 			formData.sessionFilter = [...formData.sessionFilter, state];
 		}
 	}
+
+	// Track expanded signal help panels per action index
+	let expandedSignalHelpIds = $state<Set<number>>(new Set());
+
+	function toggleSignalHelp(index: number) {
+		if (expandedSignalHelpIds.has(index)) {
+			expandedSignalHelpIds.delete(index);
+		} else {
+			expandedSignalHelpIds.add(index);
+		}
+		expandedSignalHelpIds = new Set(expandedSignalHelpIds);
+	}
 </script>
 
 {#if isOpen}
 	<!-- Modal Overlay -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-base-300/80 backdrop-blur-sm {className}"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-base-300/80 {className}"
 		onclick={handleOverlayClick}
 		onkeydown={(e) => e.key === 'Escape' && handleCancel()}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="rule-editor-title"
 		tabindex="-1"
-		transition:fade={{ duration: 150 }}
+		transition:fade={{ duration: 150 * _dur }}
 	>
 		<!-- Modal Content -->
 		<div
 			class="flex flex-col w-full max-w-[700px] rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-2xl"
 			style="max-height: calc(100vh - 2rem);"
-			transition:fly={{ y: 20, duration: 200 }}
+			transition:fly={{ y: 20, duration: 200 * _dur }}
 		>
 			<!-- Header -->
 			<header class="flex items-center justify-between px-5 py-4 bg-base-300 border-b border-base-300">
@@ -466,7 +481,7 @@
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d={RULE_CATEGORY_META[formData.category].icon} />
 					</svg>
-					<h2 id="rule-editor-title" class="text-base font-semibold text-base-content m-0 font-mono">{modalTitle}</h2>
+					<h2 id="rule-editor-title" class="text-base font-semibold text-base-content m-0">{modalTitle}</h2>
 				</div>
 				<button
 					class="flex items-center justify-center w-8 h-8 rounded-md bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-base-100 hover:text-base-content/80"
@@ -482,12 +497,12 @@
 			<!-- Form Content -->
 			<div class="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
 				<!-- Basic Info Section -->
-				<section class="p-4 rounded-[10px] bg-base-100 border border-base-300">
-					<h3 class="text-xs font-semibold text-info uppercase tracking-wider font-mono m-0 mb-3">Basic Information</h3>
+				<section class="p-4 rounded-lg bg-base-100 border border-base-300">
+					<h3 class="text-xs font-semibold text-info uppercase tracking-wider m-0 mb-3">Basic Information</h3>
 
 					<!-- Name -->
 					<div class="mb-3.5">
-						<label for="rule-name" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">
+						<label for="rule-name" class="block text-xs font-medium text-base-content/70 mb-1.5">
 							Name <span class="text-error">*</span>
 						</label>
 						<input
@@ -498,13 +513,13 @@
 							placeholder="e.g., API Error Recovery"
 						/>
 						{#if errors.name}
-							<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors.name}</span>
+							<span class="block text-[0.7rem] text-error mt-1">{errors.name}</span>
 						{/if}
 					</div>
 
 					<!-- Description -->
 					<div class="mb-3.5">
-						<label for="rule-description" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Description</label>
+						<label for="rule-description" class="block text-xs font-medium text-base-content/70 mb-1.5">Description</label>
 						<textarea
 							id="rule-description"
 							bind:value={formData.description}
@@ -518,7 +533,7 @@
 					<!-- Category & Priority -->
 					<div class="flex gap-4 items-start">
 						<div class="mb-3.5 flex-1">
-							<label for="rule-category" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Category</label>
+							<label for="rule-category" class="block text-xs font-medium text-base-content/70 mb-1.5">Category</label>
 							<select id="rule-category" bind:value={formData.category} class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
 								{#each Object.entries(RULE_CATEGORY_META) as [value, meta]}
 									<option {value}>{meta.label}</option>
@@ -526,7 +541,7 @@
 							</select>
 						</div>
 						<div class="mb-3.5 flex-1">
-							<label for="rule-priority" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Priority</label>
+							<label for="rule-priority" class="block text-xs font-medium text-base-content/70 mb-1.5">Priority</label>
 							<input
 								id="rule-priority"
 								type="number"
@@ -535,10 +550,10 @@
 								min="0"
 								max="100"
 							/>
-							<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">Higher = processed first</span>
+							<span class="block text-[0.65rem] text-base-content/50 mt-1">Higher = processed first</span>
 						</div>
 						<div class="mb-3.5">
-							<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Enabled</div>
+							<div class="block text-xs font-medium text-base-content/70 mb-1.5">Enabled</div>
 							<label class="inline-flex items-center cursor-pointer mt-1">
 								<input
 									type="checkbox"
@@ -552,10 +567,17 @@
 				</section>
 
 				<!-- Patterns Section -->
-				<section class="p-4 rounded-[10px] bg-base-100 border border-base-300">
+				<section class="p-4 rounded-lg bg-base-100 border border-base-300">
 					<div class="flex items-center justify-between mb-3">
-						<h3 class="text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">Patterns</h3>
-						<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] font-mono rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={addPattern}>
+						<div class="flex items-center gap-3">
+							<h3 class="text-xs font-semibold text-info uppercase tracking-wider m-0">Patterns</h3>
+							<button
+								class="text-[0.6rem] text-base-content/35 hover:text-info/70 transition-colors duration-100 bg-transparent border-none p-0 cursor-pointer"
+								onclick={handleCancel}
+								title="Close editor and test patterns in the Pattern Tester panel"
+							>validate in Pattern Tester ↗</button>
+						</div>
+						<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={addPattern} aria-label="Add pattern">
 							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 							</svg>
@@ -563,13 +585,13 @@
 						</button>
 					</div>
 					{#if errors.patterns}
-						<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors.patterns}</span>
+						<span class="block text-[0.7rem] text-error mt-1">{errors.patterns}</span>
 					{/if}
 
 					{#each formData.patterns as pattern, index}
 						<div class="p-3.5 rounded-lg mb-3 bg-base-300 border border-base-300 last:mb-0">
 							<div class="flex items-center justify-between mb-2">
-								<span class="text-[0.7rem] font-semibold text-base-content/60 font-mono">Pattern {index + 1}</span>
+								<span class="text-[0.7rem] font-semibold text-base-content/60">Pattern {index + 1}</span>
 								{#if formData.patterns.length > 1}
 									<button
 										class="flex items-center justify-center w-6 h-6 rounded bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-error/20 hover:text-error"
@@ -589,10 +611,10 @@
 								rows="2"
 							></textarea>
 							{#if errors[`pattern-${index}`]}
-								<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors[`pattern-${index}`]}</span>
+								<span class="block text-[0.7rem] text-error mt-1">{errors[`pattern-${index}`]}</span>
 							{/if}
 							<div class="flex gap-4 mt-2">
-								<label class="inline-flex items-center gap-1.5 cursor-pointer text-xs text-base-content/70 font-mono">
+								<label class="inline-flex items-center gap-1.5 cursor-pointer text-xs text-base-content/70">
 									<input
 										type="checkbox"
 										checked={pattern.mode === 'regex'}
@@ -601,7 +623,7 @@
 									/>
 									<span>Regex</span>
 								</label>
-								<label class="inline-flex items-center gap-1.5 cursor-pointer text-xs text-base-content/70 font-mono">
+								<label class="inline-flex items-center gap-1.5 cursor-pointer text-xs text-base-content/70">
 									<input type="checkbox" bind:checked={pattern.caseSensitive} class="w-4 h-4 cursor-pointer accent-info" />
 									<span>Case Sensitive</span>
 								</label>
@@ -611,14 +633,16 @@
 				</section>
 
 				<!-- Session State Filter Section -->
-				<section class="p-4 rounded-[10px] bg-base-100 border border-base-300">
-					<h3 class="text-xs font-semibold text-info uppercase tracking-wider font-mono m-0 mb-3">Session State Filter</h3>
+				<section class="p-4 rounded-lg bg-base-100 border border-base-300">
+					<h3 class="text-xs font-semibold text-info uppercase tracking-wider m-0 mb-3">Session State Filter</h3>
 					<p class="text-xs text-base-content/50 m-0 mb-3">Only trigger when session is in selected states (leave empty for all states)</p>
 
 					<div class="flex flex-wrap gap-2">
 						{#each sessionStates as state}
 							<button
-								class="py-1.5 px-3 text-[0.7rem] font-mono rounded-2xl cursor-pointer transition-all duration-150 {formData.sessionFilter.includes(state.value) ? '' : 'bg-base-300 border border-base-300 text-base-content/60 hover:bg-base-100 hover:border-base-content/30'}"
+								role="switch"
+								aria-checked={formData.sessionFilter.includes(state.value)}
+								class="py-1.5 px-3 text-[0.7rem] rounded-2xl cursor-pointer transition-all duration-150 {formData.sessionFilter.includes(state.value) ? '' : 'bg-base-300 border border-base-300 text-base-content/60 hover:bg-base-100 hover:border-base-content/30'}"
 								style={formData.sessionFilter.includes(state.value) ? `background: ${state.visual.bgColor}; border: 1px solid ${state.visual.borderColor}; color: ${state.visual.textColor};` : ''}
 								onclick={() => toggleStateFilter(state.value)}
 							>
@@ -629,10 +653,10 @@
 				</section>
 
 				<!-- Actions Section -->
-				<section class="p-4 rounded-[10px] bg-base-100 border border-base-300">
+				<section class="p-4 rounded-lg bg-base-100 border border-base-300">
 					<div class="flex items-center justify-between mb-3">
-						<h3 class="text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">Actions</h3>
-						<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] font-mono rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={addAction}>
+						<h3 class="text-xs font-semibold text-info uppercase tracking-wider m-0">Actions</h3>
+						<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={addAction} aria-label="Add action">
 							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 							</svg>
@@ -640,13 +664,13 @@
 						</button>
 					</div>
 					{#if errors.actions}
-						<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors.actions}</span>
+						<span class="block text-[0.7rem] text-error mt-1">{errors.actions}</span>
 					{/if}
 
 					{#each formData.actions as action, index}
 						<div class="p-3.5 rounded-lg mb-3 bg-base-300 border border-base-300 last:mb-0">
 							<div class="flex items-center justify-between mb-2">
-								<span class="text-[0.7rem] font-semibold text-base-content/60 font-mono">Action {index + 1}</span>
+								<span class="text-[0.7rem] font-semibold text-base-content/60">Action {index + 1}</span>
 								{#if formData.actions.length > 1}
 									<button
 										class="flex items-center justify-center w-6 h-6 rounded bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-error/20 hover:text-error"
@@ -662,7 +686,7 @@
 
 							<div class="flex gap-4 items-start">
 								<div class="mb-3.5 flex-1">
-									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Action Type</div>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5">Action Type</div>
 									<select
 										value={action.type}
 										onchange={(e) => handleActionTypeChange(index, e.currentTarget.value as ActionType)}
@@ -672,12 +696,12 @@
 											<option value={actionType.value}>{actionType.label}</option>
 										{/each}
 									</select>
-									<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">
+									<span class="block text-[0.65rem] text-base-content/50 mt-1">
 										{actionTypes.find(a => a.value === action.type)?.description}
 									</span>
 								</div>
 								<div class="mb-3.5 w-28">
-									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Delay (ms)</div>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5">Delay (ms)</div>
 									<input
 										type="number"
 										bind:value={action.delay}
@@ -693,7 +717,7 @@
 							{#if action.type === 'show_question_ui' && action.questionUIConfig}
 								<div class="mt-3 p-3 rounded-lg bg-secondary/10 border border-secondary/20">
 									<div class="mb-3.5">
-										<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Text <span class="text-error">*</span></div>
+										<div class="block text-xs font-medium text-base-content/70 mb-1.5">Question Text <span class="text-error">*</span></div>
 										<input
 											type="text"
 											bind:value={action.questionUIConfig.question}
@@ -701,24 +725,24 @@
 											placeholder="e.g., Which approach should we use?"
 										/>
 										{#if errors[`action-${index}-question`]}
-											<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors[`action-${index}-question`]}</span>
+											<span class="block text-[0.7rem] text-error mt-1">{errors[`action-${index}-question`]}</span>
 										{/if}
 									</div>
 
 									<div class="flex gap-4 items-start">
 										<div class="mb-3.5 flex-1">
-											<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Type</div>
+											<div class="block text-xs font-medium text-base-content/70 mb-1.5">Question Type</div>
 											<select bind:value={action.questionUIConfig.questionType} class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
 												{#each questionTypes as qType}
 													<option value={qType.value}>{qType.label}</option>
 												{/each}
 											</select>
-											<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">
+											<span class="block text-[0.65rem] text-base-content/50 mt-1">
 												{questionTypes.find(q => q.value === action.questionUIConfig?.questionType)?.description}
 											</span>
 										</div>
 										<div class="mb-3.5 w-28">
-											<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Timeout (s)</div>
+											<div class="block text-xs font-medium text-base-content/70 mb-1.5">Timeout (s)</div>
 											<input
 												type="number"
 												bind:value={action.questionUIConfig.timeout}
@@ -734,8 +758,8 @@
 									{#if action.questionUIConfig.questionType === 'choice'}
 										<div class="mt-3">
 											<div class="flex items-center justify-between mb-2">
-												<span class="text-[0.7rem] font-semibold text-secondary uppercase tracking-wider font-mono">Options</span>
-												<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] font-mono rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={() => addQuestionOption(index)}>
+												<span class="text-[0.7rem] font-semibold text-secondary uppercase tracking-wider">Options</span>
+												<button class="inline-flex items-center gap-1.5 py-1.5 px-3 text-[0.7rem] rounded-md cursor-pointer bg-info/20 border border-info/40 text-info transition-all duration-150 hover:bg-info/30 hover:border-info/60" onclick={() => addQuestionOption(index)} aria-label="Add option">
 													<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 													</svg>
@@ -743,13 +767,13 @@
 												</button>
 											</div>
 											{#if errors[`action-${index}-options`]}
-												<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors[`action-${index}-options`]}</span>
+												<span class="block text-[0.7rem] text-error mt-1">{errors[`action-${index}-options`]}</span>
 											{/if}
 
 											{#each action.questionUIConfig.options || [] as option, optIndex}
 												<div class="p-2.5 rounded-md mb-2 bg-base-300 border border-base-300 last:mb-0">
 													<div class="flex items-center justify-between mb-1.5">
-														<span class="text-[0.65rem] font-semibold text-secondary/70 font-mono">Option {optIndex + 1}</span>
+														<span class="text-[0.65rem] font-semibold text-secondary/70">Option {optIndex + 1}</span>
 														{#if (action.questionUIConfig.options?.length || 0) > 1}
 															<button
 																class="flex items-center justify-center w-6 h-6 rounded bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-error/20 hover:text-error"
@@ -764,7 +788,7 @@
 													</div>
 													<div class="flex gap-4 items-start">
 														<div class="mb-3.5 flex-1">
-															<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Label <span class="text-error">*</span></div>
+															<div class="block text-xs font-medium text-base-content/70 mb-1.5">Label <span class="text-error">*</span></div>
 															<input
 																type="text"
 																bind:value={option.label}
@@ -772,11 +796,11 @@
 																placeholder="Display text"
 															/>
 															{#if errors[`action-${index}-option-${optIndex}-label`]}
-																<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors[`action-${index}-option-${optIndex}-label`]}</span>
+																<span class="block text-[0.7rem] text-error mt-1">{errors[`action-${index}-option-${optIndex}-label`]}</span>
 															{/if}
 														</div>
 														<div class="mb-3.5 w-24">
-															<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Value <span class="text-error">*</span></div>
+															<div class="block text-xs font-medium text-base-content/70 mb-1.5">Value <span class="text-error">*</span></div>
 															<input
 																type="text"
 																bind:value={option.value}
@@ -784,12 +808,12 @@
 																placeholder="1"
 															/>
 															{#if errors[`action-${index}-option-${optIndex}-value`]}
-																<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors[`action-${index}-option-${optIndex}-value`]}</span>
+																<span class="block text-[0.7rem] text-error mt-1">{errors[`action-${index}-option-${optIndex}-value`]}</span>
 															{/if}
 														</div>
 													</div>
 													<div class="mb-0">
-														<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Description (optional)</div>
+														<div class="block text-xs font-medium text-base-content/70 mb-1.5">Description (optional)</div>
 														<input
 															type="text"
 															bind:value={option.description}
@@ -805,22 +829,22 @@
 							{:else if action.type === 'run_command'}
 								<!-- Command selector for run_command action -->
 								<div class="mb-3.5 mt-2">
-									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Slash Command</div>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5">Slash Command</div>
 									{#if commandsLoading}
-										<div class="flex items-center gap-2 py-2 px-3 text-xs text-base-content/60 font-mono">
+										<div class="flex items-center gap-2 py-2 px-3 text-xs text-base-content/60">
 											<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-base-300 border-t-info animate-spin"></span>
 											Loading commands...
 										</div>
 									{:else if commandsError}
-										<div class="flex items-center gap-2 py-2 px-3 rounded-md text-xs font-mono bg-error/10 border border-error/20 text-error">
+										<div class="flex items-center gap-2 py-2 px-3 rounded-md text-xs bg-error/10 border border-error/20 text-error">
 											<span class="text-sm">⚠</span>
 											{commandsError}
-											<button class="ml-auto py-1 px-2 text-[0.65rem] font-mono rounded cursor-pointer bg-base-300 border border-base-300 text-base-content/75 transition-all duration-150 hover:bg-base-100 hover:border-base-content/40" onclick={fetchCommands}>Retry</button>
+											<button class="ml-auto py-1 px-2 text-[0.65rem] rounded cursor-pointer bg-base-300 border border-base-300 text-base-content/75 transition-all duration-150 hover:bg-base-100 hover:border-base-content/40" onclick={fetchCommands}>Retry</button>
 										</div>
 									{:else if availableCommands.length === 0}
-										<div class="py-2 px-3 text-xs text-base-content/50 italic font-mono">No commands available</div>
+										<div class="py-2 px-3 text-xs text-base-content/50 italic">No commands available</div>
 									{:else}
-										<select bind:value={action.payload} class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
+										<select bind:value={action.payload} aria-label="Select slash command" class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
 											<option value="">Select a command...</option>
 											{#each availableCommands as cmd}
 												<option value={cmd.invocation}>
@@ -828,7 +852,7 @@
 												</option>
 											{/each}
 										</select>
-										<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">
+										<span class="block text-[0.65rem] text-base-content/50 mt-1">
 											The selected command will be sent to the session terminal
 										</span>
 									{/if}
@@ -836,7 +860,7 @@
 							{:else}
 								<!-- Standard payload input for other action types -->
 								<div class="mb-3.5">
-									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5">
 										{#if action.type === 'send_keys'}
 											Key to Send
 										{:else if action.type === 'notify_only'}
@@ -868,21 +892,27 @@
 									{/if}
 								<!-- Signal Help Section -->
 								{#if action.type === 'signal'}
-									<details class="mt-2 group">
-										<summary class="flex items-center gap-1.5 text-[0.7rem] text-info/70 cursor-pointer select-none font-mono hover:text-info group-open:text-info group-open:mb-2">
-											<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+									<div class="mt-2">
+										<button
+											class="flex items-center gap-1.5 text-[0.7rem] text-info/70 cursor-pointer bg-transparent border-none p-0 select-none hover:text-info transition-colors duration-100"
+											onclick={() => toggleSignalHelp(index)}
+											aria-expanded={expandedSignalHelpIds.has(index)}
+											aria-controls="signal-help-{index}"
+										>
+											<svg class="w-2.5 h-2.5 transition-transform duration-150 {expandedSignalHelpIds.has(index) ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
 											</svg>
 											Signal Types, Variables & Payloads
-										</summary>
-										<div class="p-3 rounded-lg text-[0.7rem] bg-base-300 border border-base-300">
-											<p class="text-base-content/75 m-0 mb-3 font-mono">
+										</button>
+										{#if expandedSignalHelpIds.has(index)}
+										<div id="signal-help-{index}" class="mt-1 p-3 rounded-lg text-[0.7rem] bg-base-300 border border-base-300">
+											<p class="text-base-content/75 m-0 mb-3">
 												Format: <code class="py-0.5 px-1.5 rounded text-[0.65rem] bg-info/20 text-info">type payload</code> (type followed by space, then JSON)
 											</p>
 
 											<!-- Template Variables Section -->
 											<div class="mb-3 p-2 rounded-md bg-base-200 border border-base-300">
-												<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2 font-mono">Template Variables</div>
+												<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2">Template Variables</div>
 												<div class="grid gap-x-3 gap-y-1 items-baseline" style="grid-template-columns: auto 1fr;">
 													<code class="py-0.5 px-1.5 rounded text-[0.6rem] font-mono whitespace-nowrap bg-success/20 text-success">{'{session}'}</code>
 													<span class="text-[0.6rem] text-base-content/60 font-mono">Tmux session name (e.g., "jat-FairBay")</span>
@@ -906,24 +936,24 @@
 
 											<!-- Example with Variables -->
 											<div class="mb-3 p-2 rounded-md bg-info/10 border border-info/20">
-												<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2 font-mono">Example: Extract task ID from output</div>
+												<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2">Example: Extract task ID from output</div>
 												<div class="flex flex-col gap-1.5">
 													<div class="flex flex-col gap-0.5">
-														<span class="text-[0.55rem] text-base-content/60 font-mono uppercase">Pattern (regex):</span>
+														<span class="text-[0.55rem] text-base-content/60 uppercase">Pattern (regex):</span>
 														<code class="py-1 px-2 rounded text-[0.6rem] font-mono break-all bg-base-300 border border-base-300 text-base-content/80">Working on task (jat-[a-z0-9]+)</code>
 													</div>
 													<div class="flex flex-col gap-0.5">
-														<span class="text-[0.55rem] text-base-content/60 font-mono uppercase">Signal payload:</span>
+														<span class="text-[0.55rem] text-base-content/60 uppercase">Signal payload:</span>
 														<code class="py-1 px-2 rounded text-[0.6rem] font-mono break-all bg-base-300 border border-base-300 text-base-content/80">{`working {"taskId":"{$1}","agentName":"{agent}"}`}</code>
 													</div>
 													<div class="flex flex-col gap-0.5">
-														<span class="text-[0.55rem] text-base-content/60 font-mono uppercase">Result:</span>
+														<span class="text-[0.55rem] text-base-content/60 uppercase">Result:</span>
 														<code class="py-1 px-2 rounded text-[0.6rem] font-mono break-all bg-base-300 border border-base-300 text-base-content/80">{`working {"taskId":"jat-abc","agentName":"FairBay"}`}</code>
 													</div>
 												</div>
 											</div>
 
-											<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2 mt-2 font-mono">Signal Types</div>
+											<div class="text-[0.65rem] font-semibold text-info uppercase tracking-wider mb-2 mt-2">Signal Types</div>
 											<div class="flex flex-col gap-1.5 mb-3">
 												<div class="flex items-start gap-2 py-1">
 													<span class="flex-shrink-0 w-20 font-semibold text-success text-[0.65rem] font-mono">working</span>
@@ -959,7 +989,8 @@
 												</div>
 											</div>
 										</div>
-									</details>
+										{/if}
+									</div>
 								{/if}
 							</div>
 							{/if}
@@ -968,12 +999,12 @@
 				</section>
 
 				<!-- Timing Section -->
-				<section class="p-4 rounded-[10px] bg-base-100 border border-base-300">
-					<h3 class="text-xs font-semibold text-info uppercase tracking-wider font-mono m-0 mb-3">Timing & Limits</h3>
+				<section class="p-4 rounded-lg bg-base-100 border border-base-300">
+					<h3 class="text-xs font-semibold text-info uppercase tracking-wider m-0 mb-3">Timing & Limits</h3>
 
 					<div class="flex gap-4 items-start">
 						<div class="mb-3.5 flex-1">
-							<label for="cooldown" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Cooldown (seconds)</label>
+							<label for="cooldown" class="block text-xs font-medium text-base-content/70 mb-1.5">Cooldown (seconds)</label>
 							<input
 								id="cooldown"
 								type="number"
@@ -983,12 +1014,12 @@
 								step="5"
 							/>
 							{#if errors.cooldown}
-								<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors.cooldown}</span>
+								<span class="block text-[0.7rem] text-error mt-1">{errors.cooldown}</span>
 							{/if}
-							<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">Minimum time between triggers</span>
+							<span class="block text-[0.65rem] text-base-content/50 mt-1">Minimum time between triggers</span>
 						</div>
 						<div class="mb-3.5 flex-1">
-							<label for="max-triggers" class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Max Triggers per Session</label>
+							<label for="max-triggers" class="block text-xs font-medium text-base-content/70 mb-1.5">Max Triggers per Session</label>
 							<input
 								id="max-triggers"
 								type="number"
@@ -997,9 +1028,9 @@
 								min="0"
 							/>
 							{#if errors.maxTriggers}
-								<span class="block text-[0.7rem] text-error mt-1 font-mono">{errors.maxTriggers}</span>
+								<span class="block text-[0.7rem] text-error mt-1">{errors.maxTriggers}</span>
 							{/if}
-							<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">0 = unlimited</span>
+							<span class="block text-[0.65rem] text-base-content/50 mt-1">0 = unlimited</span>
 						</div>
 					</div>
 				</section>
@@ -1007,10 +1038,10 @@
 
 			<!-- Footer -->
 			<footer class="flex justify-end gap-3 px-5 py-4 bg-base-300 border-t border-base-300">
-				<button class="py-2 px-5 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-transparent border border-base-content/30 text-base-content/70 hover:bg-base-100 hover:border-base-content/40" onclick={handleCancel}>
+				<button class="py-2 px-5 text-sm font-medium rounded-md cursor-pointer transition-all duration-150 bg-transparent border border-base-content/30 text-base-content/70 hover:bg-base-100 hover:border-base-content/40" onclick={handleCancel}>
 					Cancel
 				</button>
-				<button class="py-2 px-5 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-success border border-success text-success-content hover:brightness-110" onclick={handleSave}>
+				<button class="py-2 px-5 text-sm font-medium rounded-md cursor-pointer transition-all duration-150 bg-success border border-success text-success-content hover:brightness-110" onclick={handleSave}>
 					{isEditMode ? 'Save Changes' : 'Create Rule'}
 				</button>
 			</footer>

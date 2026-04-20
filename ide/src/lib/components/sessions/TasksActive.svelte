@@ -3056,6 +3056,7 @@
 	}
 
 	.ta-row2-wrapper:hover,
+	.ta-session-card:hover .ta-row2-wrapper,
 	.ta-session-card.tray-open .ta-row2-wrapper {
 		background: oklch(0.22 0.02 250 / 0.6);
 	}
@@ -3075,6 +3076,7 @@
 	}
 
 	.ta-row2-wrapper:hover::after,
+	.ta-session-card:hover .ta-row2-wrapper::after,
 	.ta-session-card.tray-open .ta-row2-wrapper::after {
 		opacity: 0;
 	}
@@ -3100,8 +3102,9 @@
 		border-radius: 3px;
 	}
 
-	/* Reveal on row2-zone hover (not full-card hover) + focus/open states */
+	/* Reveal on any card hover + focus/open states */
 	.ta-row2-wrapper:hover > .ta-action-tray,
+	.ta-session-card:hover .ta-row2-wrapper > .ta-action-tray,
 	.ta-row2-wrapper > .ta-action-tray:focus-within,
 	.ta-session-card.tray-open .ta-row2-wrapper > .ta-action-tray {
 		opacity: 1;

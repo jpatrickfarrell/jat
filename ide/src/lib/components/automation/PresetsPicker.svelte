@@ -109,6 +109,30 @@
 		}
 	}
 
+	// Keyboard navigation for preset rows (j/k to move, Enter/Space to install/remove)
+	function handlePresetKeydown(e: KeyboardEvent) {
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		const focused = document.activeElement as HTMLElement;
+		if (!focused?.dataset.presetNavId) return; // Not on a preset row — let event bubble
+		const items = Array.from(document.querySelectorAll<HTMLElement>('[data-preset-nav-id]'));
+		const currentIdx = items.indexOf(focused);
+		if (currentIdx === -1) return;
+		if (e.key === 'j' || e.key === 'ArrowDown') {
+			e.preventDefault(); e.stopPropagation();
+			items[Math.min(currentIdx + 1, items.length - 1)]?.focus();
+		} else if (e.key === 'k' || e.key === 'ArrowUp') {
+			e.preventDefault(); e.stopPropagation();
+			items[Math.max(currentIdx - 1, 0)]?.focus();
+		} else if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault(); e.stopPropagation();
+			const preset = AUTOMATION_PRESETS.find(p => p.id === focused.dataset.presetNavId);
+			if (preset) togglePreset(preset);
+		} else if (e.key === 'Escape') {
+			e.stopPropagation();
+			focused.blur();
+		}
+	}
+
 	// Get action type label
 	function getActionTypeLabel(type: string): string {
 		switch (type) {
@@ -133,7 +157,7 @@
 	}
 </script>
 
-<div class="flex flex-col rounded-lg overflow-hidden bg-base-200 border border-base-300 {className}">
+<div class="flex flex-col rounded-lg overflow-hidden bg-base-200 border border-base-300 {className}" onkeydown={handlePresetKeydown}>
 	<!-- Header -->
 	<header class="flex items-center justify-between py-3 px-4 bg-base-300 border-b border-base-300">
 		<div class="flex items-center gap-2 text-sm font-semibold text-base-content">
@@ -192,7 +216,13 @@
 					<div class="flex flex-col gap-1">
 						{#each presets as preset (preset.id)}
 							{@const isInstalled = installedPresets.has(preset.id)}
-							<div class="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors duration-150 {isInstalled ? 'bg-success/[0.06] border border-success/20' : 'bg-base-100/40 border border-base-content/[0.07] hover:bg-base-100/70 hover:border-base-content/15'}">
+							<div
+								class="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors duration-150 {isInstalled ? 'bg-success/[0.06] border border-success/20' : 'bg-base-100/40 border border-base-content/[0.07] hover:bg-base-100/70 hover:border-base-content/15'}"
+								tabindex="0"
+								data-preset-nav-id={preset.id}
+								role="row"
+								aria-label="{preset.name}{isInstalled ? ' (installed)' : ''}"
+							>
 								<!-- Installed indicator dot -->
 								<div class="w-1.5 h-1.5 rounded-full flex-shrink-0 {isInstalled ? 'bg-success' : 'bg-base-content/15'}"></div>
 
@@ -446,5 +476,10 @@
 {/if}
 
 <style>
-	/* All styling converted to inline Tailwind/DaisyUI classes for Tailwind v4 compatibility */
+	/* Keyboard-nav focus indicator for preset rows */
+	[data-preset-nav-id]:focus-visible {
+		outline: none;
+		background: oklch(0.70 0.18 240 / 0.10);
+		box-shadow: inset 3px 0 0 0 oklch(0.70 0.18 240);
+	}
 </style>

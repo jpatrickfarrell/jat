@@ -97,6 +97,7 @@
 		openAssign: () => void;
 		openStatus: () => void;
 		openPriority: () => void;
+		openType: () => void;
 		spawn: () => void;
 		openFull: () => void;
 		dismiss: () => void;
@@ -223,6 +224,9 @@
 	}
 	export function openPriority() {
 		actionBarRef?.openPriority();
+	}
+	export function openType() {
+		actionBarRef?.openType();
 	}
 	export function spawnAgent() {
 		actionBarRef?.spawn();
@@ -358,22 +362,18 @@
 				<h3 class="section-label">Context</h3>
 				<div class="context-items">
 					{#if feedbackContext.recording_url || feedbackContext.db_id}
-						{@const replayBase = (() => { try { return new URL(feedbackContext.page_url || '').origin; } catch { return ''; } })()}
-						{@const replayUrl = feedbackContext.db_id && replayBase ? `${replayBase}/feedback/replay?id=${feedbackContext.db_id}` : feedbackContext.recording_url || ''}
-						{#if replayUrl}
-							<a
-								href={replayUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="context-recording-link"
-							>
-								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-								</svg>
-								Watch Recording
-							</a>
-						{/if}
+						<a
+							href={`/feedback/replay/${encodeURIComponent(task.id)}`}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="context-recording-link"
+						>
+							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+							</svg>
+							Watch Recording
+						</a>
 					{/if}
 					{#if feedbackContext.page_url}
 						<div class="context-url-row">

@@ -337,6 +337,18 @@
 		}
 	};
 
+	// Track expanded match location panels per rule (replaces <details>)
+	let expandedMatchIds = $state<Set<string>>(new Set());
+
+	function toggleMatchLocations(ruleId: string) {
+		if (expandedMatchIds.has(ruleId)) {
+			expandedMatchIds.delete(ruleId);
+		} else {
+			expandedMatchIds.add(ruleId);
+		}
+		expandedMatchIds = new Set(expandedMatchIds);
+	}
+
 	// Handle testing a specific rule
 	function testRule(rule: AutomationRule) {
 		const result = findMatches(sampleOutput, rule.pattern, rule.isRegex, rule.caseSensitive);
@@ -575,19 +587,29 @@
 									{/if}
 								</div>
 
-								<!-- Match Details (collapsed by default) -->
-								<details class="mt-2">
-									<summary class="cursor-pointer text-[10px] font-mono text-base-content/50">
+								<!-- Match Details (custom expandable) -->
+								<div class="mt-2">
+									<button
+										class="flex items-center gap-1 text-[10px] text-base-content/50 cursor-pointer bg-transparent border-none p-0 hover:text-base-content/70 transition-colors duration-100"
+										onclick={() => toggleMatchLocations(rule.id)}
+										aria-expanded={expandedMatchIds.has(rule.id)}
+										aria-controls="match-loc-{rule.id}"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-2.5 h-2.5 transition-transform duration-150 {expandedMatchIds.has(rule.id) ? 'rotate-90' : ''}">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+										</svg>
 										Match locations
-									</summary>
-									<div class="mt-1 p-2 rounded max-h-24 overflow-y-auto bg-base-300">
-										{#each matches as match, i}
-											<div class="text-[9px] font-mono text-base-content/60">
-												{i + 1}. Line {match.line}, Col {match.column}: "<span class="text-info">{match.text}</span>"
-											</div>
-										{/each}
-									</div>
-								</details>
+									</button>
+									{#if expandedMatchIds.has(rule.id)}
+										<div id="match-loc-{rule.id}" class="mt-1 p-2 rounded max-h-24 overflow-y-auto bg-base-300">
+											{#each matches as match, i}
+												<div class="text-[9px] font-mono text-base-content/60">
+													{i + 1}. Line {match.line}, Col {match.column}: "<span class="text-info">{match.text}</span>"
+												</div>
+											{/each}
+										</div>
+									{/if}
+								</div>
 							</div>
 						</div>
 					{/each}

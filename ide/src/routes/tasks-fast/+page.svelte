@@ -137,6 +137,7 @@
 		openAssign: () => void;
 		openStatus: () => void;
 		openPriority: () => void;
+		openType: () => void;
 		spawnAgent: () => void;
 		openFullDrawer: () => void;
 		dismissTask: () => void;
@@ -349,6 +350,7 @@
 				{ key: "a", description: "Open assign picker" },
 				{ key: "s", description: "Open status picker" },
 				{ key: "p", description: "Open priority picker" },
+				{ key: "t", description: "Open type picker" },
 				{ key: "Space", description: "Spawn agent on this task" },
 				{ key: "o", description: "Open full task detail drawer" },
 				{ key: "d", description: "Dismiss / close task" },
@@ -467,6 +469,10 @@
 					case "p":
 						e.preventDefault();
 						detailRef.openPriority();
+						return;
+					case "t":
+						e.preventDefault();
+						detailRef.openType();
 						return;
 					case "o":
 						e.preventDefault();

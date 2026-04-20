@@ -9,7 +9,7 @@
 	 * Data stored in memory (not persisted).
 	 */
 
-	import { fly, fade, slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 
 	// Multiplier for all transition durations — collapses to 0 when reduced motion is preferred
 	const _dur = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;

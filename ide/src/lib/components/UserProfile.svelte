@@ -7,8 +7,9 @@
 	 * Uses DaisyUI dropdown component.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import ThemeSelector from './ThemeSelector.svelte';
+	import { listNav } from '$lib/actions/listNav';
 	import {
 		enableSounds,
 		disableSounds,
@@ -83,6 +84,7 @@
 	let editEmail = $state('');
 	let identitySaving = $state(false);
 	let identityError = $state<string | null>(null);
+	let editNameInputEl = $state<HTMLInputElement | null>(null);
 
 	async function loadIdentity() {
 		try {
@@ -100,7 +102,7 @@
 
 	onMount(loadIdentity);
 
-	function openIdentityEditor() {
+	async function openIdentityEditor() {
 		// Pre-fill with current effective values, not override-only. Saving with
 		// the same values the git config already provides is harmless — the
 		// backend stores them as an override and falls back if cleared.
@@ -108,6 +110,12 @@
 		editEmail = userEmail;
 		identityError = null;
 		editingIdentity = true;
+		// DaisyUI dropdowns close when `:focus-within` goes false. Swapping the
+		// {#if}/{:else} branch destroys the Edit button (which was focused by
+		// the click), so focus escapes the dropdown and it closes. Immediately
+		// focus the new Name input to keep `:focus-within` true.
+		await tick();
+		editNameInputEl?.focus();
 	}
 
 	async function saveIdentity() {
@@ -207,8 +215,17 @@
 	let isToastReviewAnimating = $state(false);
 	let isToastCompleteAnimating = $state(false);
 
-	// Collapsible section state
-	let expandedSections = $state<Set<string>>(new Set(['notifications', 'terminal', 'agents']));
+	// Collapsible section state — default all collapsed, persist per-section in localStorage
+	function loadExpandedSections(): Set<string> {
+		if (typeof localStorage !== 'undefined') {
+			try {
+				const stored = localStorage.getItem('userprofile-expanded-sections');
+				if (stored) return new Set(JSON.parse(stored) as string[]);
+			} catch {}
+		}
+		return new Set();
+	}
+	let expandedSections = $state<Set<string>>(loadExpandedSections());
 
 	// Help modal
 	let showHelpModal = $state(false);
@@ -216,8 +233,14 @@
 	// Update JAT state
 	let isUpdating = $state(false);
 
-	// Keyboard icon path
-	const keyboardIcon = 'M6.75 3a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 006.75 21h10.5a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0017.25 3H6.75zm0 1.5h10.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H6.75a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z';
+	// Keyboard nav
+	function handleNavSelect(el: HTMLElement) {
+		el.click();
+	}
+
+	function closeDropdown() {
+		(document.activeElement as HTMLElement)?.blur();
+	}
 	const questionIcon = 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z';
 
 	// Chart/sparkline icon path
@@ -396,6 +419,9 @@
 			expandedSections.add(section);
 		}
 		expandedSections = new Set(expandedSections);
+		try {
+			localStorage.setItem('userprofile-expanded-sections', JSON.stringify([...expandedSections]));
+		} catch {}
 	}
 
 	function handleToastNeedsInputToggle() {
@@ -461,7 +487,15 @@
 	}
 </script>
 
-<div class="dropdown dropdown-end">
+<div
+	class="dropdown dropdown-end"
+	use:listNav={{
+		global: false,
+		itemSelector: '[data-nav-id]',
+		onSelect: handleNavSelect,
+		onEscape: closeDropdown,
+	}}
+>
 	<!-- Avatar Button - Industrial -->
 	<button
 		tabindex="0"
@@ -502,11 +536,11 @@
 						{/if}
 						{#if userEmail}
 							<span
-								class="text-[10px] font-mono text-base-content/50 truncate"
+								class="text-[11px] font-mono text-base-content/50 truncate"
 								title="Email used to match your identity in each project's profiles table. Different Supabase projects can have different UUIDs for the same email."
 							>{userEmail}</span>
 						{/if}
-						<span class="text-[9px] text-base-content/40 mt-0.5">
+						<span class="text-[11px] text-base-content/40 mt-0.5">
 							{#if emailSource === 'jat'}
 								source: JAT override
 							{:else if emailSource === 'git'}
@@ -521,6 +555,7 @@
 						class="btn btn-xs btn-ghost shrink-0"
 						onclick={openIdentityEditor}
 						title="Edit identity — lets you use a different email here than your git config"
+						data-nav-id="edit-identity"
 					>
 						Edit
 					</button>
@@ -528,17 +563,18 @@
 			{:else}
 				<div class="flex flex-col gap-1.5">
 					<label class="flex flex-col gap-0.5">
-						<span class="text-[10px] uppercase tracking-wide text-base-content/60">Name</span>
+						<span class="text-[11px] uppercase tracking-wide text-base-content/60">Name</span>
 						<input
 							type="text"
 							class="input input-xs input-bordered font-mono text-xs"
+							bind:this={editNameInputEl}
 							bind:value={editName}
 							placeholder="Your display name"
 							disabled={identitySaving}
 						/>
 					</label>
 					<label class="flex flex-col gap-0.5">
-						<span class="text-[10px] uppercase tracking-wide text-base-content/60">Email</span>
+						<span class="text-[11px] uppercase tracking-wide text-base-content/60">Email</span>
 						<input
 							type="email"
 							class="input input-xs input-bordered font-mono text-xs"
@@ -548,9 +584,9 @@
 						/>
 					</label>
 					{#if identityError}
-						<p class="text-[10px] text-error">{identityError}</p>
+						<p class="text-[11px] text-error">{identityError}</p>
 					{/if}
-					<p class="text-[9px] text-base-content/50 leading-snug">
+					<p class="text-[11px] text-base-content/50 leading-snug">
 						Used as the comment author on tasks. Each Supabase-backed project
 						resolves this email to its own <code>profiles.id</code>, so you don't
 						need to match UUIDs across apps — just use the same email.
@@ -587,13 +623,14 @@
 				</div>
 			{/if}
 		</li>
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 
 		<!-- Help & Shortcuts -->
 		<li>
 			<button
 				onclick={() => showHelpModal = true}
 				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200"
+				data-nav-id="help"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -612,7 +649,7 @@
 			</button>
 		</li>
 
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 
 		<!-- ═══════════════════════════════════════════ -->
 		<!-- APPEARANCE -->
@@ -628,7 +665,8 @@
 		<li>
 			<button
 				onclick={handleSoundToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {soundsEnabled ? 'bg-success/20' : ''}"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+				data-nav-id="toggle-sound"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -641,8 +679,9 @@
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={soundsEnabled ? soundOnIcon : soundOffIcon} />
 				</svg>
-				<span class="text-xs flex-1 text-left text-base-content/70">
-					Sound Effects
+				<span class="flex-1 text-left">
+					<span class="text-xs text-base-content/70 block">Sound Effects</span>
+					<span class="text-[11px] text-base-content/40 leading-tight block">Plays a test chime when enabled</span>
 				</span>
 				<span
 					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {soundsEnabled ? 'bg-success/40 text-success' : 'bg-base-200 text-base-content/50'}"
@@ -656,7 +695,8 @@
 		<li>
 			<button
 				onclick={handleSparklineToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {sparklineVisible ? 'bg-info/20' : ''}"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+				data-nav-id="toggle-sparkline"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -669,8 +709,9 @@
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={chartIcon} />
 				</svg>
-				<span class="text-xs flex-1 text-left text-base-content/70">
-					Sparkline
+				<span class="flex-1 text-left">
+					<span class="text-xs text-base-content/70 block">Sparkline</span>
+					<span class="text-[11px] text-base-content/40 leading-tight block">Activity history in session cards</span>
 				</span>
 				<span
 					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {sparklineVisible ? 'bg-info/40 text-info' : 'bg-base-200 text-base-content/50'}"
@@ -684,7 +725,8 @@
 		<li>
 			<button
 				onclick={handleDebugModeToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {debugModeEnabled ? 'bg-secondary/20' : ''}"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+				data-nav-id="toggle-debug"
 				title={debugModeEnabled
 					? 'Debug mode enabled (feedback widget visible)'
 					: 'Enable debug mode to show feedback widget and dev tools'}
@@ -700,8 +742,9 @@
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z" />
 				</svg>
-				<span class="text-xs flex-1 text-left text-base-content/70">
-					Debug Mode
+				<span class="flex-1 text-left">
+					<span class="text-xs text-base-content/70 block">Debug Mode</span>
+					<span class="text-[11px] text-base-content/40 leading-tight block">Shows feedback widget &amp; dev tools</span>
 				</span>
 				<span
 					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {debugModeEnabled ? 'bg-secondary/40 text-secondary' : 'bg-base-200 text-base-content/50'}"
@@ -715,15 +758,19 @@
 		<!-- ═══════════════════════════════════════════ -->
 		<!-- NOTIFICATIONS (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('notifications')}>
+		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('notifications')} data-nav-id="section-notifications">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('notifications') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 				</svg>
 				Notifications
+				{#if !expandedSections.has('notifications')}
+					{@const activeCount = [browserNotificationsEnabled && browserNotificationPermission === 'granted', faviconBadgeEnabled, titleBadgeEnabled, toastNeedsInput, toastReview, toastComplete].filter(Boolean).length}
+					{#if activeCount > 0}<span class="text-[10px] text-base-content/30 font-mono normal-case tracking-normal ml-1">{activeCount}/6 on</span>{/if}
+				{/if}
 			</span>
 		</li>
 
@@ -733,7 +780,8 @@
 				<li>
 					<button
 						onclick={handleBrowserNotificationsToggle}
-						class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {browserNotificationsEnabled && browserNotificationPermission === 'granted' ? 'bg-info/20' : ''}"
+						class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+						data-nav-id="toggle-browser-alerts"
 						title={browserNotificationPermission === 'denied'
 							? 'Browser notifications blocked - check browser settings'
 							: browserNotificationsEnabled
@@ -751,8 +799,9 @@
 						>
 							<path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
 						</svg>
-						<span class="text-xs flex-1 text-left text-base-content/70">
-							Browser Alerts
+						<span class="flex-1 text-left">
+							<span class="text-xs text-base-content/70 block">Browser Alerts</span>
+							<span class="text-[11px] text-base-content/40 leading-tight block">OS-level desktop notification</span>
 						</span>
 						{#if browserNotificationPermission === 'denied'}
 							<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-error/30 text-error">
@@ -774,7 +823,8 @@
 			<li>
 				<button
 					onclick={handleFaviconBadgeToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {faviconBadgeEnabled ? 'bg-warning/20' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-favicon-badge"
 					title={faviconBadgeEnabled
 						? 'Show count badge on favicon when agents need attention'
 						: 'Favicon badge disabled'}
@@ -785,8 +835,9 @@
 					>
 						{faviconBadgeEnabled ? '🔴' : '⚪'}
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Favicon Badge
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Favicon Badge</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Count badge on browser tab icon</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {faviconBadgeEnabled ? 'bg-warning/40 text-warning-content' : 'bg-base-200 text-base-content/50'}"
@@ -801,7 +852,8 @@
 			<li>
 				<button
 					onclick={handleTitleBadgeToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {titleBadgeEnabled ? 'bg-primary/20' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-title-badge"
 					title={titleBadgeEnabled
 						? 'Show count in page title when agents need attention'
 						: 'Title badge disabled'}
@@ -812,8 +864,9 @@
 					>
 						(3)
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Title Badge
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Title Badge</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Agent count in browser tab title</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {titleBadgeEnabled ? 'bg-primary/40 text-primary' : 'bg-base-200 text-base-content/50'}"
@@ -826,14 +879,15 @@
 
 			<!-- Subheader: Agent Signal Toasts -->
 			<li class="px-2 pt-2 pb-0.5">
-				<span class="text-[10px] text-base-content/40 uppercase tracking-wider">Agent Toasts</span>
+				<span class="text-[11px] text-base-content/40 uppercase tracking-wider">Agent Toasts</span>
 			</li>
 
 			<!-- Needs Input Toast -->
 			<li>
 				<button
 					onclick={handleToastNeedsInputToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {toastNeedsInput ? 'bg-warning/15' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-toast-needs-input"
 					title={toastNeedsInput
 						? 'Show toast when agent needs your input'
 						: 'No toast for needs-input signals'}
@@ -860,7 +914,8 @@
 			<li>
 				<button
 					onclick={handleToastReviewToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {toastReview ? 'bg-info/15' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-toast-review"
 					title={toastReview
 						? 'Show toast when agent is ready for review'
 						: 'No toast for review signals'}
@@ -887,7 +942,8 @@
 			<li>
 				<button
 					onclick={handleToastCompleteToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {toastComplete ? 'bg-success/15' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-toast-complete"
 					title={toastComplete
 						? 'Show toast when agent completes a task'
 						: 'No toast for task completion'}
@@ -914,15 +970,18 @@
 		<!-- ═══════════════════════════════════════════ -->
 		<!-- TERMINAL (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('terminal')}>
+		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('terminal')} data-nav-id="section-terminal">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('terminal') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 				</svg>
 				Terminal
+				{#if !expandedSections.has('terminal')}
+					<span class="text-[10px] text-base-content/30 font-mono normal-case tracking-normal ml-1">{terminalHeight}r · {TERMINAL_FONT_OPTIONS.find(o => o.value === terminalFontFamily)?.label ?? terminalFontFamily} · {terminalFontSize}px</span>
+				{/if}
 			</span>
 		</li>
 
@@ -942,7 +1001,7 @@
 						oninput={(e) => handleHeightChange(parseInt(e.currentTarget.value, 10))}
 						class="range range-xs range-info w-full"
 					/>
-					<div class="flex justify-between text-[9px] text-base-content/50">
+					<div class="flex justify-between text-[11px] text-base-content/50">
 						<span>{MIN_TERMINAL_HEIGHT}</span>
 						<span>{MAX_TERMINAL_HEIGHT}</span>
 					</div>
@@ -1021,7 +1080,8 @@
 			<li>
 				<button
 					onclick={handleCtrlCToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {ctrlCIntercept ? 'bg-error/20' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-ctrl-c"
 					title={ctrlCIntercept
 						? 'Ctrl+C sends interrupt to tmux'
 						: 'Ctrl+C copies text (browser default)'}
@@ -1048,15 +1108,18 @@
 		<!-- ═══════════════════════════════════════════ -->
 		<!-- AGENTS (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('agents')}>
+		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('agents')} data-nav-id="section-agents">
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('agents') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 				</svg>
 				Agents
+				{#if !expandedSections.has('agents')}
+					<span class="text-[10px] text-base-content/30 font-mono normal-case tracking-normal ml-1">{maxSessions} sessions</span>
+				{/if}
 			</span>
 		</li>
 
@@ -1082,7 +1145,8 @@
 			<li>
 				<button
 					onclick={handleEpicCelebrationToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {epicCelebration ? 'bg-warning/20' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-epic-celebration"
 					title={epicCelebration
 						? 'Celebrate when all children of an epic complete'
 						: 'No celebration for epic completion'}
@@ -1093,8 +1157,9 @@
 					>
 						{epicCelebration ? '🎉' : '🔕'}
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Epic Celebration
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Epic Celebration</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Confetti when all epic children close</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {epicCelebration ? 'bg-warning/40 text-warning-content' : 'bg-base-200 text-base-content/50'}"
@@ -1109,7 +1174,8 @@
 			<li>
 				<button
 					onclick={handleEpicAutoCloseToggle}
-					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {epicAutoClose ? 'bg-success/20' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200/50"
+					data-nav-id="toggle-epic-autoclose"
 					title={epicAutoClose
 						? 'Automatically close the epic in JAT when all children complete'
 						: 'Keep epic open even when all children complete'}
@@ -1120,8 +1186,9 @@
 					>
 						{epicAutoClose ? '✅' : '⏸️'}
 					</span>
-					<span class="text-xs flex-1 text-left text-base-content/70">
-						Epic Auto-Close
+					<span class="flex-1 text-left">
+						<span class="text-xs text-base-content/70 block">Epic Auto-Close</span>
+						<span class="text-[11px] text-base-content/40 leading-tight block">Closes epic when all children complete</span>
 					</span>
 					<span
 						class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {epicAutoClose ? 'bg-success/40 text-success' : 'bg-base-200 text-base-content/50'}"
@@ -1136,19 +1203,23 @@
 		<!-- ═══════════════════════════════════════════ -->
 		<!-- VERSION & UPDATE (always visible) -->
 		<!-- ═══════════════════════════════════════════ -->
-		<div class="divider my-1 h-px bg-base-content/20"></div>
+		<li aria-hidden="true" class="my-1 h-px bg-base-content/20 mx-1"></li>
 		<li>
 			<div class="flex items-center justify-between px-2 py-1">
-				<div
-					class="text-[10px] font-mono cursor-default text-base-content/50"
-					title="Build version"
-				>
-					{getVersionString()}
+				<div class="flex items-center gap-2">
+					<div
+						class="text-[10px] font-mono cursor-default text-base-content/50"
+						title="Build version"
+					>
+						{getVersionString()}
+					</div>
+					<span class="text-[10px] font-mono text-base-content/25" title="j/k to navigate · Enter to toggle · Esc to close">j/k · ↵</span>
 				</div>
 				<button
 					onclick={handleUpdate}
 					disabled={isUpdating}
 					class="text-[10px] font-mono px-2 py-0.5 rounded transition-colors border {isUpdating ? 'bg-base-200 text-base-content/50 border-base-content/20 cursor-wait' : 'bg-info/20 text-info border-info/30 hover:bg-info/30'}"
+					data-nav-id="update"
 					title="Pull latest and run install.sh"
 				>
 					{#if isUpdating}
@@ -1215,6 +1286,28 @@
 						<div class="flex items-center justify-between">
 							<span class="text-sm text-base-content/70">Spawn New Session</span>
 							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Alt + S</kbd>
+						</div>
+					</div>
+				</div>
+
+				<!-- Settings Menu Navigation -->
+				<div>
+					<h3 class="text-sm font-semibold mb-2 text-primary">Settings Menu</h3>
+					<div class="space-y-1.5">
+						<div class="flex items-center justify-between">
+							<span class="text-sm text-base-content/70">Navigate items</span>
+							<span class="flex gap-1">
+								<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">j</kbd>
+								<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">k</kbd>
+							</span>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm text-base-content/70">Toggle / activate</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Enter</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm text-base-content/70">Close menu</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Esc</kbd>
 						</div>
 					</div>
 				</div>

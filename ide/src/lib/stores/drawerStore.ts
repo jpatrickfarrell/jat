@@ -337,9 +337,9 @@ export function getFileChangesCount(): number {
 	return get(fileChangesCount);
 }
 
-// Submitted tasks count store (for /tasks-fast Inbox sidebar badge).
+// Submitted tasks count store (for /inbox sidebar badge).
 // Counted from the all-tasks fetch in +layout.svelte so the badge stays
-// accurate even when the user hasn't visited /tasks-fast yet.
+// accurate even when the user hasn't visited /inbox yet.
 export const submittedTasksCount = writable(0);
 
 export function setSubmittedTasksCount(count: number) {

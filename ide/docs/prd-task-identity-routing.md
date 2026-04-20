@@ -18,7 +18,7 @@ Task identity is split across incompatible, overlapping columns depending on whi
 | Alt-N drawer | `requester TEXT` (optional) | inconsistently populated |
 
 As a result:
-- `/tasks-fast` Ctrl+Enter routing is broken for most meadow tasks (`requester` is null because the feedback ingest never sets it)
+- `/inbox` Ctrl+Enter routing is broken for most meadow tasks (`requester` is null because the feedback ingest never sets it)
 - The compose header shows "—" instead of "Reply to: Tracy Johnson (patient)"
 - No concept of who approves completed work — everything auto-closes or gets lost
 - Every new task source adds its own column convention
@@ -242,7 +242,7 @@ function buildTaskIdentity(actor: TaskActorInput) {
 
 ## UI Changes
 
-### 1. TaskFastCompose — "Reply to" header
+### 1. InboxCompose — "Reply to" header
 
 Current: shows `task.requester || "—"`  
 New: resolve from `approver` → `requester` → `creator`, show name + role badge
@@ -264,7 +264,7 @@ function resolveRoutingTarget(task: Task): TaskActor | null {
 }
 ```
 
-### 2. TaskFastDetail — Meta row
+### 2. InboxDetail — Meta row
 
 Current: `Assignee | Requester`  
 New: `Assignee | Reply to` (resolved target, not raw field)
@@ -288,7 +288,7 @@ New: `Assignee | Reply to` (resolved target, not raw field)
 - Show `approver` as editable (text input or user picker, defaults to requester)
 - Only visible in "advanced" section — not promoted
 
-### 5. Ctrl+Enter routing logic (TaskFastCompose)
+### 5. Ctrl+Enter routing logic (InboxCompose)
 
 Current:
 ```javascript
@@ -333,10 +333,10 @@ Not blocking. When approver receives the task:
 9. Update JST template `newTask()` function
 10. Update meadow/flush/headcount/steelbridge task creation paths
 
-**P3 — tasks-fast UI**
-11. TaskFastCompose: resolve routing target, show "Reply to: [name] [role]" header
-12. TaskFastCompose: update Ctrl+Enter to route via new fields
-13. TaskFastDetail: update meta row to show resolved routing target
+**P3 — inbox UI**
+11. InboxCompose: resolve routing target, show "Reply to: [name] [role]" header
+12. InboxCompose: update Ctrl+Enter to route via new fields
+13. InboxDetail: update meta row to show resolved routing target
 
 **P4 — Task creation UI**
 14. TaskCreationDrawer: add "On behalf of" field (collapsed by default)
@@ -351,7 +351,7 @@ Not blocking. When approver receives the task:
 
 ## Success Criteria
 
-- [ ] Ctrl+Enter in tasks-fast routes to the correct person for 100% of meadow tasks
+- [ ] Ctrl+Enter in inbox routes to the correct person for 100% of meadow tasks
 - [ ] "Reply to" header is never "—" for tasks with a known creator
 - [ ] All new tasks from any source have `creator` populated
 - [ ] No `reporter_*` columns remain in production schema

@@ -12,7 +12,7 @@
 	import { formatRelativeTime } from "$lib/utils/dateFormatters";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
 	import { createListNav, type ListNavController } from "$lib/actions/listNav";
-	import TaskFastDetail from "$lib/components/tasks-fast/TaskFastDetail.svelte";
+	import InboxDetail from "$lib/components/inbox/InboxDetail.svelte";
 	import KeyboardShortcutsOverlay from "$lib/components/KeyboardShortcutsOverlay.svelte";
 	import { setSubmittedTasksCount } from "$lib/stores/drawerStore";
 	import type { TaskActor } from "$lib/types/api.types";
@@ -85,7 +85,7 @@
 	let error = $state<string | null>(null);
 
 	// Resizable divider between list and detail panels.
-	const SPLIT_STORAGE_KEY = "jat-tasks-fast-split-percent";
+	const SPLIT_STORAGE_KEY = "jat-inbox-split-percent";
 	const DEFAULT_SPLIT = 38;
 	const MIN_SPLIT = 22;
 	const MAX_SPLIT = 72;
@@ -567,7 +567,7 @@
 
 	// --- Send + Route -------------------------------------------------------
 	//
-	// Called by TaskFastCompose *after* it has already posted the comment (if
+	// Called by InboxCompose *after* it has already posted the comment (if
 	// any). Our job here is:
 	//   1. PUT /api/tasks/:id with assignee=requester (fallback: current human
 	//      assignee) and status=waiting when task was submitted/open.
@@ -1160,7 +1160,7 @@
 
 <div
 	bind:this={layoutEl}
-	class="tasks-fast-layout"
+	class="inbox-layout"
 	class:split={panelOpen}
 	class:list-only={!panelOpen}
 	class:resizing={isResizing}
@@ -1489,7 +1489,7 @@
 				<div class="state-message state-muted">No tasks loaded.</div>
 			{/if}
 		{:else}
-			<TaskFastDetail
+			<InboxDetail
 				bind:this={detailRef}
 				task={selectedTask}
 				{currentUser}
@@ -1665,7 +1665,7 @@
 />
 
 <style>
-	.tasks-fast-layout {
+	.inbox-layout {
 		display: grid;
 		height: 100%;
 		min-height: 0;
@@ -1675,16 +1675,16 @@
 		   (1fr vs percentage+px), which freezes the computed layout. */
 	}
 
-	.tasks-fast-layout.list-only {
+	.inbox-layout.list-only {
 		grid-template-columns: 1fr 0 0;
 	}
 
-	.tasks-fast-layout.split {
+	.inbox-layout.split {
 		grid-template-columns: var(--split-left, 38%) 6px 1fr;
 	}
 
 	/* While dragging, prevent text selection and show the resize cursor everywhere. */
-	.tasks-fast-layout.resizing {
+	.inbox-layout.resizing {
 		cursor: col-resize;
 		user-select: none;
 	}
@@ -1692,9 +1692,9 @@
 	/* Below 1280px: list takes full width, detail panel is hidden.
 	   (Overlay drawer fallback for small screens lands in a later task.) */
 	@media (max-width: 1279px) {
-		.tasks-fast-layout,
-		.tasks-fast-layout.split,
-		.tasks-fast-layout.list-only {
+		.inbox-layout,
+		.inbox-layout.split,
+		.inbox-layout.list-only {
 			grid-template-columns: 1fr;
 		}
 		.detail-panel,
@@ -1736,7 +1736,7 @@
 
 	.divider-handle:hover,
 	.divider-handle:focus-visible,
-	.tasks-fast-layout.resizing .divider-handle {
+	.inbox-layout.resizing .divider-handle {
 		background: oklch(0.70 0.18 240 / 0.7);
 	}
 
@@ -1745,7 +1745,7 @@
 		box-shadow: 0 0 0 2px oklch(0.70 0.18 240 / 0.5);
 	}
 
-	.tasks-fast-layout.list-only .divider-handle {
+	.inbox-layout.list-only .divider-handle {
 		display: none;
 	}
 
@@ -1933,10 +1933,10 @@
 	/* Send+Route success flash — a brief green wash that fades back to normal.
 	   Duration matches triggerFlash() in the script (900ms). */
 	.task-row.route-flash {
-		animation: tasks-fast-route-flash 900ms ease-out forwards;
+		animation: inbox-route-flash 900ms ease-out forwards;
 	}
 
-	@keyframes tasks-fast-route-flash {
+	@keyframes inbox-route-flash {
 		0% {
 			background: oklch(0.65 0.20 145 / 0.35);
 			border-left-color: oklch(0.70 0.22 145);

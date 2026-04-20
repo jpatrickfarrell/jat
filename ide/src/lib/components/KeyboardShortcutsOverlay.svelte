@@ -36,7 +36,7 @@
 		shortcuts?: KeyboardShortcut[];
 		/**
 		 * Optional grouped sections (e.g. mode-specific shortcut tables for
-		 * /tasks-fast: list / detail / compose). When provided, takes
+		 * /inbox: list / detail / compose). When provided, takes
 		 * precedence over the flat `shortcuts` prop.
 		 */
 		sections?: ShortcutSection[];

@@ -1,13 +1,13 @@
 <script lang="ts">
 	/**
-	 * TaskFastDetail — the right-side detail panel for /tasks-fast.
+	 * InboxDetail — the right-side detail panel for /inbox.
 	 *
 	 * Sections (top to bottom):
 	 *   1. Header       → title + id/type/priority/status/project badges
 	 *   2. Meta         → status, created, assignee, requester
 	 *   3. Description  → markdown rendered, collapsible if rendered height > 400px
 	 *   4. Comments     → CommentsThread (built-in input hidden; parent owns the compose)
-	 *   5. Compose      → TaskFastCompose (Enter=send, Ctrl+Enter=send+route)
+	 *   5. Compose      → InboxCompose (Enter=send, Ctrl+Enter=send+route)
 	 *
 	 * The scrollable region is centered on the comments thread so that new
 	 * replies auto-scroll into view and the description/compose stay docked.
@@ -15,8 +15,8 @@
 
 	import { marked } from "marked";
 	import CommentsThread from "$lib/components/comments/CommentsThread.svelte";
-	import TaskFastCompose from "./TaskFastCompose.svelte";
-	import TaskFastActionBar from "./TaskFastActionBar.svelte";
+	import InboxCompose from "./InboxCompose.svelte";
+	import InboxActionBar from "./InboxActionBar.svelte";
 	import {
 		getPriorityBadge,
 		getTaskStatusBadge,
@@ -453,7 +453,7 @@
 		</section>
 	</div>
 
-	<TaskFastCompose
+	<InboxCompose
 		bind:this={composeRef}
 		taskId={task.id}
 		{task}
@@ -465,7 +465,7 @@
 		onFocus={() => onComposeFocus?.()}
 	/>
 
-	<TaskFastActionBar
+	<InboxActionBar
 		bind:this={actionBarRef}
 		{task}
 		{currentUser}

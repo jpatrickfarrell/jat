@@ -74,7 +74,7 @@
 	function getBadgeCount(itemId: string): number {
 		switch (itemId) {
 			case 'tasks': return $activeAgentSessionsCount;
-			case 'tasks-fast': return $submittedTasksCount;
+			case 'inbox': return $submittedTasksCount;
 			case 'sessions': return $activeSessionsCount;
 			case 'source': return $gitChangesCount;
 			case 'servers': return $runningServersCount;
@@ -86,7 +86,7 @@
 	// Badge color configs per item
 	const badgeColors: Record<string, { bg: string; text: string; border: string; dot: string }> = {
 		tasks: { bg: 'oklch(0.55 0.15 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.15 85 / 0.4)', dot: 'oklch(0.75 0.15 85)' },
-		'tasks-fast': { bg: 'oklch(0.55 0.18 30 / 0.25)', text: 'oklch(0.85 0.15 40)', border: 'oklch(0.60 0.18 30 / 0.45)', dot: 'oklch(0.75 0.18 40)' },
+		'inbox': { bg: 'oklch(0.55 0.18 30 / 0.25)', text: 'oklch(0.85 0.15 40)', border: 'oklch(0.60 0.18 30 / 0.45)', dot: 'oklch(0.75 0.18 40)' },
 		sessions: { bg: 'oklch(0.55 0.15 145 / 0.25)', text: 'oklch(0.75 0.15 145)', border: 'oklch(0.55 0.15 145 / 0.4)', dot: 'oklch(0.70 0.15 145)' },
 		source: { bg: 'oklch(0.55 0.15 220 / 0.25)', text: 'oklch(0.80 0.12 220)', border: 'oklch(0.55 0.15 220 / 0.4)', dot: 'oklch(0.75 0.12 220)' },
 		servers: { bg: 'oklch(0.50 0.02 250 / 0.3)', text: 'oklch(0.75 0.02 250)', border: 'oklch(0.50 0.02 250 / 0.4)', dot: 'oklch(0.65 0.02 250)' },
@@ -97,7 +97,7 @@
 	function getBadgeTitle(itemId: string, count: number): string {
 		switch (itemId) {
 			case 'tasks': return `${count} active agent${count === 1 ? '' : 's'}`;
-			case 'tasks-fast': return `${count} submitted task${count === 1 ? '' : 's'} awaiting reply`;
+			case 'inbox': return `${count} submitted task${count === 1 ? '' : 's'} awaiting reply`;
 			case 'sessions': return `${count} active session${count === 1 ? '' : 's'}`;
 			case 'source': return `${count} file${count === 1 ? '' : 's'} with changes`;
 			case 'servers': return `${count} running server${count === 1 ? '' : 's'}`;

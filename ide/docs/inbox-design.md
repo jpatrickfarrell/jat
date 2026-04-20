@@ -1,4 +1,4 @@
-# /tasks-fast Route Design
+# /inbox Route Design
 
 **Status:** Ideation  
 **Task:** jat-qo8ig  
@@ -194,13 +194,13 @@ The detail panel should feel like a lightweight email client panel, not a full t
 
 ### New Components Needed
 
-- `TaskFastList.svelte` — compact task list with j/k focus management
-- `TaskFastDetail.svelte` — the right panel: header, meta, description, comments, compose, actions
-- `TaskFastCompose.svelte` — the comment compose box with Send and Send+Route buttons
+- `InboxList.svelte` — compact task list with j/k focus management
+- `InboxDetail.svelte` — the right panel: header, meta, description, comments, compose, actions
+- `InboxCompose.svelte` — the comment compose box with Send and Send+Route buttons
 
 ### Route File
 
-`ide/src/routes/tasks-fast/+page.svelte`
+`ide/src/routes/inbox/+page.svelte`
 
 The page is self-contained (no child routes needed). Data is fetched client-side on mount with polling.
 
@@ -255,9 +255,9 @@ This route should wait for the `listNav` action and `KeyboardShortcutsOverlay` f
 |-------|-----------------|----------------|
 | `/tasks` | Session management + project overview | Spawn/monitor agents |
 | `/triage` | Groom incoming stories | Promote/reject/edit tasks |
-| `/tasks-fast` | Process 100+ tasks quickly | Comment + reassign + advance |
+| `/inbox` | Process 100+ tasks quickly | Comment + reassign + advance |
 
-`/tasks-fast` is NOT a replacement for `/triage`. `/triage` is for grooming (deciding what to build). `/tasks-fast` is for responding (telling clients about existing solutions, routing tasks to the right person, leaving instructions).
+`/inbox` is NOT a replacement for `/triage`. `/triage` is for grooming (deciding what to build). `/inbox` is for responding (telling clients about existing solutions, routing tasks to the right person, leaving instructions).
 
 ---
 
@@ -265,7 +265,7 @@ This route should wait for the `listNav` action and `KeyboardShortcutsOverlay` f
 
 - Icon: `⚡` or `⟵ᐅ` (fast-forward style)
 - Label: "Quick Review" or "Inbox"
-- URL: `/tasks-fast`
+- URL: `/inbox`
 - Badge: count of `submitted` tasks (the inbox)
 - Tooltip: "Keyboard-driven task queue"
 

@@ -177,7 +177,7 @@ export async function PUT({ params, request }) {
 		// assignee_id must pass through for postgres-backed projects. Without
 		// it, mapRow() joins on the OLD assignee_id → profiles and returns the
 		// stale assignee_name, making assignee-only updates look like no-ops.
-		// This is what was breaking /tasks-fast send+route on meadow tasks.
+		// This is what was breaking /inbox send+route on meadow tasks.
 		if (updates.assignee_id !== undefined) {
 			updateFields.assignee_id = updates.assignee_id;
 		}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * TaskFastCompose — the reply box for /tasks-fast.
+	 * InboxCompose — the reply box for /inbox.
 	 *
 	 * Keys:
 	 *   Enter           → send comment (POST /api/tasks/:id/comments), stay on task
@@ -19,7 +19,7 @@
 
 	// Minimal task shape needed to resolve the routing target. Using a local
 	// interface keeps this component structurally compatible with the varied
-	// Task shapes used by callers (TaskFastDetail, /tasks-fast page, etc.).
+	// Task shapes used by callers (InboxDetail, /inbox page, etc.).
 	interface RoutingTaskShape {
 		approver?: TaskActor | null;
 		approver_id?: string | null;
@@ -125,6 +125,10 @@
 			const data = await res.json();
 			draft = "";
 			onSent?.(data.comment);
+			// Return keyboard focus to the detail zone so shortcuts (s, a, p, etc.)
+			// work immediately after sending without requiring Escape.
+			textarea?.blur();
+			onEscape?.();
 		} catch (e: any) {
 			error = e?.message || "Failed to send";
 		} finally {

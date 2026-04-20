@@ -610,7 +610,7 @@
 				activeAgents = data.agent_counts.activeAgents || [];
 			}
 
-			// Update submitted-tasks badge for the /tasks-fast Inbox nav entry.
+			// Update submitted-tasks badge for the /inbox nav entry.
 			// Cheap O(n) over the same payload — no extra request.
 			setSubmittedTasksCount(
 				allTasks.filter((t: { status?: string }) => t.status === 'submitted').length

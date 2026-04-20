@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * TaskFastActionBar — quick-action bar for /tasks-fast detail panel.
+	 * InboxActionBar — quick-action bar for /inbox detail panel.
 	 *
 	 * Keys (wired by the parent page when focusZone='detail'):
 	 *   a      → Assign picker   (SearchDropdown, assignee list)
@@ -10,7 +10,7 @@
 	 *   o      → Open full       (TaskDetailDrawer via drawerStore)
 	 *   d      → Dismiss task    (two-press confirmation, closes the task)
 	 *
-	 * Exposed methods (called by TaskFastDetail via bind:this):
+	 * Exposed methods (called by InboxDetail via bind:this):
 	 *   openAssign() / openStatus() / openPriority() → open the relevant picker
 	 *   spawn() / openFull() / dismiss()             → direct actions
 	 */

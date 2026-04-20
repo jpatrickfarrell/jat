@@ -1640,7 +1640,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								type="button"
 								tabindex="0"
 								bind:this={projectDropdownBtn}
-								class="badge badge-lg gap-1.5 px-2.5 pt-1 font-mono text-sm transition-colors cursor-pointer"
+								class="badge badge-lg gap-1.5 px-2.5 pt-1 font-mono text-sm transition-colors cursor-pointer {projectSelectionRequired && !formData.project ? 'animate-pulse-subtle' : ''}"
 								style={formData.project && selectedProjectColor
 									? `background: color-mix(in oklch, ${selectedProjectColor} 20%, transparent); border-color: color-mix(in oklch, ${selectedProjectColor} 50%, transparent); color: ${selectedProjectColor};`
 									: formData.project
@@ -2542,8 +2542,20 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				class="px-6 py-4 bg-base-200 border-t border-base-content/30"
 			>
 				<div class="flex items-center justify-between">
-					<!-- Spacer (shortcuts shown in dropdown) -->
-					<div></div>
+					<!-- Ghost keyboard hints — discoverable, not intrusive -->
+					<div class="flex items-center gap-2.5 select-none pointer-events-none" aria-hidden="true">
+						<span class="text-[10px] font-mono text-base-content/20 flex items-center gap-1">
+							<kbd class="px-1 py-0.5 rounded border border-base-content/15 bg-base-content/5 text-[9px]">⌘</kbd>
+							<kbd class="px-1 py-0.5 rounded border border-base-content/15 bg-base-content/5 text-[9px]">↵</kbd>
+							<span class="text-base-content/15">spawn</span>
+						</span>
+						<span class="text-base-content/10">·</span>
+						<span class="text-[10px] font-mono text-base-content/20 flex items-center gap-1">
+							<kbd class="px-1 py-0.5 rounded border border-base-content/15 bg-base-content/5 text-[9px]">⌥</kbd>
+							<kbd class="px-1 py-0.5 rounded border border-base-content/15 bg-base-content/5 text-[9px]">↵</kbd>
+							<span class="text-base-content/15">close</span>
+						</span>
+					</div>
 
 					<div class="flex gap-3">
 						<button

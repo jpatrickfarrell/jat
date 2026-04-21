@@ -30,6 +30,7 @@ export type NodeType =
 	| 'action_spawn_agent'
 	| 'action_browser'
 	| 'action_run_workflow'
+	| 'subflow'
 	// Logic
 	| 'condition'
 	| 'transform'
@@ -54,6 +55,7 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
 	action_spawn_agent: 'action',
 	action_browser: 'action',
 	action_run_workflow: 'action',
+	subflow: 'action',
 	condition: 'logic',
 	transform: 'logic',
 	delay: 'logic'
@@ -179,6 +181,12 @@ export interface ActionRunWorkflowConfig {
 	passInput?: boolean;
 }
 
+/** Subflow node: calls a reusable workflow marked as is_subflow=true */
+export interface SubflowConfig {
+	/** ID of the subflow workflow to call */
+	subflowId: string;
+}
+
 /** Condition node: routes to true/false branch */
 export interface ConditionConfig {
 	/** JavaScript expression. Evaluates against `input` variable.
@@ -215,6 +223,7 @@ export type NodeConfig =
 	| ActionSpawnAgentConfig
 	| ActionBrowserConfig
 	| ActionRunWorkflowConfig
+	| SubflowConfig
 	| ConditionConfig
 	| TransformConfig
 	| DelayConfig;
@@ -233,6 +242,7 @@ export interface NodeConfigMap {
 	action_spawn_agent: ActionSpawnAgentConfig;
 	action_browser: ActionBrowserConfig;
 	action_run_workflow: ActionRunWorkflowConfig;
+	subflow: SubflowConfig;
 	condition: ConditionConfig;
 	transform: TransformConfig;
 	delay: DelayConfig;
@@ -323,6 +333,8 @@ export interface Workflow {
 	updatedAt: string;
 	/** If true, this record is a reusable snippet rather than a runnable workflow */
 	is_snippet?: boolean;
+	/** If true, this workflow is a reusable callable subflow */
+	is_subflow?: boolean;
 }
 
 // =============================================================================
@@ -396,6 +408,7 @@ export interface WorkflowFile {
 	createdAt: string;
 	updatedAt: string;
 	is_snippet?: boolean;
+	is_subflow?: boolean;
 }
 
 /**
@@ -445,6 +458,7 @@ export interface WorkflowSummary {
 	nodeCount: number;
 	edgeCount: number;
 	is_snippet?: boolean;
+	is_subflow?: boolean;
 	/** Last run status (if any) */
 	lastRunStatus?: RunStatus;
 	/** Last run timestamp (if any) */
@@ -497,9 +511,10 @@ export function getDefaultPorts(type: NodeType): { inputs: Port[]; outputs: Port
 		case 'action_spawn_agent':
 		case 'action_browser':
 		case 'action_run_workflow':
+		case 'subflow':
 			return {
 				inputs: [{ id: 'data_in', type: 'data', label: 'Input' }],
-				outputs: [{ id: 'data_out', type: 'data', label: 'Result' }]
+				outputs: [{ id: 'data_out', type: 'data', label: 'Output' }]
 			};
 
 		// Condition has data in, true/false outputs

@@ -97,6 +97,9 @@ const NODE_OUTPUT_SCHEMAS: Record<NodeType, OutputField[]> = {
 	action_run_workflow: [
 		{ name: 'Full output', path: 'input', description: 'Called workflow run result', insertText: '{{input}}' }
 	],
+	subflow: [
+		{ name: 'Full output', path: 'input', description: 'Subflow output', insertText: '{{input}}' }
+	],
 
 	// ── Logic ────────────────────────────────────────────────────────
 	// Condition passes input through to the matched branch

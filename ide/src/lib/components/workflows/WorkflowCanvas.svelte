@@ -22,7 +22,8 @@
 		onNodesChange,
 		onEdgesChange,
 		onNodeDoubleClick,
-		onNodeFocus
+		onNodeFocus,
+		onExtractToSubflow
 	}: {
 		nodes: WorkflowNode[];
 		edges: WorkflowEdge[];
@@ -40,6 +41,7 @@
 		onEdgesChange?: (edges: WorkflowEdge[]) => void;
 		onNodeDoubleClick?: (nodeId: string) => void;
 		onNodeFocus?: (nodeId: string) => void;
+		onExtractToSubflow?: (nodeIds: string[]) => void;
 	} = $props();
 
 	// =========================================================================
@@ -81,7 +83,7 @@
 		pending: { border: 'oklch(0.35 0.02 250)', glow: 'oklch(0.35 0.02 250 / 0.15)', bg: 'transparent' }
 	};
 
-	const NODE_ICONS: Record<NodeType, string> = {
+	const NODE_ICONS: Partial<Record<NodeType, string>> = {
 		trigger_cron: '⏱',
 		trigger_event: '⚡',
 		trigger_manual: '▶',
@@ -91,8 +93,11 @@
 		action_run_bash: '>_',
 		action_spawn_agent: '⬡',
 		action_browser: '◎',
+		action_run_workflow: '↻',
+		subflow: '⊂',
 		condition: '◇',
-		transform: '⚙'
+		transform: '⚙',
+		delay: '⧖'
 	};
 
 	// =========================================================================
@@ -573,7 +578,10 @@
 		if (readonly) return;
 		e.preventDefault();
 		e.stopPropagation();
-		selectedNodeIds = new Set([nodeId]);
+		// Keep multi-selection if right-clicking an already-selected node
+		if (!selectedNodeIds.has(nodeId)) {
+			selectedNodeIds = new Set([nodeId]);
+		}
 		selectedEdgeIds = new Set();
 		contextMenu = { x: e.clientX, y: e.clientY, nodeId };
 	}
@@ -691,6 +699,12 @@
 	// =========================================================================
 	// CONTEXT MENU ACTIONS
 	// =========================================================================
+
+	function handleContextMenuExtractToSubflow() {
+		if (!contextMenu || !onExtractToSubflow) return;
+		onExtractToSubflow([...selectedNodeIds]);
+		contextMenu = null;
+	}
 
 	function handleContextMenuDelete() {
 		if (!contextMenu) return;
@@ -1017,11 +1031,13 @@
 			{@const overlayStatus = nodeStatusOverlay?.[node.id]}
 			{@const overlayColors = overlayStatus ? STATUS_OVERLAY_COLORS[overlayStatus] : null}
 			{@const isNewAi = highlightedNodeIds?.has(node.id) ?? false}
+			{@const isRunning = overlayStatus === 'running'}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="wf-node"
 				class:selected={isSelected}
+				class:wf-node-running={isRunning}
 				style="
 					left: {node.position.x}px;
 					top: {node.position.y}px;
@@ -1030,7 +1046,9 @@
 					--node-bg: {catColors.bg};
 					--node-accent: {catColors.accent};
 					--node-icon: {catColors.icon};
-					{overlayColors ? `border-color: ${overlayColors.border}; box-shadow: 0 0 12px ${overlayColors.glow}; background: ${overlayColors.bg};` : isNewAi ? 'border-color: oklch(0.78 0.17 85); box-shadow: 0 0 10px oklch(0.78 0.17 85 / 0.5);' : ''}
+					{overlayColors
+						? `border-color: ${overlayColors.border};${isRunning ? '' : ` box-shadow: 0 0 12px ${overlayColors.glow};`} background: ${overlayColors.bg};`
+						: isNewAi ? 'border-color: oklch(0.78 0.17 85); box-shadow: 0 0 10px oklch(0.78 0.17 85 / 0.5);' : ''}
 				"
 				title="Double-click to configure"
 				onmousedown={(e) => handleNodeMouseDown(e, node.id)}
@@ -1260,6 +1278,20 @@
 				</svg>
 				Duplicate
 			</button>
+			{#if onExtractToSubflow && selectedNodeIds.size >= 1}
+				<div class="wf-ctx-divider"></div>
+				<button class="wf-ctx-item" onclick={handleContextMenuExtractToSubflow}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+						<rect x="3" y="3" width="8" height="8" rx="1.5" />
+						<rect x="13" y="13" width="8" height="8" rx="1.5" />
+						<path d="M7 11v2a4 4 0 004 4h2" />
+					</svg>
+					Extract to Subflow
+					{#if selectedNodeIds.size > 1}
+						<span class="wf-ctx-key">{selectedNodeIds.size}</span>
+					{/if}
+				</button>
+			{/if}
 			<div class="wf-ctx-divider"></div>
 			<button class="wf-ctx-item danger" onclick={handleContextMenuDelete}>
 				<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -1376,6 +1408,19 @@
 
 	.wf-node:active {
 		cursor: grabbing;
+	}
+
+	@keyframes wf-node-pulse {
+		0%, 100% { box-shadow: 0 0 8px oklch(0.70 0.15 200 / 0.4); }
+		50% { box-shadow: 0 0 20px oklch(0.70 0.15 200 / 0.7), 0 0 40px oklch(0.70 0.15 200 / 0.3); }
+	}
+
+	.wf-node-running {
+		animation: wf-node-pulse 1.2s ease-in-out infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.wf-node-running { animation: none; }
 	}
 
 	/* ===================================================================

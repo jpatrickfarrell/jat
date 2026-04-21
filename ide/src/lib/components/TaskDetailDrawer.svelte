@@ -42,6 +42,7 @@
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
+	import RoleChip from './RoleChip.svelte';
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
 	import {
 		TaskFieldLabel,
@@ -3144,9 +3145,11 @@
 								<TaskFieldLabel>Origin</TaskFieldLabel>
 								<div class="flex flex-col gap-1.5">
 									{#if creatorName}
+										{@const creatorRole = actorRole(task.creator)}
 										<div class="flex items-center gap-2 text-sm">
 											<span class="text-xs text-base-content/50 w-20 shrink-0">Creator</span>
 											<span class="font-mono text-base-content">{creatorName}</span>
+											<RoleChip role={creatorRole} />
 											{#if creatorSrc}
 												<span class="badge badge-xs bg-base-300 text-base-content/70 normal-case">via {creatorSrc}</span>
 											{/if}
@@ -3156,9 +3159,7 @@
 										<div class="flex items-center gap-2 text-sm">
 											<span class="text-xs text-base-content/50 w-20 shrink-0">Reply to</span>
 											<span class="font-mono text-base-content">{replyName}</span>
-											{#if replyRole}
-												<span class="badge badge-xs bg-primary/30 text-base-content normal-case">{replyRole}</span>
-											{/if}
+											<RoleChip role={replyRole} />
 										</div>
 									{/if}
 									{#if showSplit}

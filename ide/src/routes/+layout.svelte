@@ -39,6 +39,7 @@
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut, matchesShortcut, getGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
 	import PushToTalkOverlay from '$lib/components/voice/PushToTalkOverlay.svelte';
 	import { startCapture, stopCapture, cancelCapture, getVoiceState } from '$lib/stores/voiceCapture.svelte';
+	import { registerVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import { loadAutoKillConfig } from '$lib/stores/autoKillConfig';
 	import { setReviewRules as setReviewRulesStore } from '$lib/stores/reviewRules.svelte';
@@ -390,6 +391,9 @@
 		initPreferences(); // Initialize unified preferences store
 		syncSidebarFromPreferences(); // Restore sidebar collapsed state from localStorage
 		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
+		// Expose global-shortcut handlers to the voice matcher so utterances like
+		// "new task" invoke the same function as Alt+N (no synthetic KeyboardEvent).
+		registerVoiceActionHandlers(globalActionHandlers);
 		initNotifications(); // Initialize push notification system (favicon badge, title badge)
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)

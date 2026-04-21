@@ -173,6 +173,13 @@
 	let saveSnippetName = $state('');
 	let saveSnippetSaving = $state(false);
 
+	// Subflows
+	let subflows = $state<WorkflowSummary[]>([]);
+	let extractSubflowOpen = $state(false);
+	let extractSubflowName = $state('');
+	let extractSubflowSaving = $state(false);
+	let pendingExtractNodeIds = $state<string[]>([]);
+
 	// Canvas context menu (for save-as-snippet)
 	let canvasCtxX = $state(0);
 	let canvasCtxY = $state(0);
@@ -504,6 +511,16 @@
 			: snippets
 	);
 
+	const filteredSubflows = $derived(
+		paletteSearch.trim()
+			? subflows.filter(
+					(s) =>
+						s.name.toLowerCase().includes(paletteSearch.toLowerCase()) ||
+						(s.description ?? '').toLowerCase().includes(paletteSearch.toLowerCase())
+				)
+			: subflows
+	);
+
 	const BUILT_IN_TEMPLATES: Array<{
 		id: string;
 		name: string;
@@ -774,8 +791,9 @@
 			if (res.ok) {
 				const data = await res.json();
 				const all: WorkflowSummary[] = data.workflows || [];
-				workflows = all.filter((w) => !w.is_snippet);
+				workflows = all.filter((w) => !w.is_snippet && !w.is_subflow);
 				snippets = all.filter((w) => w.is_snippet);
+				subflows = all.filter((w) => w.is_subflow);
 			}
 		} catch (err) {
 			console.error('Failed to load workflows:', err);
@@ -950,32 +968,91 @@
 		}
 	}
 
-	async function runWorkflow() {
+	function handleStreamEvent(event: Record<string, unknown>): void {
+		switch (event.type) {
+			case 'node-pending':
+				if (!nodeStatusOverlay) nodeStatusOverlay = {};
+				nodeStatusOverlay = { ...nodeStatusOverlay, [event.nodeId as string]: 'pending' };
+				break;
+			case 'node-start':
+				nodeStatusOverlay = { ...nodeStatusOverlay, [event.nodeId as string]: 'running' };
+				break;
+			case 'node-complete':
+				nodeStatusOverlay = { ...nodeStatusOverlay, [event.nodeId as string]: event.status as string };
+				break;
+			case 'run-complete': {
+				const run = event.run as WorkflowRun;
+				lastRun = run;
+				const overlay: Record<string, string> = {};
+				for (const [nodeId, result] of Object.entries(run.nodeResults)) {
+					overlay[nodeId] = (result as NodeExecutionResult).status;
+				}
+				nodeStatusOverlay = overlay;
+				showToast(run.status === 'success' ? 'Workflow completed' : `Run finished: ${run.status}`);
+				break;
+			}
+			case 'error':
+				showToast(`Run failed: ${event.message}`, 'error');
+				nodeStatusOverlay = null;
+				break;
+		}
+	}
+
+	async function runWorkflowStreaming(body: Record<string, unknown>): Promise<void> {
 		if (!currentId) return;
-		// Auto-save before running if dirty
 		if (dirty) await saveWorkflow();
 		running = true;
 		logExpanded = true;
+		// Clear any history selection and reset overlay to empty (server will populate pending)
+		selectedRun = null;
+		selectedRunId = null;
+		nodeStatusOverlay = {};
+
 		try {
-			const res = await fetch(`/api/workflows/${currentId}/run`, {
+			const res = await fetch(`/api/workflows/${currentId}/run-stream`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ trigger: 'manual' })
+				body: JSON.stringify(body)
 			});
-			const data = await res.json();
-			if (data.error) {
-				showToast(`Run failed: ${data.error}`, 'error');
-			} else {
-				lastRun = data;
-				showToast(data.status === 'success' ? 'Workflow completed' : `Run finished: ${data.status}`);
+
+			if (!res.ok || !res.body) {
+				const text = await res.text();
+				showToast(`Run failed: ${text}`, 'error');
+				nodeStatusOverlay = null;
+				return;
 			}
-		} catch (err) {
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const chunks = buffer.split('\n\n');
+				buffer = chunks.pop() ?? '';
+				for (const chunk of chunks) {
+					const dataLine = chunk.split('\n').find((l) => l.startsWith('data: '));
+					if (!dataLine) continue;
+					try {
+						handleStreamEvent(JSON.parse(dataLine.slice(6)));
+					} catch {
+						// ignore malformed events
+					}
+				}
+			}
+		} catch {
 			showToast('Execution failed', 'error');
+			nodeStatusOverlay = null;
 		} finally {
 			running = false;
-			// Refresh run history if open
 			runHistoryRef?.refresh();
 		}
+	}
+
+	async function runWorkflow() {
+		await runWorkflowStreaming({ trigger: 'manual' });
 	}
 
 	// =========================================================================
@@ -1068,30 +1145,8 @@
 			return;
 		}
 		testInputError = null;
-
-		if (dirty) await saveWorkflow();
-		running = true;
-		logExpanded = true;
-		try {
-			const res = await fetch(`/api/workflows/${currentId}/run`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ trigger: 'manual', testInput: parsed })
-			});
-			const data = await res.json();
-			if (data.error) {
-				showToast(`Run failed: ${data.error}`, 'error');
-			} else {
-				lastRun = data;
-				showToast(data.status === 'success' ? 'Workflow completed' : `Run finished: ${data.status}`);
-				closeTestInputPanel();
-			}
-		} catch (err) {
-			showToast('Execution failed', 'error');
-		} finally {
-			running = false;
-			runHistoryRef?.refresh();
-		}
+		closeTestInputPanel();
+		await runWorkflowStreaming({ trigger: 'manual', testInput: parsed });
 	}
 
 	async function toggleEnabled() {
@@ -1377,6 +1432,146 @@
 			showToast(`Snippet "${name}" deleted`);
 		} catch {
 			showToast('Failed to delete snippet', 'error');
+		}
+	}
+
+	// =========================================================================
+	// SUBFLOWS
+	// =========================================================================
+
+	function handleExtractToSubflow(nodeIds: string[]) {
+		if (nodeIds.length === 0) return;
+		pendingExtractNodeIds = nodeIds;
+		extractSubflowName = '';
+		extractSubflowOpen = true;
+	}
+
+	async function confirmExtractToSubflow() {
+		if (!extractSubflowName.trim() || pendingExtractNodeIds.length === 0) return;
+		extractSubflowSaving = true;
+		try {
+			pushUndoState();
+
+			const selectedIds = new Set(pendingExtractNodeIds);
+			const selectedNodes = nodes.filter((n) => selectedIds.has(n.id));
+			const internalEdges = edges.filter(
+				(e) => selectedIds.has(e.sourceNodeId) && selectedIds.has(e.targetNodeId)
+			);
+			// Boundary edges: outside→inside (inputs to the selection)
+			const inboundEdges = edges.filter(
+				(e) => !selectedIds.has(e.sourceNodeId) && selectedIds.has(e.targetNodeId)
+			);
+			// Boundary edges: inside→outside (outputs from the selection)
+			const outboundEdges = edges.filter(
+				(e) => selectedIds.has(e.sourceNodeId) && !selectedIds.has(e.targetNodeId)
+			);
+
+			// Create the subflow workflow
+			const res = await fetch('/api/workflows', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: extractSubflowName.trim(),
+					nodes: selectedNodes,
+					edges: internalEdges,
+					enabled: false,
+					is_subflow: true
+				})
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				showToast(data.error || 'Failed to create subflow', 'error');
+				return;
+			}
+			const { workflow: newSubflow } = await res.json();
+
+			// Compute centroid of selected nodes for subflow node placement
+			const centroidX = selectedNodes.reduce((s, n) => s + n.position.x, 0) / selectedNodes.length;
+			const centroidY = selectedNodes.reduce((s, n) => s + n.position.y, 0) / selectedNodes.length;
+
+			// Create replacement subflow node
+			const subflowNodeId = generateId('node');
+			const ports = getDefaultPorts('subflow');
+			const subflowNode: WorkflowNode = {
+				id: subflowNodeId,
+				type: 'subflow',
+				position: { x: Math.round(centroidX), y: Math.round(centroidY) },
+				config: { subflowId: newSubflow.id },
+				label: extractSubflowName.trim(),
+				inputs: ports.inputs,
+				outputs: ports.outputs
+			};
+
+			// Replace selected nodes + their edges with the subflow node
+			nodes = [
+				...nodes.filter((n) => !selectedIds.has(n.id)),
+				subflowNode
+			];
+
+			// Rewire inbound edges to point to the subflow node
+			const rewiredInbound: WorkflowEdge[] = inboundEdges.map((e) => ({
+				...e,
+				id: generateId('edge'),
+				targetNodeId: subflowNodeId,
+				targetPort: 'data_in'
+			}));
+
+			// Rewire outbound edges to come from the subflow node
+			const rewiredOutbound: WorkflowEdge[] = outboundEdges.map((e) => ({
+				...e,
+				id: generateId('edge'),
+				sourceNodeId: subflowNodeId,
+				sourcePort: 'data_out'
+			}));
+
+			// Remove old boundary edges and internal edges, add new ones
+			edges = [
+				...edges.filter(
+					(e) =>
+						!selectedIds.has(e.sourceNodeId) &&
+						!selectedIds.has(e.targetNodeId)
+				),
+				...rewiredInbound,
+				...rewiredOutbound
+			];
+
+			selectedNodeIds = new Set([subflowNodeId]);
+			dirty = true;
+			extractSubflowOpen = false;
+			await loadWorkflows();
+			showToast(`Subflow "${extractSubflowName.trim()}" created`);
+		} catch {
+			showToast('Failed to extract subflow', 'error');
+		} finally {
+			extractSubflowSaving = false;
+		}
+	}
+
+	function addSubflowNode(subflow: WorkflowSummary) {
+		pushUndoState();
+		const ports = getDefaultPorts('subflow');
+		const newNode: WorkflowNode = {
+			id: generateId('node'),
+			type: 'subflow',
+			position: { x: 400, y: 200 },
+			config: { subflowId: subflow.id },
+			label: subflow.name,
+			inputs: ports.inputs,
+			outputs: ports.outputs
+		};
+		nodes = [...nodes, newNode];
+		selectedNodeIds = new Set([newNode.id]);
+		dirty = true;
+	}
+
+	async function deleteSubflow(id: string, name: string) {
+		try {
+			const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+			if (!res.ok) throw new Error('Failed to delete');
+			await loadWorkflows();
+			showToast(`Subflow "${name}" deleted`);
+		} catch {
+			showToast('Failed to delete subflow', 'error');
 		}
 	}
 
@@ -1748,8 +1943,14 @@
 	// LIFECYCLE
 	// =========================================================================
 
-	onMount(() => {
-		loadWorkflows();
+	onMount(async () => {
+		await loadWorkflows();
+		// Handle ?open=<id> from subflow "Open" links
+		const openId = new URLSearchParams(window.location.search).get('open');
+		if (openId) {
+			window.history.replaceState({}, '', window.location.pathname);
+			loadWorkflow(openId);
+		}
 	});
 </script>
 
@@ -2352,6 +2553,53 @@
 						{/if}
 					</div>
 
+					<!-- SUBFLOWS SECTION -->
+					<div class="mt-3">
+						<div class="flex items-center gap-1.5 px-2 py-1">
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="oklch(0.72 0.17 220)" stroke-width="2">
+								<rect x="3" y="3" width="8" height="8" rx="1.5"/>
+								<rect x="13" y="13" width="8" height="8" rx="1.5"/>
+								<path d="M7 11v2a4 4 0 004 4h2"/>
+							</svg>
+							<span class="text-[11px] font-bold uppercase tracking-wider" style="color: oklch(0.72 0.17 220)">Subflows</span>
+						</div>
+						{#if filteredSubflows.length === 0}
+							{#if paletteSearch.trim()}
+								<div class="px-3 py-1 text-[10px]" style="color: oklch(0.40 0.02 250)">No subflows match.</div>
+							{:else}
+								<div class="px-3 py-1 text-[10px]" style="color: oklch(0.40 0.02 250)">Select nodes → right-click → Extract to Subflow.</div>
+							{/if}
+						{:else}
+							{#each filteredSubflows as subflow}
+								<div class="group flex items-center gap-1 px-2 py-1.5 rounded-md hover:bg-[oklch(0.20_0.02_250)] transition-colors" style="color: oklch(0.70 0.02 250)">
+									<button
+										class="flex items-center gap-2 min-w-0 flex-1 text-left"
+										onclick={() => addSubflowNode(subflow)}
+										title="Add subflow node to canvas"
+									>
+										<div class="w-6 h-6 rounded flex items-center justify-center shrink-0" style="background: oklch(0.72 0.17 220 / 0.12)">
+											<span class="text-xs" style="color: oklch(0.72 0.17 220)">⊂</span>
+										</div>
+										<div class="min-w-0 flex-1">
+											<div class="text-xs font-medium truncate">{subflow.name}</div>
+											<div class="text-[10px] truncate" style="color: oklch(0.45 0.02 250)">{subflow.nodeCount} node{subflow.nodeCount === 1 ? '' : 's'}</div>
+										</div>
+									</button>
+									<button
+										class="opacity-0 group-hover:opacity-100 btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 transition-opacity"
+										style="color: oklch(0.55 0.15 25)"
+										onclick={() => deleteSubflow(subflow.id, subflow.name)}
+										title="Delete subflow"
+									>
+										<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke-linecap="round"/>
+										</svg>
+									</button>
+								</div>
+							{/each}
+						{/if}
+					</div>
+
 					<!-- TEMPLATES SECTION -->
 					{#if filteredTemplates.length > 0}
 						<div class="mt-3 pb-2">
@@ -2485,6 +2733,7 @@
 						onNodesChange={handleNodesChange}
 						onEdgesChange={handleEdgesChange}
 						onNodeDoubleClick={handleNodeDoubleClick}
+						onExtractToSubflow={handleExtractToSubflow}
 					/>
 				{/if}
 			{/if}
@@ -3343,6 +3592,59 @@
 						<span class="loading loading-spinner loading-xs"></span>
 					{/if}
 					Save Snippet
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- EXTRACT TO SUBFLOW MODAL -->
+{#if extractSubflowOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center"
+		style="background: oklch(0 0 0 / 0.5)"
+		onclick={() => (extractSubflowOpen = false)}
+		onkeydown={(e) => e.key === 'Escape' && (extractSubflowOpen = false)}
+	>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="rounded-xl p-5 w-80 mx-4"
+			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.25 0.02 250)"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
+			<h3 class="text-sm font-semibold mb-1" style="color: oklch(0.85 0.02 250)">Extract to Subflow</h3>
+			<p class="text-xs mb-3" style="color: oklch(0.55 0.02 250)">
+				{pendingExtractNodeIds.length} node{pendingExtractNodeIds.length === 1 ? '' : 's'} will be moved into a new reusable subflow.
+			</p>
+			<!-- svelte-ignore a11y_autofocus -->
+			<input
+				type="text"
+				class="input input-sm w-full mb-4"
+				style="background: oklch(0.22 0.02 250); color: oklch(0.85 0.02 250); border-color: oklch(0.30 0.02 250)"
+				placeholder="Subflow name…"
+				bind:value={extractSubflowName}
+				autofocus
+				onkeydown={(e) => { if (e.key === 'Enter') confirmExtractToSubflow(); if (e.key === 'Escape') extractSubflowOpen = false; }}
+			/>
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn btn-sm btn-ghost"
+					style="color: oklch(0.55 0.02 250)"
+					onclick={() => (extractSubflowOpen = false)}
+					disabled={extractSubflowSaving}
+				>Cancel</button>
+				<button
+					class="btn btn-sm gap-1.5"
+					style="background: oklch(0.72 0.17 220); color: oklch(0.15 0.01 250); border: none"
+					onclick={confirmExtractToSubflow}
+					disabled={extractSubflowSaving || !extractSubflowName.trim()}
+				>
+					{#if extractSubflowSaving}
+						<span class="loading loading-spinner loading-xs"></span>
+					{/if}
+					Extract
 				</button>
 			</div>
 		</div>

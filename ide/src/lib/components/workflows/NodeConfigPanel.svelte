@@ -12,6 +12,7 @@
 	import SpawnAgentConfig from './nodes/SpawnAgentConfig.svelte';
 	import BrowserConfig from './nodes/BrowserConfig.svelte';
 	import RunWorkflowConfig from './nodes/RunWorkflowConfig.svelte';
+	import SubflowConfig from './nodes/SubflowConfig.svelte';
 	import ConditionConfig from './nodes/ConditionConfig.svelte';
 	import TransformConfig from './nodes/TransformConfig.svelte';
 	import DelayConfig from './nodes/DelayConfig.svelte';
@@ -221,6 +222,8 @@
 					<BrowserConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'action_run_workflow'}
 					<RunWorkflowConfig config={cfg} onUpdate={handleConfigUpdate} />
+				{:else if node.type === 'subflow'}
+					<SubflowConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'condition'}
 					<ConditionConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'transform'}

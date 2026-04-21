@@ -518,11 +518,20 @@ function buildGlobalEntries(): VoiceVocabularyEntry[] {
 // REACTIVE STORE
 // $derived.by re-evaluates whenever getGlobalShortcut() deps change ($state in
 // keyboardShortcuts.svelte.ts mutates → tracker fires → this rebuilds).
+//
+// Svelte 5 disallows exporting `$derived` bindings from a module — consumers
+// must go through a getter function that returns the current value.
 // =============================================================================
 
-export const voiceVocabulary: VoiceVocabularyEntry[] = $derived.by(() => {
+const voiceVocabulary: VoiceVocabularyEntry[] = $derived.by(() => {
 	return [...NAV_ENTRIES, ...buildGlobalEntries(), ...ROUTE_ENTRIES];
 });
+
+/** Snapshot of the full reactive vocabulary. Call from inside a reactive
+ *  context (component, $derived, $effect) for auto-tracking. */
+export function getVoiceVocabulary(): VoiceVocabularyEntry[] {
+	return voiceVocabulary;
+}
 
 // =============================================================================
 // HELPERS

@@ -236,6 +236,21 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		defaultConfig: { workflowId: '', passInput: false }
 	},
 
+	// ── SUBFLOW ───────────────────────────────────────────────────────────────
+
+	subflow: {
+		type: 'subflow',
+		label: 'Subflow',
+		description: 'Call a reusable subflow workflow',
+		category: 'action',
+		icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18',
+		color: 'oklch(0.72 0.17 220)',
+		bgColor: 'oklch(0.72 0.17 220 / 0.08)',
+		portColor: 'oklch(0.72 0.17 220)',
+		helpText: 'Calls a reusable subflow workflow inline. Select a subflow from the list. The current data is passed as input and the subflow output is returned.',
+		defaultConfig: { subflowId: '' }
+	},
+
 	// ── LOGIC ─────────────────────────────────────────────────────────────────
 
 	condition: {

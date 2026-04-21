@@ -6,6 +6,7 @@
 		getTranscript,
 		getMicPermission,
 		getErrorMessage,
+		getLastMatch,
 		type VoiceState
 	} from '$lib/stores/voiceCapture.svelte';
 
@@ -15,6 +16,7 @@
 	let transcript = $derived(getTranscript());
 	let micPermission = $derived(getMicPermission());
 	let errorMessage = $derived(getErrorMessage());
+	let match = $derived(getLastMatch());
 
 	let visible = $derived(voiceState !== 'idle');
 </script>
@@ -45,12 +47,23 @@
 
 			{:else if voiceState === 'matched'}
 				<span class="ptl-icon matched" aria-hidden="true">✓</span>
-				<span class="ptl-transcript">{transcript}</span>
+				{#if match?.entry}
+					<span class="ptl-transcript">
+						"{match.raw}" <span class="ptl-arrow">→</span>
+						<span class="ptl-shortcut">{match.entry.shortcut}</span>
+					</span>
+				{:else}
+					<span class="ptl-transcript">{transcript}</span>
+				{/if}
 
 			{:else if voiceState === 'no-match'}
 				{#if micPermission === 'denied'}
 					<span class="ptl-icon error" aria-hidden="true">🎤</span>
 					<span class="ptl-label error">{errorMessage || 'Microphone permission denied'}</span>
+				{:else if match?.raw}
+					<span class="ptl-icon error" aria-hidden="true">✗</span>
+					<span class="ptl-label error">No command for "{match.raw}"</span>
+					<span class="ptl-hint">Press ? to see vocabulary</span>
 				{:else}
 					<span class="ptl-icon error" aria-hidden="true">✗</span>
 					<span class="ptl-label error">{errorMessage || 'No speech detected'}</span>
@@ -168,6 +181,22 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 380px;
+	}
+
+	.ptl-arrow {
+		color: oklch(0.55 0.04 250);
+		margin: 0 0.125rem;
+	}
+
+	.ptl-shortcut {
+		display: inline-block;
+		padding: 0.0625rem 0.375rem;
+		background: oklch(0.26 0.04 250);
+		border: 1px solid oklch(0.35 0.05 250);
+		border-radius: 0.25rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.7rem;
+		color: oklch(0.82 0.12 200);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

@@ -11,6 +11,7 @@ import { createTask as libCreateTask, getTaskById, addDependency } from '$lib/se
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 /** Suggested task from JAT:SUGGESTED_TASKS marker */
 interface SuggestedTask {
@@ -313,6 +314,9 @@ async function createTask(
 				.map((d) => d.trim());
 		}
 
+		const identity = buildTaskIdentity({ source: 'ide' });
+		const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
+
 		// Create the task directly via lib/tasks.js
 		const createdTask = libCreateTask({
 			projectPath,
@@ -323,7 +327,9 @@ async function createTask(
 			labels,
 			deps,
 			assignee: null,
-			notes: ''
+			notes: '',
+			creator: sqliteCreator,
+			approver: sqliteCreator
 		});
 
 		const taskId = createdTask.id;

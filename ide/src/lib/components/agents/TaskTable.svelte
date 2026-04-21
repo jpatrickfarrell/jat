@@ -38,6 +38,7 @@
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import { openEpicSwarmModal } from '$lib/stores/drawerStore';
 	import { computeReviewStatus, type ReviewRule, type ReviewStatus } from '$lib/utils/reviewStatusUtils';
+	import RoleChip from '$lib/components/RoleChip.svelte';
 
 	// Type definitions for task files (images, PDFs, text, etc.)
 	interface TaskFile {
@@ -52,6 +53,12 @@
 	}
 
 	// Type definitions - aligned with api.types.Task
+	interface TaskActorMinimal {
+		role?: string;
+		name?: string;
+		email?: string;
+	}
+
 	interface Task {
 		id: string;
 		title: string;
@@ -67,6 +74,8 @@
 		created_ts?: string;
 		updated_at?: string;
 		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+		requester?: TaskActorMinimal | null;
+		creator?: TaskActorMinimal | null;
 	}
 
 	// A task is "client-visible" when it was ingested from an external source
@@ -3439,6 +3448,9 @@
 											{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 											{@const reviewStatus = computeReviewStatus(task, reviewRules)}
 											{@const titleSource = getTaskSourceOrigin(task)}
+											{@const reqRole = task.requester?.role}
+											{@const creRole = task.creator?.role}
+											{@const showCreRole = creRole && creRole !== reqRole}
 											<tr
 												class="industrial-row hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
 												data-nav-id={task.id}
@@ -3557,6 +3569,12 @@
 																class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
 															>{task.title}</div>
 														</div>
+														{#if reqRole || showCreRole}
+															<div class="flex items-center gap-1 mt-0.5">
+																{#if reqRole}<RoleChip role={reqRole} />{/if}
+																{#if showCreRole}<RoleChip role={creRole} />{/if}
+															</div>
+														{/if}
 														{#if task.description}
 															<div class="text-xs line-clamp-5 text-base-content/55">
 																{task.description}
@@ -3944,6 +3962,9 @@
 									{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 									{@const reviewStatusStd = computeReviewStatus(task, reviewRules)}
 										{@const stdTitleSource = getTaskSourceOrigin(task)}
+										{@const stdReqRole = task.requester?.role}
+										{@const stdCreRole = task.creator?.role}
+										{@const stdShowCreRole = stdCreRole && stdCreRole !== stdReqRole}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
@@ -4066,6 +4087,12 @@
 														class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
 													>{task.title}</div>
 												</div>
+												{#if stdReqRole || stdShowCreRole}
+													<div class="flex items-center gap-1 mt-0.5">
+														{#if stdReqRole}<RoleChip role={stdReqRole} />{/if}
+														{#if stdShowCreRole}<RoleChip role={stdCreRole} />{/if}
+													</div>
+												{/if}
 												{#if task.description}
 													<div class="text-xs line-clamp-5 text-base-content/55">
 														{task.description}

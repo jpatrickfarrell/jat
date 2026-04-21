@@ -16,6 +16,7 @@
 		resolveRoutingTarget,
 		getActorDisplayName,
 	} from "$lib/utils/taskRouting";
+	import RoleChip from "$lib/components/RoleChip.svelte";
 
 	// Minimal task shape needed to resolve the routing target. Using a local
 	// interface keeps this component structurally compatible with the varied
@@ -226,6 +227,7 @@
 			{routingName}
 		</span>
 		{#if routingTarget}
+			<RoleChip role={routingTarget.actor.role} />
 			<span class="reply-to-role badge badge-xs badge-outline">
 				{routingTarget.role}
 			</span>

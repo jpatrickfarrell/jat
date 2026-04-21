@@ -131,6 +131,7 @@ const VALID_NODE_TYPES: NodeType[] = [
 	'action_spawn_agent',
 	'action_browser',
 	'action_run_workflow',
+	'subflow',
 	'condition',
 	'transform',
 	'delay'
@@ -337,6 +338,12 @@ function validateNodeConfig(
 			}
 			break;
 
+		case 'subflow':
+			if (!config.subflowId || typeof config.subflowId !== 'string') {
+				errors.push({ path: `${pathPrefix}.subflowId`, message: 'Subflow ID is required' });
+			}
+			break;
+
 		case 'condition':
 			if (!config.expression || typeof config.expression !== 'string') {
 				errors.push({
@@ -393,7 +400,8 @@ function parseWorkflowFile(content: string, id: string): Workflow | null {
 			enabled: data.enabled ?? false,
 			createdAt: data.createdAt || new Date().toISOString(),
 			updatedAt: data.updatedAt || new Date().toISOString(),
-			is_snippet: data.is_snippet ?? false
+			is_snippet: data.is_snippet ?? false,
+			is_subflow: data.is_subflow ?? false
 		};
 	} catch (error) {
 		console.error(`[workflows] Failed to parse workflow ${id}:`, error);
@@ -412,7 +420,8 @@ function serializeWorkflow(workflow: Workflow): string {
 		enabled: workflow.enabled,
 		createdAt: workflow.createdAt,
 		updatedAt: workflow.updatedAt,
-		...(workflow.is_snippet ? { is_snippet: true } : {})
+		...(workflow.is_snippet ? { is_snippet: true } : {}),
+		...(workflow.is_subflow ? { is_subflow: true } : {})
 	};
 	return JSON.stringify(data, null, 2);
 }
@@ -566,6 +575,7 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 			nodeCount: wf.nodes.length,
 			edgeCount: wf.edges.length,
 			is_snippet: wf.is_snippet ?? false,
+			is_subflow: wf.is_subflow ?? false,
 			lastRunStatus: lastRun?.status,
 			lastRunAt: lastRun?.startedAt,
 			cronExpr,
@@ -623,7 +633,8 @@ export async function saveWorkflow(
 		enabled: workflow.enabled ?? false,
 		createdAt: exists ? workflow.createdAt || now : now,
 		updatedAt: now,
-		...(workflow.is_snippet ? { is_snippet: true } : {})
+		...(workflow.is_snippet ? { is_snippet: true } : {}),
+		...(workflow.is_subflow ? { is_subflow: true } : {})
 	};
 
 	const path = getWorkflowPath(workflow.id);
@@ -847,6 +858,8 @@ function getDefaultConfig(type: NodeType): Record<string, unknown> {
 			return { action: 'navigate', url: '' };
 		case 'action_run_workflow':
 			return { workflowId: '', passInput: false };
+		case 'subflow':
+			return { subflowId: '' };
 		case 'condition':
 			return { expression: '' };
 		case 'transform':
@@ -869,6 +882,7 @@ function getDefaultLabel(type: NodeType): string {
 		action_spawn_agent: 'Spawn Agent',
 		action_browser: 'Browser Action',
 		action_run_workflow: 'Run Workflow',
+		subflow: 'Subflow',
 		condition: 'Condition',
 		transform: 'Transform',
 		delay: 'Delay'

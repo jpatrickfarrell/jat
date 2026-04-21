@@ -6,8 +6,21 @@
  *   - Call stopCapture() on keyup.
  *   - Call cancelCapture() to abort without transcribing.
  *   - Read voiceState, transcript, and micPermission reactively.
+ *
+ * When a transcript returns from /api/voice/capture, the matcher
+ * (`ide/src/lib/voice/utteranceMatcher.ts`) runs against the current route's
+ * vocabulary. If confidence ≥ 0.7 the matched shortcut is dispatched via the
+ * voice action registry (same code path as a keystroke); otherwise the raw
+ * transcript surfaces so the user can see why.
  */
 import { browser } from '$app/environment';
+import {
+	matchUtterance,
+	MATCH_CONFIDENCE_THRESHOLD,
+	type MatchResult
+} from '$lib/voice/utteranceMatcher';
+import { dispatchMatch } from '$lib/voice/dispatchMatch';
+import { recordMatch } from '$lib/voice/matchDebugBuffer';
 
 export type VoiceState = 'idle' | 'listening' | 'transcribing' | 'matched' | 'no-match';
 export type MicPermission = 'unknown' | 'granted' | 'denied';
@@ -17,6 +30,7 @@ let voiceState = $state<VoiceState>('idle');
 let transcript = $state('');
 let micPermission = $state<MicPermission>('unknown');
 let errorMessage = $state('');
+let lastMatch = $state<MatchResult | null>(null);
 
 // Internal recording state
 let mediaRecorder: MediaRecorder | null = null;
@@ -29,6 +43,7 @@ export function getVoiceState(): VoiceState { return voiceState; }
 export function getTranscript(): string { return transcript; }
 export function getMicPermission(): MicPermission { return micPermission; }
 export function getErrorMessage(): string { return errorMessage; }
+export function getLastMatch(): MatchResult | null { return lastMatch; }
 
 export async function startCapture(): Promise<void> {
 	if (!browser) return;
@@ -87,13 +102,31 @@ export async function startCapture(): Promise<void> {
 			const text = (data.transcript ?? '').trim();
 
 			if (!text) {
+				lastMatch = null;
 				voiceState = 'no-match';
 				scheduleReset();
 				return;
 			}
 
 			transcript = text;
-			voiceState = 'matched';
+
+			// Run the matcher against the current route's vocabulary.
+			const route = typeof window !== 'undefined' ? window.location.pathname : '';
+			const result = matchUtterance(text, route);
+			lastMatch = result;
+
+			if (result.entry && result.confidence >= MATCH_CONFIDENCE_THRESHOLD) {
+				// Dispatch the matched shortcut. Preferred path is the registered
+				// action handler (same code as a keystroke); fallback is a
+				// KeyboardEvent for nav/route-scoped shortcuts.
+				const dispatched = await dispatchMatch(result.entry);
+				recordMatch(result, route, dispatched);
+				voiceState = 'matched';
+			} else {
+				recordMatch(result, route, 'none');
+				voiceState = 'no-match';
+			}
+
 			scheduleReset();
 		} catch (e: unknown) {
 			errorMessage = e instanceof Error ? e.message : 'Network error';
@@ -134,6 +167,7 @@ export function resetVoiceState(): void {
 	voiceState = 'idle';
 	transcript = '';
 	errorMessage = '';
+	lastMatch = null;
 }
 
 function clearAutoStop(): void {
@@ -156,6 +190,7 @@ function scheduleReset(ms = 3000): void {
 			voiceState = 'idle';
 			transcript = '';
 			errorMessage = '';
+			lastMatch = null;
 		}
 	}, ms);
 }

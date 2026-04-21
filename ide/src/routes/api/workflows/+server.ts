@@ -68,7 +68,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			nodes: Array.isArray(body.nodes) ? body.nodes : [],
 			edges: Array.isArray(body.edges) ? body.edges : [],
 			enabled: body.enabled === true,
-			...(body.is_snippet ? { is_snippet: true } : {})
+			...(body.is_snippet ? { is_snippet: true } : {}),
+			...(body.is_subflow ? { is_subflow: true } : {})
 		});
 
 		return json({ success: true, workflow }, { status: 201 });

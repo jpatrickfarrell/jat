@@ -109,6 +109,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
 	import { MinimapCssScale } from "$lib/components/minimap";
 	import SendToLLM from "./SendToLLM.svelte";
+	import RoleChip from "$lib/components/RoleChip.svelte";
 	import { marked } from 'marked';
 	import type {
 		WorkingSignal,
@@ -129,6 +130,12 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 		priority?: number;
 		issue_type?: string;
 	}
+	interface TaskActorMinimal {
+		role?: string;
+		name?: string;
+		email?: string;
+	}
+
 	interface Task {
 		id: string;
 		title?: string;
@@ -139,6 +146,8 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 		depends_on?: TaskDep[];
 		agent_program?: string | null;
 		model?: string | null;
+		requester?: TaskActorMinimal | null;
+		creator?: TaskActorMinimal | null;
 	}
 
 	/** Extended task info for completed tasks - includes closedAt timestamp */
@@ -5363,6 +5372,15 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 				>
 					{displayTask.title || displayTask.id}
 				</button>
+				{#if displayTask.requester?.role || (displayTask.creator?.role && displayTask.creator?.role !== displayTask.requester?.role)}
+					{@const scReqRole = displayTask.requester?.role}
+					{@const scCreRole = displayTask.creator?.role}
+					{@const scShowCreRole = scCreRole && scCreRole !== scReqRole}
+					<div class="flex items-center gap-1">
+						{#if scReqRole}<RoleChip role={scReqRole} />{/if}
+						{#if scShowCreRole}<RoleChip role={scCreRole} />{/if}
+					</div>
+				{/if}
 			</div>
 		{:else if lastCompletedTask}
 			<!-- Show last completed task -->

@@ -18,6 +18,7 @@
 import { json } from '@sveltejs/kit';
 import { createTask } from '$lib/server/jat-tasks.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
@@ -108,6 +109,9 @@ async function launchTopTask(tasks, origin) {
 			: [];
 	if (!labels.includes('voice')) labels.push('voice');
 
+	const identity = buildTaskIdentity({ source: 'voice' });
+	const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
+
 	let created;
 	try {
 		created = createTask({
@@ -119,7 +123,9 @@ async function launchTopTask(tasks, origin) {
 			labels,
 			deps: [],
 			assignee: null,
-			notes: ''
+			notes: '',
+			creator: sqliteCreator,
+			approver: sqliteCreator
 		});
 	} catch (e) {
 		vlog(`launch: createTask failed: ${e?.message || e}`);

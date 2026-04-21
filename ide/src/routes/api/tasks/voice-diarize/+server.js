@@ -21,6 +21,7 @@
 import { json } from '@sveltejs/kit';
 import { createTask } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { writeFileSync, unlinkSync, mkdirSync, statSync } from 'fs';
@@ -128,6 +129,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			// Fallback: create a single task from the transcript directly
 			const projectPath = process.cwd().replace(/\/ide$/, '');
 			try {
+				const identity = buildTaskIdentity({ source: 'voice' });
+				const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
 				const createdTask = createTask({
 					projectPath,
 					title,
@@ -137,7 +140,9 @@ function transcribeAndOrganize(audioPath, title, priority) {
 					labels: ['voice'],
 					deps: [],
 					assignee: null,
-					notes: ''
+					notes: '',
+					creator: sqliteCreator,
+					approver: sqliteCreator
 				});
 				invalidateCache.tasks();
 				invalidateCache.agents();
@@ -185,10 +190,14 @@ export async function POST({ request }) {
 				const priority = body.priority !== undefined ? parseInt(body.priority) : 2;
 				const projectPath = process.cwd().replace(/\/ide$/, '');
 				try {
+					const identity = buildTaskIdentity({ source: 'voice' });
+					const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
 					createTask({
 						projectPath, title, description: text, type: 'task',
 						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'], deps: [], assignee: null, notes: ''
+						labels: ['voice'], deps: [], assignee: null, notes: '',
+						creator: sqliteCreator,
+						approver: sqliteCreator
 					});
 					invalidateCache.tasks();
 					invalidateCache.agents();

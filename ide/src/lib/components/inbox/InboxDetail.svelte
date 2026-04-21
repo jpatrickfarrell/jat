@@ -17,6 +17,7 @@
 	import CommentsThread from "$lib/components/comments/CommentsThread.svelte";
 	import InboxCompose from "./InboxCompose.svelte";
 	import InboxActionBar from "./InboxActionBar.svelte";
+	import RoleChip from "$lib/components/RoleChip.svelte";
 	import {
 		getPriorityBadge,
 		getTaskStatusBadge,
@@ -304,6 +305,7 @@
 			<strong>Reply to:</strong>
 			{#if routingTarget}
 				{routingName}
+				<RoleChip role={routingTarget.actor.role} />
 				<span class="badge badge-xs badge-outline role-badge">
 					{routingTarget.role}
 				</span>

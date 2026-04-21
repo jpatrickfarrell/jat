@@ -14,6 +14,7 @@ import { getTasks, createTask, addDependency } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../agents/+server.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 interface Epic {
 	id: string;
@@ -129,12 +130,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			projectPath = process.cwd().replace(/\/ide$/, '');
 		}
 
+		const identity = buildTaskIdentity({ source: 'ide' });
+		const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
+
 		// Create the epic directly using lib/tasks.js
 		const createdEpic = createTask({
 			projectPath,
 			title: title.trim(),
 			type: 'epic',
-			priority: 1
+			priority: 1,
+			creator: sqliteCreator,
+			approver: sqliteCreator
 		});
 
 		const epicId = createdEpic.id;

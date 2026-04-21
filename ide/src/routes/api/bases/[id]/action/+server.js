@@ -16,6 +16,7 @@ import { broadcastDataChanged } from '$lib/server/websocket';
 import { evaluateFormula } from '$lib/utils/formulaEval';
 import { createTask, updateTask as updateJatTask, getTaskById } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
+import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
 const execAsync = promisify(exec);
 
@@ -336,6 +337,9 @@ ACTION_EXECUTORS['CreateTask'] = async ({ actionConfig, project }) => {
 		return { success: false, message: `Invalid type: ${taskType}. Must be one of: ${validTypes.join(', ')}` };
 	}
 
+	const identity = buildTaskIdentity({ source: 'ide' });
+	const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
+
 	const result = createTask({
 		projectPath,
 		title: String(title).trim(),
@@ -343,6 +347,8 @@ ACTION_EXECUTORS['CreateTask'] = async ({ actionConfig, project }) => {
 		priority: priority !== undefined ? parseInt(String(priority)) : 2,
 		description: description ? String(description).trim() : '',
 		labels: Array.isArray(labels) ? labels.map(String) : [],
+		creator: sqliteCreator,
+		approver: sqliteCreator
 	});
 
 	invalidateCache.tasks();

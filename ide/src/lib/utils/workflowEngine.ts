@@ -27,6 +27,7 @@ import type {
 	ActionSpawnAgentConfig,
 	ActionBrowserConfig,
 	ActionRunWorkflowConfig,
+	SubflowConfig,
 	ConditionConfig,
 	TransformConfig,
 	DelayConfig
@@ -51,6 +52,10 @@ export interface RunOptions {
 	signal?: AbortSignal;
 	/** Data from the triggering event (passed as trigger node output) */
 	eventData?: Record<string, unknown>;
+	/** Called when a node begins executing */
+	onNodeStart?: (nodeId: string, nodeLabel: string) => void;
+	/** Called when a node finishes executing */
+	onNodeComplete?: (nodeId: string, result: NodeExecutionResult) => void;
 }
 
 /** Execution context passed to node executors */
@@ -580,6 +585,28 @@ async function executeRunWorkflow(
 	return data;
 }
 
+/** Subflow: run a reusable subflow workflow inline */
+async function executeSubflow(
+	node: WorkflowNode,
+	input: unknown,
+	ctx: ExecutionContext
+): Promise<unknown> {
+	const config = node.config as SubflowConfig;
+	if (!config.subflowId) throw new Error('subflow: no subflowId configured');
+
+	const body: Record<string, unknown> = { trigger: 'subflow_call', testInput: input };
+
+	const res = await fetch(`${ctx.ideBaseUrl ?? 'http://127.0.0.1:3333'}/api/workflows/${encodeURIComponent(config.subflowId)}/run`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+
+	const data = await res.json();
+	if (data.error) throw new Error(`Subflow ${config.subflowId} failed: ${data.error}`);
+	return data.output ?? data;
+}
+
 /** Condition: evaluate JS expression against input */
 async function executeCondition(
 	node: WorkflowNode,
@@ -671,6 +698,7 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
 	action_spawn_agent: executeSpawnAgent,
 	action_browser: executeBrowser,
 	action_run_workflow: executeRunWorkflow,
+	subflow: executeSubflow,
 	condition: executeCondition,
 	transform: executeTransform,
 	delay: executeDelay
@@ -750,7 +778,9 @@ export async function executeWorkflow(
 		ideBaseUrl = 'http://127.0.0.1:3333',
 		project,
 		signal,
-		eventData
+		eventData,
+		onNodeStart,
+		onNodeComplete
 	} = options;
 
 	const runId = generateRunId();
@@ -827,6 +857,7 @@ export async function executeWorkflow(
 				startedAt: nodeStartedAt.toISOString()
 			};
 			ctx.nodeResults.set(node.id, nodeResult);
+			onNodeComplete?.(node.id, nodeResult);
 			skippedNodes.add(node.id);
 			ctx.log(node.id, `Skipped (inactive branch)`);
 			continue;
@@ -852,6 +883,7 @@ export async function executeWorkflow(
 		// Execute the node
 		try {
 			ctx.log(node.id, `Executing ${node.type} "${node.label}"`);
+			onNodeStart?.(node.id, node.label);
 			const output = await executor(node, input, ctx);
 			const completedAt = new Date();
 
@@ -865,6 +897,7 @@ export async function executeWorkflow(
 				completedAt: completedAt.toISOString()
 			};
 			ctx.nodeResults.set(node.id, nodeResult);
+			onNodeComplete?.(node.id, nodeResult);
 			ctx.log(node.id, `Completed in ${nodeResult.durationMs}ms`);
 		} catch (err) {
 			const completedAt = new Date();
@@ -880,6 +913,7 @@ export async function executeWorkflow(
 				error: errorMessage
 			};
 			ctx.nodeResults.set(node.id, nodeResult);
+			onNodeComplete?.(node.id, nodeResult);
 			hasErrors = true;
 			ctx.log(node.id, `Error: ${errorMessage}`);
 

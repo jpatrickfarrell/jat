@@ -368,8 +368,8 @@ export function parseShortcut(shortcut: string): ParsedShortcut {
 				result.meta = true;
 				break;
 			default:
-				// This is the main key
-				result.key = part;
+				// This is the main key; normalize space character to 'space'
+				result.key = part === ' ' ? 'space' : part;
 		}
 	}
 

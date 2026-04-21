@@ -19,6 +19,7 @@ import { readFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
 import { writeFile, mkdir, unlink, readFile, readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, basename } from 'path';
+import cronParser from 'cron-parser';
 import type {
 	Workflow,
 	WorkflowFile,
@@ -32,7 +33,8 @@ import type {
 	NodeType,
 	NodeCategory,
 	Position,
-	Port
+	Port,
+	TriggerCronConfig
 } from '$lib/types/workflow';
 import { NODE_CATEGORIES, getDefaultPorts } from '$lib/types/workflow';
 
@@ -495,6 +497,28 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 		// Get last run status
 		const lastRun = await getLastRun(wf.id);
 
+		// Extract cron trigger info (first trigger_cron node wins if multiple)
+		const cronNode = wf.nodes.find((n) => n.type === 'trigger_cron');
+		let cronExpr: string | undefined;
+		let timezone: string | undefined;
+		let nextRunAt: string | undefined;
+		if (cronNode) {
+			const cfg = cronNode.config as TriggerCronConfig;
+			cronExpr = cfg.cronExpr;
+			timezone = cfg.timezone;
+			if (cronExpr) {
+				try {
+					const interval = cronParser.parseExpression(cronExpr, {
+						currentDate: new Date(),
+						tz: timezone || 'UTC'
+					});
+					nextRunAt = interval.next().toISOString();
+				} catch {
+					// Invalid cron expression — leave nextRunAt undefined
+				}
+			}
+		}
+
 		summaries.push({
 			id: wf.id,
 			name: wf.name,
@@ -504,6 +528,9 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 			edgeCount: wf.edges.length,
 			lastRunStatus: lastRun?.status,
 			lastRunAt: lastRun?.startedAt,
+			cronExpr,
+			timezone,
+			nextRunAt,
 			createdAt: wf.createdAt,
 			updatedAt: wf.updatedAt
 		});

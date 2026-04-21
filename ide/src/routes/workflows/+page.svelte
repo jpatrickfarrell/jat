@@ -8,7 +8,8 @@
 		WorkflowSummary,
 		WorkflowRun,
 		NodeType,
-		NodeExecutionResult
+		NodeExecutionResult,
+		TriggerEventConfig
 	} from '$lib/types/workflow';
 	import { getDefaultPorts } from '$lib/types/workflow';
 	import WorkflowCanvas from '$lib/components/workflows/WorkflowCanvas.svelte';
@@ -38,6 +39,12 @@
 			return name.includes(q) || desc.includes(q);
 		});
 	});
+
+	// Bulk selection state (list view)
+	let selectedWfIds = $state<Set<string>>(new Set());
+	let lastClickedWfId = $state<string | null>(null);
+	let bulkActionInProgress = $state(false);
+	let showBulkDeleteConfirm = $state(false);
 
 	// Column sort (component-local, no URL param; null = server order)
 	type WfSortKey = 'name' | 'status' | 'lastRun';
@@ -103,6 +110,13 @@
 	// Execution log
 	let lastRun = $state<WorkflowRun | null>(null);
 	let logExpanded = $state(false);
+
+	// Run-with-test-input
+	let runMenuOpen = $state(false);
+	let testInputPanelOpen = $state(false);
+	let testInputJson = $state('{}');
+	let testInputError = $state<string | null>(null);
+	let testInputTextareaRef: HTMLTextAreaElement | undefined = $state();
 
 	// Load error
 	let loadError = $state<{ name: string; id: string } | null>(null);
@@ -268,6 +282,132 @@
 		deleteTargetId = wf.id;
 		deleteTargetName = wf.name;
 		showDeleteConfirm = true;
+	}
+
+	// Bulk selection (list view)
+	function clearSelection() {
+		selectedWfIds = new Set();
+		lastClickedWfId = null;
+	}
+
+	function toggleRowSelected(wf: WorkflowSummary, event: MouseEvent) {
+		const next = new Set(selectedWfIds);
+		const id = wf.id;
+
+		// Shift+click extends range across currently-rendered rows
+		if (event.shiftKey && lastClickedWfId && lastClickedWfId !== id) {
+			const rows = sortedWorkflows;
+			const fromIdx = rows.findIndex((r) => r.id === lastClickedWfId);
+			const toIdx = rows.findIndex((r) => r.id === id);
+			if (fromIdx !== -1 && toIdx !== -1) {
+				const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+				for (let i = lo; i <= hi; i++) next.add(rows[i].id);
+				selectedWfIds = next;
+				lastClickedWfId = id;
+				return;
+			}
+		}
+
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selectedWfIds = next;
+		lastClickedWfId = id;
+	}
+
+	const allVisibleSelected = $derived.by(() => {
+		const rows = sortedWorkflows;
+		return rows.length > 0 && rows.every((r) => selectedWfIds.has(r.id));
+	});
+	const someVisibleSelected = $derived.by(() => {
+		const rows = sortedWorkflows;
+		return rows.some((r) => selectedWfIds.has(r.id)) && !allVisibleSelected;
+	});
+
+	function toggleSelectAllVisible() {
+		const rows = sortedWorkflows;
+		const next = new Set(selectedWfIds);
+		if (allVisibleSelected) {
+			for (const r of rows) next.delete(r.id);
+		} else {
+			for (const r of rows) next.add(r.id);
+		}
+		selectedWfIds = next;
+	}
+
+	async function bulkSetEnabled(target: boolean) {
+		if (selectedWfIds.size === 0) return;
+		const toChange = workflows.filter((wf) => selectedWfIds.has(wf.id) && wf.enabled !== target);
+		if (toChange.length === 0) {
+			showToast(target ? 'All selected workflows are already enabled' : 'All selected workflows are already disabled');
+			return;
+		}
+
+		bulkActionInProgress = true;
+
+		// Optimistic: flip local state immediately
+		const changingIds = new Set(toChange.map((wf) => wf.id));
+		workflows = workflows.map((wf) => (changingIds.has(wf.id) ? { ...wf, enabled: target } : wf));
+
+		try {
+			const results = await Promise.allSettled(
+				toChange.map((wf) =>
+					fetch(`/api/workflows/${wf.id}/toggle`, { method: 'POST' }).then((res) => {
+						if (!res.ok) throw new Error(`toggle ${wf.id} failed`);
+						return wf.id;
+					})
+				)
+			);
+			const failed = results.filter((r) => r.status === 'rejected').length;
+			if (failed > 0) {
+				showToast(`${failed} of ${toChange.length} failed — refreshing`, 'error');
+				await loadWorkflows();
+			} else {
+				showToast(`${toChange.length} workflow${toChange.length === 1 ? '' : 's'} ${target ? 'enabled' : 'disabled'}`);
+			}
+		} catch {
+			showToast('Bulk toggle failed', 'error');
+			await loadWorkflows();
+		} finally {
+			bulkActionInProgress = false;
+		}
+	}
+
+	async function bulkDelete() {
+		if (selectedWfIds.size === 0) return;
+		const ids = Array.from(selectedWfIds);
+		bulkActionInProgress = true;
+
+		// Optimistic: remove from local state
+		const removedIds = new Set(ids);
+		const snapshot = workflows;
+		workflows = workflows.filter((wf) => !removedIds.has(wf.id));
+
+		try {
+			const results = await Promise.allSettled(
+				ids.map((id) =>
+					fetch(`/api/workflows/${id}`, { method: 'DELETE' }).then((res) => {
+						if (!res.ok) throw new Error(`delete ${id} failed`);
+						return id;
+					})
+				)
+			);
+			const failed = results.filter((r) => r.status === 'rejected').length;
+			if (failed > 0) {
+				showToast(`${failed} of ${ids.length} failed — refreshing`, 'error');
+				workflows = snapshot;
+				await loadWorkflows();
+			} else {
+				showToast(`${ids.length} workflow${ids.length === 1 ? '' : 's'} deleted`);
+			}
+		} catch {
+			showToast('Bulk delete failed', 'error');
+			workflows = snapshot;
+			await loadWorkflows();
+		} finally {
+			bulkActionInProgress = false;
+			showBulkDeleteConfirm = false;
+			clearSelection();
+		}
 	}
 
 	// Back to list
@@ -495,6 +635,16 @@
 		}
 	}
 
+	// Open a workflow editor and jump straight to the History tab
+	// (quick-link from the Last Run cell on the workflows list).
+	async function openWorkflowHistory(id: string) {
+		await loadWorkflow(id);
+		bottomTab = 'history';
+		logExpanded = true;
+		// loadWorkflow populates lastRun; refresh the run list so History shows fresh data.
+		runHistoryRef?.refresh();
+	}
+
 	let nameInputRef: HTMLInputElement | null = null;
 
 	async function createWorkflow() {
@@ -627,6 +777,122 @@
 		}
 	}
 
+	// =========================================================================
+	// RUN WITH TEST INPUT
+	// =========================================================================
+
+	/** Generate a sample event payload for a given event type */
+	function getSampleEventPayload(eventType: string): Record<string, unknown> {
+		switch (eventType) {
+			case 'task_created':
+				return {
+					eventType: 'task_created',
+					data: { id: 'jat-abc', title: 'Sample task', priority: 2, type: 'task' }
+				};
+			case 'task_closed':
+				return {
+					eventType: 'task_closed',
+					data: { id: 'jat-abc', title: 'Sample task', closeReason: 'Completed' }
+				};
+			case 'task_status_changed':
+				return {
+					eventType: 'task_status_changed',
+					data: { id: 'jat-abc', oldStatus: 'open', newStatus: 'in_progress' }
+				};
+			case 'signal_received':
+				return {
+					eventType: 'signal_received',
+					data: { agentName: 'SampleAgent', signal: 'working', taskId: 'jat-abc' }
+				};
+			case 'file_changed':
+				return {
+					eventType: 'file_changed',
+					data: { path: '/path/to/file.ts', change: 'modified' }
+				};
+			case 'ingest_item':
+				return {
+					eventType: 'ingest_item',
+					data: { source: 'rss', title: 'Item title', url: 'https://example.com' }
+				};
+			default:
+				return { eventType, data: {} };
+		}
+	}
+
+	/** Generate a sample test-input JSON based on the first trigger node in the workflow */
+	function getSampleTestInput(): string {
+		const trigger = nodes.find((n) => n.type.startsWith('trigger_'));
+		if (!trigger) return '{}';
+
+		switch (trigger.type) {
+			case 'trigger_event': {
+				const cfg = trigger.config as TriggerEventConfig;
+				const eventType = cfg?.eventType ?? 'task_created';
+				return JSON.stringify(getSampleEventPayload(eventType), null, 2);
+			}
+			case 'trigger_cron':
+				return JSON.stringify(
+					{ timestamp: new Date().toISOString(), triggeredBy: 'cron' },
+					null,
+					2
+				);
+			case 'trigger_manual':
+				return JSON.stringify({ reason: 'Manual test run' }, null, 2);
+			default:
+				return '{}';
+		}
+	}
+
+	function openTestInputPanel() {
+		runMenuOpen = false;
+		testInputJson = getSampleTestInput();
+		testInputError = null;
+		testInputPanelOpen = true;
+		queueMicrotask(() => testInputTextareaRef?.focus());
+	}
+
+	function closeTestInputPanel() {
+		testInputPanelOpen = false;
+		testInputError = null;
+	}
+
+	async function runWorkflowWithTestInput() {
+		if (!currentId) return;
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(testInputJson);
+		} catch (err) {
+			testInputError = err instanceof Error ? err.message : 'Invalid JSON';
+			return;
+		}
+		testInputError = null;
+
+		if (dirty) await saveWorkflow();
+		running = true;
+		logExpanded = true;
+		try {
+			const res = await fetch(`/api/workflows/${currentId}/run`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ trigger: 'manual', testInput: parsed })
+			});
+			const data = await res.json();
+			if (data.error) {
+				showToast(`Run failed: ${data.error}`, 'error');
+			} else {
+				lastRun = data;
+				showToast(data.status === 'success' ? 'Workflow completed' : `Run finished: ${data.status}`);
+				closeTestInputPanel();
+			}
+		} catch (err) {
+			showToast('Execution failed', 'error');
+		} finally {
+			running = false;
+			runHistoryRef?.refresh();
+		}
+	}
+
 	async function toggleEnabled() {
 		if (!currentId) return;
 		try {
@@ -728,6 +994,67 @@
 		nodes = [...nodes, ...duplicated];
 		edges = [...edges, ...duplicatedEdges];
 		selectedNodeIds = new Set(duplicated.map((n) => n.id));
+		selectedEdgeIds = new Set();
+		dirty = true;
+	}
+
+	// Clipboard persists within the page lifetime. Internal edges only (both
+	// endpoints in the selection) — external wiring belongs to the originals.
+	let clipboard: { nodes: WorkflowNode[]; edges: WorkflowEdge[] } | null = null;
+
+	function selectAllNodes() {
+		if (nodes.length === 0) return;
+		selectedNodeIds = new Set(nodes.map((n) => n.id));
+		selectedEdgeIds = new Set();
+	}
+
+	function copySelectedNodes() {
+		if (selectedNodeIds.size === 0) return;
+		const copiedNodes: WorkflowNode[] = [];
+		for (const node of nodes) {
+			if (selectedNodeIds.has(node.id)) copiedNodes.push(deepCopy(node));
+		}
+		const copiedEdges: WorkflowEdge[] = [];
+		for (const edge of edges) {
+			if (selectedNodeIds.has(edge.sourceNodeId) && selectedNodeIds.has(edge.targetNodeId)) {
+				copiedEdges.push(deepCopy(edge));
+			}
+		}
+		clipboard = { nodes: copiedNodes, edges: copiedEdges };
+	}
+
+	function pasteClipboard() {
+		if (!clipboard || clipboard.nodes.length === 0) return;
+		pushUndoState();
+
+		const idMap = new Map<string, string>();
+		const pasted: WorkflowNode[] = [];
+		for (const node of clipboard.nodes) {
+			const newId = generateId('node');
+			idMap.set(node.id, newId);
+			pasted.push({
+				...deepCopy(node),
+				id: newId,
+				position: { x: node.position.x + 40, y: node.position.y + 40 }
+			});
+		}
+
+		const pastedEdges: WorkflowEdge[] = [];
+		for (const edge of clipboard.edges) {
+			const newSource = idMap.get(edge.sourceNodeId);
+			const newTarget = idMap.get(edge.targetNodeId);
+			if (!newSource || !newTarget) continue;
+			pastedEdges.push({
+				...deepCopy(edge),
+				id: generateId('edge'),
+				sourceNodeId: newSource,
+				targetNodeId: newTarget
+			});
+		}
+
+		nodes = [...nodes, ...pasted];
+		edges = [...edges, ...pastedEdges];
+		selectedNodeIds = new Set(pasted.map((n) => n.id));
 		selectedEdgeIds = new Set();
 		dirty = true;
 	}
@@ -839,6 +1166,19 @@
 
 		// --- LIST VIEW ------------------------------------------------------
 		if (!currentId) {
+			// Escape closes bulk-delete confirm, else clears selection, else falls through.
+			if (e.key === 'Escape') {
+				if (showBulkDeleteConfirm) {
+					e.preventDefault();
+					showBulkDeleteConfirm = false;
+					return;
+				}
+				if (selectedWfIds.size > 0) {
+					e.preventDefault();
+					clearSelection();
+					return;
+				}
+			}
 			// j/k/Arrow/Enter handled by listNav; Escape clears focus (default).
 			if (listNavController.handleKeydown(e)) return;
 			if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key === 'n') {
@@ -852,6 +1192,8 @@
 		// Escape returns to list (but not while a modal or config panel is open).
 		if (e.key === 'Escape') {
 			if (showDeleteConfirm) { e.preventDefault(); showDeleteConfirm = false; return; }
+			if (testInputPanelOpen) { e.preventDefault(); closeTestInputPanel(); return; }
+			if (runMenuOpen) { e.preventDefault(); runMenuOpen = false; return; }
 			if (configPanelOpen) { e.preventDefault(); configPanelOpen = false; return; }
 			e.preventDefault();
 			backToList();
@@ -877,6 +1219,18 @@
 			if (selectedNodeIds.size === 0) return;
 			e.preventDefault();
 			duplicateSelectedNodes();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.shiftKey && !e.altKey) {
+			if (nodes.length === 0) return;
+			e.preventDefault();
+			selectAllNodes();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !e.shiftKey && !e.altKey) {
+			if (selectedNodeIds.size === 0) return;
+			e.preventDefault();
+			copySelectedNodes();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !e.shiftKey && !e.altKey) {
+			if (!clipboard || clipboard.nodes.length === 0) return;
+			e.preventDefault();
+			pasteClipboard();
 		} else if (e.key === 'Delete' || e.key === 'Backspace') {
 			if (selectedNodeIds.size > 0) {
 				pushUndoState();
@@ -923,6 +1277,9 @@
 				{ key: 'Esc', description: 'Back to workflow list' },
 				{ key: 'Del / ⌫', description: 'Delete selected node(s) or edge(s)' },
 				{ key: 'Ctrl+D', description: 'Duplicate selected node(s)' },
+				{ key: 'Ctrl+A', description: 'Select all nodes' },
+				{ key: 'Ctrl+C', description: 'Copy selected node(s)' },
+				{ key: 'Ctrl+V', description: 'Paste copied node(s)' },
 				{ key: 'Ctrl+S', description: 'Save workflow' },
 				{ key: 'Ctrl+Enter', description: 'Run workflow' },
 				{ key: 'Ctrl+Z', description: 'Undo' },
@@ -982,6 +1339,17 @@
 		const hrs = Math.floor(mins / 60);
 		if (hrs < 24) return `${hrs}h ago`;
 		return `${Math.floor(hrs / 24)}d ago`;
+	}
+
+	function formatTimeUntil(iso: string): string {
+		const diff = new Date(iso).getTime() - Date.now();
+		if (diff <= 0) return 'due';
+		const mins = Math.floor(diff / 60000);
+		if (mins < 1) return 'in <1m';
+		if (mins < 60) return `in ${mins}m`;
+		const hrs = Math.floor(mins / 60);
+		if (hrs < 24) return `in ${hrs}h`;
+		return `in ${Math.floor(hrs / 24)}d`;
 	}
 
 	// =========================================================================
@@ -1219,23 +1587,112 @@
 				</button>
 			</div>
 
-			<!-- Run button -->
-			<button
-				class="btn btn-sm gap-1.5"
-				style="background: oklch(0.55 0.15 200); color: oklch(0.15 0.01 250); border: none; margin-left: 0.5rem"
-				onclick={runWorkflow}
-				disabled={running || nodes.length === 0}
-				title="Run workflow (Ctrl+Enter)"
-			>
-				{#if running}
-					<span class="loading loading-spinner loading-xs"></span>
-				{:else}
-					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M8 5v14l11-7L8 5z" />
+			<!-- Run split button -->
+			<div class="wf-run-split" style="margin-left: 0.5rem">
+				<button
+					class="wf-run-main"
+					onclick={runWorkflow}
+					disabled={running || nodes.length === 0}
+					title="Run workflow (Ctrl+Enter)"
+				>
+					{#if running}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M8 5v14l11-7L8 5z" />
+						</svg>
+					{/if}
+					Run
+				</button>
+				<button
+					class="wf-run-arrow"
+					onclick={() => (runMenuOpen = !runMenuOpen)}
+					disabled={running || nodes.length === 0}
+					title="Run options"
+					aria-label="Show run options"
+					aria-haspopup="menu"
+					aria-expanded={runMenuOpen}
+				>
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+						<path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>
+				</button>
+				{#if runMenuOpen}
+					<div class="wf-run-menu" role="menu">
+						<button class="wf-run-menu-item" role="menuitem" onclick={openTestInputPanel}>
+							<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" />
+							</svg>
+							<span>Run with input…</span>
+						</button>
+					</div>
 				{/if}
-				Run
-			</button>
+
+				<!-- Run-with-input overlay panel (anchored to split button) -->
+				{#if testInputPanelOpen}
+					<div class="wf-test-input-panel" role="dialog" aria-label="Run with test input">
+			<div class="wf-test-input-header">
+				<span class="wf-test-input-title">Run with test input</span>
+				<button
+					class="wf-test-input-close"
+					onclick={closeTestInputPanel}
+					aria-label="Close"
+					title="Close (Esc)"
+				>
+					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+					</svg>
+				</button>
+			</div>
+			<p class="wf-test-input-hint">
+				JSON passed to the trigger node as event data. Available as <code>input</code> in downstream nodes.
+			</p>
+			<textarea
+				bind:this={testInputTextareaRef}
+				class="wf-test-input-textarea"
+				bind:value={testInputJson}
+				spellcheck="false"
+				rows="8"
+				aria-label="Test input JSON"
+			></textarea>
+			{#if testInputError}
+				<div class="wf-test-input-error">
+					<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="10" />
+						<path d="M12 8v4M12 16h.01" stroke-linecap="round" />
+					</svg>
+					<span>{testInputError}</span>
+				</div>
+			{/if}
+			<div class="wf-test-input-actions">
+				<button
+					class="btn btn-sm btn-ghost"
+					style="color: oklch(0.65 0.02 250)"
+					onclick={closeTestInputPanel}
+					disabled={running}
+				>
+					Cancel
+				</button>
+				<button
+					class="btn btn-sm gap-1.5"
+					style="background: oklch(0.55 0.15 200); color: oklch(0.15 0.01 250); border: none"
+					onclick={runWorkflowWithTestInput}
+					disabled={running || nodes.length === 0}
+					title="Run workflow with this input"
+				>
+					{#if running}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M8 5v14l11-7L8 5z" />
+						</svg>
+					{/if}
+					Run
+				</button>
+			</div>
+		</div>
+	{/if}
+		</div>
 	</div>
 
 	<!-- ===== EDITOR CONTENT ===== -->
@@ -1636,6 +2093,8 @@
 			<!-- Loading skeleton — matches wf-list-grid columns -->
 			{#each Array(4) as _}
 				<div class="grid wf-list-grid items-center px-4 py-2" style="border-bottom: 1px solid oklch(0.18 0.01 250); min-height: 48px">
+					<!-- Checkbox col (empty skeleton) -->
+					<div></div>
 					<!-- Name col: two lines -->
 					<div class="flex flex-col gap-1">
 						<div class="skeleton h-3 rounded" style="background: oklch(0.22 0.02 250); max-width: 160px"></div>
@@ -1645,6 +2104,8 @@
 					<div class="skeleton h-4 w-10 rounded" style="background: oklch(0.20 0.02 250)"></div>
 					<!-- Nodes col -->
 					<div class="skeleton h-3 w-5 rounded" style="background: oklch(0.20 0.02 250)"></div>
+					<!-- Next run col -->
+					<div class="skeleton h-3 rounded" style="background: oklch(0.20 0.02 250); max-width: 60px"></div>
 					<!-- Last run col -->
 					<div class="skeleton h-3 rounded" style="background: oklch(0.20 0.02 250); max-width: 96px"></div>
 					<!-- Hint col (empty) -->
@@ -1665,11 +2126,78 @@
 				<span class="text-xs" style="color: oklch(0.35 0.02 250); margin-left: auto;">j/k to navigate · ? for shortcuts</span>
 			</div>
 		{:else}
+			<!-- Bulk action bar (shown when 1+ rows selected) -->
+			{#if selectedWfIds.size > 0}
+				<div class="wf-bulk-bar">
+					<span style="color: oklch(0.72 0.08 200); font-weight: 500;">
+						{selectedWfIds.size} selected
+					</span>
+					<div class="flex-1"></div>
+					<button
+						type="button"
+						class="wf-bulk-btn wf-bulk-btn-enable"
+						disabled={bulkActionInProgress}
+						onclick={() => bulkSetEnabled(true)}
+						title="Enable selected workflows"
+					>
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							<path d="M5 13l4 4L19 7" />
+						</svg>
+						Enable
+					</button>
+					<button
+						type="button"
+						class="wf-bulk-btn wf-bulk-btn-disable"
+						disabled={bulkActionInProgress}
+						onclick={() => bulkSetEnabled(false)}
+						title="Disable selected workflows"
+					>
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							<path d="M18.364 18.364A9 9 0 015.636 5.636m12.728 12.728A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+						</svg>
+						Disable
+					</button>
+					<button
+						type="button"
+						class="wf-bulk-btn wf-bulk-btn-delete"
+						disabled={bulkActionInProgress}
+						onclick={() => (showBulkDeleteConfirm = true)}
+						title="Delete selected workflows"
+					>
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+							<path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+						</svg>
+						Delete
+					</button>
+					<button
+						type="button"
+						class="wf-bulk-btn wf-bulk-btn-clear"
+						disabled={bulkActionInProgress}
+						onclick={clearSelection}
+						title="Clear selection (Esc)"
+					>
+						Clear
+					</button>
+				</div>
+			{/if}
+
 			<!-- Column headers -->
 			<div
 				class="grid wf-list-grid px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
 				style="color: oklch(0.38 0.02 250); border-bottom: 1px solid oklch(0.20 0.02 250)"
 			>
+				<!-- Select-all checkbox -->
+				<div class="wf-row-checkbox-cell">
+					<input
+						type="checkbox"
+						class="wf-row-checkbox"
+						checked={allVisibleSelected}
+						indeterminate={someVisibleSelected}
+						onchange={toggleSelectAllVisible}
+						title={allVisibleSelected ? 'Deselect all' : 'Select all'}
+						aria-label="Select all workflows"
+					/>
+				</div>
 				<button
 					type="button"
 					class="wf-sort-header"
@@ -1707,6 +2235,7 @@
 					{/if}
 				</button>
 				<span>Nodes</span>
+				<span title="Next scheduled run (cron-triggered workflows only)">Next Run</span>
 				<button
 					type="button"
 					class="wf-sort-header"
@@ -1748,12 +2277,29 @@
 				<div
 					data-nav-id={wf.id}
 					class="wf-list-row grid wf-list-grid px-4 py-2 cursor-pointer"
+					class:wf-row-selected={selectedWfIds.has(wf.id)}
 					onclick={() => loadWorkflow(wf.id)}
 					oncontextmenu={(e) => handleCardContextMenu(wf, e)}
 					onkeydown={(e) => e.key === 'Enter' && loadWorkflow(wf.id)}
 					role="button"
 					tabindex="0"
 				>
+					<!-- Row checkbox -->
+					<div
+						class="wf-row-checkbox-cell"
+						onclick={(e) => e.stopPropagation()}
+						onkeydown={(e) => e.stopPropagation()}
+						role="presentation"
+					>
+						<input
+							type="checkbox"
+							class="wf-row-checkbox"
+							checked={selectedWfIds.has(wf.id)}
+							onclick={(e) => { e.stopPropagation(); toggleRowSelected(wf, e); }}
+							aria-label="Select {wf.name}"
+						/>
+					</div>
+
 					<!-- Name — always two lines to keep row heights uniform -->
 					<div class="flex flex-col min-w-0 gap-0.5">
 						<span class="text-sm font-medium truncate" style="color: oklch(0.88 0.02 250)">{wf.name}</span>
@@ -1775,16 +2321,35 @@
 						<span>{wf.nodeCount}</span>
 					</div>
 
-					<!-- Last run -->
-					<div class="flex items-center gap-1.5">
+					<!-- Next run (cron-triggered workflows only) -->
+					<div class="flex items-center text-xs tabular-nums" style="color: oklch(0.50 0.02 250)">
+						{#if wf.nextRunAt}
+							<span title="{wf.cronExpr}{wf.timezone ? ` (${wf.timezone})` : ''} · {new Date(wf.nextRunAt).toLocaleString()}">
+								{formatTimeUntil(wf.nextRunAt)}
+							</span>
+						{:else}
+							<span style="color: oklch(0.30 0.02 250)">—</span>
+						{/if}
+					</div>
+
+					<!-- Last run (clickable quick-link to History tab in editor) -->
+					<div class="flex items-center">
 						{#if wf.lastRunStatus}
-							<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke={getStatusColor(wf.lastRunStatus)} stroke-width="2">
-								<path d={getStatusIcon(wf.lastRunStatus)} />
-							</svg>
-							<span class="text-xs" style="color: {getStatusColor(wf.lastRunStatus)}">{wf.lastRunStatus}</span>
-							{#if wf.lastRunAt}
-								<span class="text-xs tabular-nums" style="color: oklch(0.38 0.02 250)">{formatTimeAgo(wf.lastRunAt)}</span>
-							{/if}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<button
+								type="button"
+								class="wf-last-run-link flex items-center gap-1.5"
+								title="Open run history"
+								onclick={(e) => { e.stopPropagation(); openWorkflowHistory(wf.id); }}
+							>
+								<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke={getStatusColor(wf.lastRunStatus)} stroke-width="2">
+									<path d={getStatusIcon(wf.lastRunStatus)} />
+								</svg>
+								<span class="text-xs" style="color: {getStatusColor(wf.lastRunStatus)}">{wf.lastRunStatus}</span>
+								{#if wf.lastRunAt}
+									<span class="text-xs tabular-nums" style="color: oklch(0.38 0.02 250)">{formatTimeAgo(wf.lastRunAt)}</span>
+								{/if}
+							</button>
 						{:else}
 							<span class="text-xs" style="color: oklch(0.30 0.02 250)">—</span>
 						{/if}
@@ -1917,7 +2482,244 @@
 	</div>
 {/if}
 
+<!-- ===== BULK DELETE CONFIRMATION MODAL ===== -->
+{#if showBulkDeleteConfirm}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center"
+		style="background: oklch(0 0 0 / 0.5)"
+		onclick={() => (showBulkDeleteConfirm = false)}
+		onkeydown={(e) => e.key === 'Escape' && (showBulkDeleteConfirm = false)}
+	>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="rounded-xl p-5 max-w-sm w-full mx-4"
+			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.25 0.02 250)"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
+			<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.85 0.02 250)">
+				Delete {selectedWfIds.size} workflow{selectedWfIds.size === 1 ? '' : 's'}?
+			</h3>
+			<p class="text-xs mb-4" style="color: oklch(0.55 0.02 250)">
+				This will permanently delete the selected workflow{selectedWfIds.size === 1 ? '' : 's'} and all run history. This action cannot be undone.
+			</p>
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn btn-sm btn-ghost"
+					style="color: oklch(0.55 0.02 250)"
+					disabled={bulkActionInProgress}
+					onclick={() => (showBulkDeleteConfirm = false)}
+				>
+					Cancel
+				</button>
+				<button
+					class="btn btn-sm"
+					style="background: oklch(0.50 0.15 20); color: white; border: none"
+					disabled={bulkActionInProgress}
+					onclick={bulkDelete}
+				>
+					{bulkActionInProgress ? 'Deleting…' : `Delete ${selectedWfIds.size}`}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
+	/* ===== RUN SPLIT BUTTON ===== */
+
+	.wf-run-split {
+		position: relative;
+		display: inline-flex;
+		align-items: stretch;
+	}
+
+	.wf-run-main,
+	.wf-run-arrow {
+		background: oklch(0.55 0.15 200);
+		color: oklch(0.15 0.01 250);
+		border: none;
+		height: 2rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.875rem;
+		font-weight: 500;
+		transition: background 0.12s;
+	}
+
+	.wf-run-main {
+		padding: 0 0.75rem;
+		gap: 0.375rem;
+		border-top-left-radius: 0.5rem;
+		border-bottom-left-radius: 0.5rem;
+		border-right: 1px solid oklch(0.45 0.12 200);
+	}
+
+	.wf-run-arrow {
+		padding: 0 0.375rem;
+		border-top-right-radius: 0.5rem;
+		border-bottom-right-radius: 0.5rem;
+	}
+
+	.wf-run-main:hover:not(:disabled),
+	.wf-run-arrow:hover:not(:disabled) {
+		background: oklch(0.62 0.15 200);
+	}
+
+	.wf-run-main:disabled,
+	.wf-run-arrow:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.wf-run-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		min-width: 10rem;
+		padding: 0.25rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		box-shadow: 0 6px 16px oklch(0 0 0 / 0.35);
+		z-index: 40;
+		animation: wf-run-menu-in 0.12s ease-out;
+	}
+
+	@keyframes wf-run-menu-in {
+		from { opacity: 0; transform: translateY(-2px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	.wf-run-menu-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		font-size: 0.8125rem;
+		color: oklch(0.82 0.02 250);
+		background: transparent;
+		border-radius: 0.25rem;
+		text-align: left;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.wf-run-menu-item:hover {
+		background: oklch(0.24 0.02 250);
+		color: oklch(0.95 0.02 250);
+	}
+
+	/* ===== RUN-WITH-INPUT OVERLAY PANEL ===== */
+
+	.wf-test-input-panel {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		width: 26rem;
+		max-width: calc(100vw - 1.5rem);
+		padding: 0.75rem;
+		background: oklch(0.17 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		z-index: 50;
+		animation: wf-test-panel-in 0.14s ease-out;
+	}
+
+	@keyframes wf-test-panel-in {
+		from { opacity: 0; transform: translateY(-4px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	.wf-test-input-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.375rem;
+	}
+
+	.wf-test-input-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.88 0.02 250);
+	}
+
+	.wf-test-input-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 0.25rem;
+		color: oklch(0.55 0.02 250);
+		background: transparent;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.wf-test-input-close:hover {
+		background: oklch(0.24 0.02 250);
+		color: oklch(0.90 0.02 250);
+	}
+
+	.wf-test-input-hint {
+		margin: 0 0 0.5rem;
+		font-size: 0.7rem;
+		color: oklch(0.55 0.02 250);
+		line-height: 1.4;
+	}
+
+	.wf-test-input-hint code {
+		padding: 0.05rem 0.25rem;
+		background: oklch(0.22 0.02 250);
+		border-radius: 0.2rem;
+		font-size: 0.68rem;
+		color: oklch(0.80 0.02 250);
+	}
+
+	.wf-test-input-textarea {
+		width: 100%;
+		padding: 0.5rem 0.625rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 0.75rem;
+		line-height: 1.45;
+		color: oklch(0.90 0.02 250);
+		background: oklch(0.13 0.01 250);
+		border: 1px solid oklch(0.26 0.02 250);
+		border-radius: 0.375rem;
+		resize: vertical;
+		min-height: 8rem;
+	}
+
+	.wf-test-input-textarea:focus {
+		outline: none;
+		border-color: oklch(0.55 0.15 200);
+		box-shadow: 0 0 0 2px oklch(0.55 0.15 200 / 0.25);
+	}
+
+	.wf-test-input-error {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+		padding: 0.4rem 0.5rem;
+		background: oklch(0.50 0.12 30 / 0.15);
+		border: 1px solid oklch(0.55 0.15 30 / 0.3);
+		border-radius: 0.25rem;
+		color: oklch(0.72 0.15 30);
+		font-size: 0.72rem;
+		line-height: 1.35;
+	}
+
+	.wf-test-input-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.375rem;
+		margin-top: 0.625rem;
+	}
+
 	/* ===== ZOOM CONTROLS ===== */
 
 	.wf-zoom-controls {
@@ -1976,9 +2778,96 @@
 	/* ===== LIST VIEW ===== */
 
 	.wf-list-grid {
-		grid-template-columns: 1fr 60px 72px 1fr 72px;
+		grid-template-columns: 28px 1fr 60px 72px 96px 1fr 72px;
 		align-items: center;
 		gap: 0.75rem;
+	}
+
+	.wf-row-checkbox {
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		cursor: pointer;
+		accent-color: oklch(0.60 0.15 200);
+	}
+
+	.wf-row-checkbox-cell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.wf-list-row.wf-row-selected {
+		background: oklch(0.20 0.06 200 / 0.35);
+	}
+
+	.wf-list-row.wf-row-selected:hover {
+		background: oklch(0.22 0.07 200 / 0.45);
+	}
+
+	.wf-bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.375rem 1rem;
+		background: oklch(0.17 0.02 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		font-size: 0.75rem;
+	}
+
+	.wf-bulk-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.625rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: background 0.1s, border-color 0.1s;
+	}
+
+	.wf-bulk-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.wf-bulk-btn-enable {
+		background: oklch(0.28 0.08 145 / 0.6);
+		color: oklch(0.82 0.15 145);
+		border-color: oklch(0.40 0.12 145 / 0.5);
+	}
+	.wf-bulk-btn-enable:not(:disabled):hover {
+		background: oklch(0.32 0.10 145 / 0.75);
+	}
+
+	.wf-bulk-btn-disable {
+		background: oklch(0.22 0.02 250 / 0.8);
+		color: oklch(0.70 0.02 250);
+		border-color: oklch(0.30 0.02 250 / 0.7);
+	}
+	.wf-bulk-btn-disable:not(:disabled):hover {
+		background: oklch(0.26 0.02 250);
+	}
+
+	.wf-bulk-btn-delete {
+		background: oklch(0.30 0.12 20 / 0.5);
+		color: oklch(0.80 0.15 20);
+		border-color: oklch(0.45 0.15 20 / 0.5);
+	}
+	.wf-bulk-btn-delete:not(:disabled):hover {
+		background: oklch(0.35 0.14 20 / 0.7);
+	}
+
+	.wf-bulk-btn-clear {
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+		border-color: oklch(0.25 0.02 250);
+	}
+	.wf-bulk-btn-clear:not(:disabled):hover {
+		color: oklch(0.75 0.02 250);
+		background: oklch(0.20 0.02 250);
 	}
 
 	.wf-list-row {
@@ -2030,6 +2919,29 @@
 	}
 
 	.wf-row-action-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.60 0.15 200 / 0.5);
+	}
+
+	.wf-last-run-link {
+		background: transparent;
+		border: none;
+		padding: 2px 0;
+		margin: 0;
+		cursor: pointer;
+		border-radius: 3px;
+		text-decoration: none;
+		transition: text-decoration-color 0.1s, background 0.1s;
+	}
+
+	.wf-last-run-link:hover {
+		text-decoration: underline;
+		text-decoration-color: oklch(0.55 0.02 250);
+		text-underline-offset: 3px;
+		text-decoration-thickness: 1px;
+	}
+
+	.wf-last-run-link:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px oklch(0.60 0.15 200 / 0.5);
 	}

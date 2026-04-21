@@ -27,6 +27,7 @@
 		"@humanspeak/svelte-virtual-list": "^0.3.6",
 		"@monaco-editor/loader": "^1.7.0",
 		"better-sqlite3": "^11.8.1",
+		"cron-parser": "^4.9.0",
 		"d3": "^7.9.0",
 		"imapflow": "^1.2.8",
 		"js-yaml": "^4.1.1",

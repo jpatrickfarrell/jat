@@ -433,6 +433,12 @@ export interface WorkflowSummary {
 	lastRunStatus?: RunStatus;
 	/** Last run timestamp (if any) */
 	lastRunAt?: string;
+	/** Cron expression if the workflow has a trigger_cron node */
+	cronExpr?: string;
+	/** IANA timezone for the cron trigger (defaults to UTC when computing) */
+	timezone?: string;
+	/** Computed ISO timestamp of next scheduled run (cron-triggered workflows only) */
+	nextRunAt?: string;
 	createdAt: string;
 	updatedAt: string;
 }

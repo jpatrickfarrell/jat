@@ -94,7 +94,7 @@ export default defineConfig({
 		]
 	},
 	ssr: {
-		external: ['sqlite-vec']
+		external: ['sqlite-vec', 'cron-parser']
 	},
 	build: {
 		rollupOptions: {

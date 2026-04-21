@@ -130,6 +130,7 @@ const VALID_NODE_TYPES: NodeType[] = [
 	'action_run_bash',
 	'action_spawn_agent',
 	'action_browser',
+	'action_run_workflow',
 	'condition',
 	'transform',
 	'delay'
@@ -327,6 +328,12 @@ function validateNodeConfig(
 		case 'action_browser':
 			if (!config.action || typeof config.action !== 'string') {
 				errors.push({ path: `${pathPrefix}.action`, message: 'Browser action is required' });
+			}
+			break;
+
+		case 'action_run_workflow':
+			if (!config.workflowId || typeof config.workflowId !== 'string') {
+				errors.push({ path: `${pathPrefix}.workflowId`, message: 'Target workflow ID is required' });
 			}
 			break;
 
@@ -838,6 +845,8 @@ function getDefaultConfig(type: NodeType): Record<string, unknown> {
 			return { taskTitle: '', model: 'sonnet' };
 		case 'action_browser':
 			return { action: 'navigate', url: '' };
+		case 'action_run_workflow':
+			return { workflowId: '', passInput: false };
 		case 'condition':
 			return { expression: '' };
 		case 'transform':
@@ -859,8 +868,10 @@ function getDefaultLabel(type: NodeType): string {
 		action_run_bash: 'Run Command',
 		action_spawn_agent: 'Spawn Agent',
 		action_browser: 'Browser Action',
+		action_run_workflow: 'Run Workflow',
 		condition: 'Condition',
-		transform: 'Transform'
+		transform: 'Transform',
+		delay: 'Delay'
 	};
 	return labels[type] || type;
 }

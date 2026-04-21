@@ -14,6 +14,7 @@
 	import { getDefaultPorts } from '$lib/types/workflow';
 	import WorkflowCanvas from '$lib/components/workflows/WorkflowCanvas.svelte';
 	import NodeConfigPanel from '$lib/components/workflows/NodeConfigPanel.svelte';
+	import CrossWorkflowGraph from '$lib/components/workflows/CrossWorkflowGraph.svelte';
 	import RunHistory from '$lib/components/workflows/RunHistory.svelte';
 	import RunDetail from '$lib/components/workflows/RunDetail.svelte';
 	import { getCategorizedNodes, getNodeMeta, type NodeTypeMeta } from '$lib/config/workflowNodes';
@@ -28,6 +29,7 @@
 
 	// Workflow list
 	let workflows = $state<WorkflowSummary[]>([]);
+	let listViewMode = $state<'list' | 'graph'>('list');
 	let loadingList = $state(true);
 	let listFilter = $state('');
 	// Unhealthy filter pill
@@ -186,6 +188,7 @@
 				fitView: (padding?: number) => void;
 				getZoom: () => number;
 				setZoom: (level: number) => void;
+				focusNode: (nodeId: string) => void;
 		  }
 		| undefined = $state();
 
@@ -491,6 +494,89 @@
 			: categorizedNodes
 	);
 
+	const filteredSnippets = $derived(
+		paletteSearch.trim()
+			? snippets.filter(
+					(s) =>
+						s.name.toLowerCase().includes(paletteSearch.toLowerCase()) ||
+						(s.description ?? '').toLowerCase().includes(paletteSearch.toLowerCase())
+				)
+			: snippets
+	);
+
+	const BUILT_IN_TEMPLATES: Array<{
+		id: string;
+		name: string;
+		description: string;
+		nodes: WorkflowNode[];
+		edges: WorkflowEdge[];
+	}> = [
+		{
+			id: 'tpl-webhook-notify',
+			name: 'Webhook → Notify',
+			description: 'Receive event, transform, send notification',
+			nodes: [
+				{ id: 'n1', type: 'trigger_event', label: 'Event Trigger', position: { x: 80, y: 80 }, config: { eventType: 'task_created' }, inputs: [], outputs: [{ id: 'trigger_out', type: 'trigger', label: 'Trigger' }] },
+				{ id: 'n2', type: 'transform', label: 'Transform', position: { x: 360, y: 80 }, config: { functionBody: 'return `Task created: ${input.title || input}`' }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] },
+				{ id: 'n3', type: 'action_send_message', label: 'Send Message', position: { x: 640, y: 80 }, config: { recipient: 'notification', message: '{{input}}' }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] }
+			],
+			edges: [
+				{ id: 'e1', sourceNodeId: 'n1', sourcePort: 'trigger_out', targetNodeId: 'n2', targetPort: 'data_in' },
+				{ id: 'e2', sourceNodeId: 'n2', sourcePort: 'data_out', targetNodeId: 'n3', targetPort: 'data_in' }
+			]
+		},
+		{
+			id: 'tpl-cron-task',
+			name: 'Cron → Create Task',
+			description: 'Schedule recurring task creation',
+			nodes: [
+				{ id: 'n1', type: 'trigger_cron', label: 'Cron Trigger', position: { x: 80, y: 80 }, config: { cronExpr: '0 9 * * 1' }, inputs: [], outputs: [{ id: 'trigger_out', type: 'trigger', label: 'Trigger' }] },
+				{ id: 'n2', type: 'action_create_task', label: 'Create Task', position: { x: 360, y: 80 }, config: { title: 'Weekly review', type: 'task', priority: 2 }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] }
+			],
+			edges: [
+				{ id: 'e1', sourceNodeId: 'n1', sourcePort: 'trigger_out', targetNodeId: 'n2', targetPort: 'data_in' }
+			]
+		},
+		{
+			id: 'tpl-llm-pipeline',
+			name: 'Event → LLM → Task',
+			description: 'Process events with an LLM and create tasks',
+			nodes: [
+				{ id: 'n1', type: 'trigger_event', label: 'Event Trigger', position: { x: 80, y: 80 }, config: { eventType: 'ingest_item' }, inputs: [], outputs: [{ id: 'trigger_out', type: 'trigger', label: 'Trigger' }] },
+				{ id: 'n2', type: 'llm_prompt', label: 'LLM Prompt', position: { x: 360, y: 80 }, config: { prompt: 'Summarize and suggest a task title:\n\n{{input}}', model: 'sonnet' }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] },
+				{ id: 'n3', type: 'action_create_task', label: 'Create Task', position: { x: 640, y: 80 }, config: { title: '{{input}}', type: 'task', priority: 2 }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] }
+			],
+			edges: [
+				{ id: 'e1', sourceNodeId: 'n1', sourcePort: 'trigger_out', targetNodeId: 'n2', targetPort: 'data_in' },
+				{ id: 'e2', sourceNodeId: 'n2', sourcePort: 'data_out', targetNodeId: 'n3', targetPort: 'data_in' }
+			]
+		},
+		{
+			id: 'tpl-manual-bash',
+			name: 'Manual → Bash → LLM',
+			description: 'Run a command and process its output',
+			nodes: [
+				{ id: 'n1', type: 'trigger_manual', label: 'Manual Trigger', position: { x: 80, y: 80 }, config: {}, inputs: [], outputs: [{ id: 'trigger_out', type: 'trigger', label: 'Trigger' }] },
+				{ id: 'n2', type: 'action_run_bash', label: 'Run Command', position: { x: 360, y: 80 }, config: { command: 'echo "Hello"', timeout: 30 }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] },
+				{ id: 'n3', type: 'llm_prompt', label: 'LLM Prompt', position: { x: 640, y: 80 }, config: { prompt: 'Analyze this output:\n\n{{input}}', model: 'haiku' }, inputs: [{ id: 'data_in', type: 'data', label: 'Input' }], outputs: [{ id: 'data_out', type: 'data', label: 'Result' }] }
+			],
+			edges: [
+				{ id: 'e1', sourceNodeId: 'n1', sourcePort: 'trigger_out', targetNodeId: 'n2', targetPort: 'data_in' },
+				{ id: 'e2', sourceNodeId: 'n2', sourcePort: 'data_out', targetNodeId: 'n3', targetPort: 'data_in' }
+			]
+		}
+	];
+
+	const filteredTemplates = $derived(
+		paletteSearch.trim()
+			? BUILT_IN_TEMPLATES.filter(
+					(t) =>
+						t.name.toLowerCase().includes(paletteSearch.toLowerCase()) ||
+						t.description.toLowerCase().includes(paletteSearch.toLowerCase())
+				)
+			: BUILT_IN_TEMPLATES
+	);
+
 	// =========================================================================
 	// ID GENERATION
 	// =========================================================================
@@ -643,7 +729,32 @@
 			const newIds = new Set(genNodes.map((n) => n.id));
 			newAiNodeIds = new Set([...newAiNodeIds, ...newIds]);
 			setTimeout(() => { newAiNodeIds = new Set([...newAiNodeIds].filter((id) => !newIds.has(id))); }, 3000);
-			arrangeNodes();
+			// Arrange inline (skip extra pushUndoState — generation is one undo step)
+			if (nodes.length > 0) {
+				const preds = new Map<string, Set<string>>();
+				for (const n of nodes) preds.set(n.id, new Set());
+				for (const e of edges) {
+					if (preds.has(e.targetNodeId) && e.sourceNodeId !== e.targetNodeId) preds.get(e.targetNodeId)!.add(e.sourceNodeId);
+				}
+				const col = new Map<string, number>();
+				const remaining = new Set(nodes.map((n) => n.id));
+				let level = 0;
+				while (remaining.size > 0) {
+					const ready: string[] = [];
+					for (const id of remaining) {
+						let ok = true;
+						for (const p of preds.get(id)!) { if (remaining.has(p)) { ok = false; break; } }
+						if (ok) ready.push(id);
+					}
+					if (ready.length === 0) { for (const id of remaining) col.set(id, level); break; }
+					for (const id of ready) { col.set(id, level); remaining.delete(id); }
+					level++;
+				}
+				const columns = new Map<number, string[]>();
+				for (const n of nodes) { const c = col.get(n.id) ?? 0; if (!columns.has(c)) columns.set(c, []); columns.get(c)!.push(n.id); }
+				nodes = nodes.map((n) => { const c = col.get(n.id) ?? 0; const r = columns.get(c)!.indexOf(n.id); return { ...n, position: { x: 80 + c * 280, y: 80 + r * 160 } }; });
+				setTimeout(() => canvasRef?.fitView(60), 50);
+			}
 			if (appendToExisting) { aiBarOpen = false; aiPrompt = ''; } else { emptyPrompt = ''; }
 		} catch {
 			setErr('Could not generate workflow, try rephrasing');
@@ -1160,6 +1271,145 @@
 	}
 
 	// =========================================================================
+	// SNIPPETS
+	// =========================================================================
+
+	function openSaveSnippetDialog() {
+		if (selectedNodeIds.size === 0) return;
+		saveSnippetName = '';
+		saveSnippetOpen = true;
+		canvasCtxVisible = false;
+	}
+
+	async function saveAsSnippet() {
+		if (!saveSnippetName.trim() || selectedNodeIds.size === 0) return;
+		saveSnippetSaving = true;
+		try {
+			const selectedNodes = nodes.filter((n) => selectedNodeIds.has(n.id));
+			const selectedEdges = edges.filter(
+				(e) => selectedNodeIds.has(e.sourceNodeId) && selectedNodeIds.has(e.targetNodeId)
+			);
+			const res = await fetch('/api/workflows', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: saveSnippetName.trim(),
+					nodes: selectedNodes,
+					edges: selectedEdges,
+					enabled: false,
+					is_snippet: true
+				})
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				showToast(data.error || 'Failed to save snippet', 'error');
+				return;
+			}
+			saveSnippetOpen = false;
+			await loadWorkflows();
+			showToast(`Snippet "${saveSnippetName.trim()}" saved`);
+		} catch {
+			showToast('Failed to save snippet', 'error');
+		} finally {
+			saveSnippetSaving = false;
+		}
+	}
+
+	function insertNodesFromSource(srcNodes: WorkflowNode[], srcEdges: WorkflowEdge[]) {
+		if (srcNodes.length === 0) return;
+		pushUndoState();
+
+		// Compute offset: place new nodes below existing canvas content
+		const offsetY = nodes.length > 0 ? Math.max(...nodes.map((n) => n.position.y + 160)) + 40 : 80;
+		const minSrcX = Math.min(...srcNodes.map((n) => n.position.x));
+		const minSrcY = Math.min(...srcNodes.map((n) => n.position.y));
+
+		const idMap = new Map<string, string>();
+		const newNodes: WorkflowNode[] = srcNodes.map((n) => {
+			const newId = generateId('node');
+			idMap.set(n.id, newId);
+			return {
+				...deepCopy(n),
+				id: newId,
+				position: { x: 80 + (n.position.x - minSrcX), y: offsetY + (n.position.y - minSrcY) }
+			};
+		});
+
+		const newEdges: WorkflowEdge[] = srcEdges
+			.map((e) => {
+				const newSource = idMap.get(e.sourceNodeId);
+				const newTarget = idMap.get(e.targetNodeId);
+				if (!newSource || !newTarget) return null;
+				return { ...deepCopy(e), id: generateId('edge'), sourceNodeId: newSource, targetNodeId: newTarget };
+			})
+			.filter((e): e is WorkflowEdge => e !== null);
+
+		nodes = [...nodes, ...newNodes];
+		edges = [...edges, ...newEdges];
+		selectedNodeIds = new Set(newNodes.map((n) => n.id));
+		selectedEdgeIds = new Set();
+		dirty = true;
+
+		setTimeout(() => canvasRef?.fitView(80), 50);
+	}
+
+	async function insertSnippet(snippetId: string) {
+		try {
+			const res = await fetch(`/api/workflows/${snippetId}`);
+			if (!res.ok) throw new Error('Failed to fetch snippet');
+			const data = await res.json();
+			const wf = data.workflow as Workflow;
+			insertNodesFromSource(wf.nodes, wf.edges);
+		} catch {
+			showToast('Failed to insert snippet', 'error');
+		}
+	}
+
+	function insertTemplate(tpl: (typeof BUILT_IN_TEMPLATES)[number]) {
+		insertNodesFromSource(tpl.nodes as WorkflowNode[], tpl.edges as WorkflowEdge[]);
+	}
+
+	async function deleteSnippet(id: string, name: string) {
+		try {
+			const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+			if (!res.ok) throw new Error('Failed to delete');
+			await loadWorkflows();
+			showToast(`Snippet "${name}" deleted`);
+		} catch {
+			showToast('Failed to delete snippet', 'error');
+		}
+	}
+
+	function handleCanvasContextMenu(e: MouseEvent) {
+		if (selectedNodeIds.size === 0) return;
+		e.preventDefault();
+		const menuWidth = 200;
+		const menuHeight = 60;
+		canvasCtxX = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
+		canvasCtxY = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
+		canvasCtxVisible = true;
+	}
+
+	$effect(() => {
+		if (!canvasCtxVisible) return;
+		function handleClick() {
+			canvasCtxVisible = false;
+		}
+		function handleKey(ev: KeyboardEvent) {
+			if (ev.key === 'Escape') canvasCtxVisible = false;
+		}
+		const timer = setTimeout(() => {
+			document.addEventListener('click', handleClick);
+			document.addEventListener('keydown', handleKey);
+		}, 0);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('click', handleClick);
+			document.removeEventListener('keydown', handleKey);
+		};
+	});
+
+	// =========================================================================
 	// DRAG & DROP FROM PALETTE
 	// =========================================================================
 
@@ -1642,6 +1892,43 @@
 				</svg>
 			</button>
 
+			<!-- Minimap toggle -->
+			<button
+				class="btn btn-sm btn-ghost btn-square"
+				style="color: {showMinimap ? 'oklch(0.72 0.14 230)' : nodes.length > 0 ? 'oklch(0.55 0.02 250)' : 'oklch(0.35 0.02 250)'};{showMinimap ? ' background: oklch(0.20 0.04 230 / 0.4);' : ''}"
+				onclick={() => { showMinimap = !showMinimap; }}
+				disabled={nodes.length === 0}
+				title={showMinimap ? 'Hide minimap' : 'Show minimap'}
+				aria-label="Toggle minimap"
+			>
+				<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+					<rect x="3" y="3" width="18" height="18" rx="2" />
+					<rect x="6" y="6" width="5" height="4" rx="0.5" fill="currentColor" opacity="0.5" stroke="none" />
+					<rect x="13" y="6" width="5" height="4" rx="0.5" fill="currentColor" opacity="0.5" stroke="none" />
+					<rect x="6" y="13" width="3" height="3" rx="0.5" fill="currentColor" opacity="0.5" stroke="none" />
+					<rect x="11" y="13" width="3" height="3" rx="0.5" fill="currentColor" opacity="0.5" stroke="none" />
+					<rect x="16" y="13" width="3" height="3" rx="0.5" fill="currentColor" opacity="0.5" stroke="none" />
+					<rect x="8" y="10" width="8" height="5" rx="1" stroke-width="1.5" />
+				</svg>
+			</button>
+
+			<!-- Run Inspector toggle -->
+			{#if activeRunResults}
+			<button
+				class="btn btn-sm btn-ghost btn-square"
+				style="color: {inspectorOpen ? 'oklch(0.72 0.17 145)' : 'oklch(0.55 0.02 250)'};{inspectorOpen ? ' background: oklch(0.20 0.05 145 / 0.4);' : ''}"
+				onclick={() => { inspectorOpen = !inspectorOpen; }}
+				title={inspectorOpen ? 'Close Run Inspector' : 'Open Run Inspector'}
+				aria-label="Toggle run inspector"
+			>
+				<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+					<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+					<rect x="9" y="3" width="6" height="4" rx="1" />
+					<path d="M9 12h6M9 16h4" />
+				</svg>
+			</button>
+			{/if}
+
 			<!-- Separator before destructive zone -->
 			<div class="w-px h-6 mx-1" style="background: oklch(0.25 0.02 250)"></div>
 
@@ -2009,6 +2296,93 @@
 							{/each}
 						</div>
 					{/each}
+
+					<!-- SNIPPETS SECTION -->
+					<div class="mt-3">
+						<div class="flex items-center gap-1.5 px-2 py-1">
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="oklch(0.68 0.14 310)" stroke-width="2">
+								<path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zM9 9h6M9 13h6M9 17h4"/>
+							</svg>
+							<span class="text-[11px] font-bold uppercase tracking-wider" style="color: oklch(0.68 0.14 310)">Snippets</span>
+							{#if selectedNodeIds.size > 0 && currentId}
+								<button
+									class="ml-auto btn btn-ghost btn-xs px-1 h-4 min-h-0 text-[9px]"
+									style="color: oklch(0.68 0.14 310)"
+									onclick={openSaveSnippetDialog}
+									title="Save selected nodes as snippet"
+								>+ Save</button>
+							{/if}
+						</div>
+						{#if filteredSnippets.length === 0}
+							{#if paletteSearch.trim()}
+								<div class="px-3 py-1 text-[10px]" style="color: oklch(0.40 0.02 250)">No snippets match.</div>
+							{:else}
+								<div class="px-3 py-1 text-[10px]" style="color: oklch(0.40 0.02 250)">Select nodes → right-click or click + Save.</div>
+							{/if}
+						{:else}
+							{#each filteredSnippets as snippet}
+								<div class="group flex items-center gap-1 px-2 py-1.5 rounded-md hover:bg-[oklch(0.20_0.02_250)] transition-colors" style="color: oklch(0.70 0.02 250)">
+									<button
+										class="flex items-center gap-2 min-w-0 flex-1 text-left"
+										onclick={() => insertSnippet(snippet.id)}
+										title="Insert snippet into canvas"
+									>
+										<div class="w-6 h-6 rounded flex items-center justify-center shrink-0" style="background: oklch(0.68 0.14 310 / 0.12)">
+											<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="oklch(0.68 0.14 310)" stroke-width="2">
+												<path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+											</svg>
+										</div>
+										<div class="min-w-0 flex-1">
+											<div class="text-xs font-medium truncate">{snippet.name}</div>
+											<div class="text-[10px] truncate" style="color: oklch(0.45 0.02 250)">{snippet.nodeCount} node{snippet.nodeCount === 1 ? '' : 's'}</div>
+										</div>
+									</button>
+									<button
+										class="opacity-0 group-hover:opacity-100 btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 transition-opacity"
+										style="color: oklch(0.55 0.15 25)"
+										onclick={() => deleteSnippet(snippet.id, snippet.name)}
+										title="Delete snippet"
+									>
+										<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke-linecap="round"/>
+										</svg>
+									</button>
+								</div>
+							{/each}
+						{/if}
+					</div>
+
+					<!-- TEMPLATES SECTION -->
+					{#if filteredTemplates.length > 0}
+						<div class="mt-3 pb-2">
+							<div class="flex items-center gap-1.5 px-2 py-1">
+								<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.14 200)" stroke-width="2">
+									<path d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+								</svg>
+								<span class="text-[11px] font-bold uppercase tracking-wider" style="color: oklch(0.65 0.14 200)">Templates</span>
+							</div>
+							{#each filteredTemplates as tpl}
+								<button
+									class="wf-palette-item w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors"
+									style="color: oklch(0.75 0.02 250)"
+									onclick={() => insertTemplate(tpl)}
+									title="Insert template into canvas"
+									onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.20 0.02 250)'; }}
+									onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+								>
+									<div class="w-6 h-6 rounded flex items-center justify-center shrink-0" style="background: oklch(0.65 0.14 200 / 0.12)">
+										<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.14 200)" stroke-width="2">
+											<path d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+										</svg>
+									</div>
+									<div class="min-w-0 flex-1">
+										<div class="text-xs font-medium truncate">{tpl.name}</div>
+										<div class="text-[10px] truncate" style="color: oklch(0.45 0.02 250)">{tpl.description}</div>
+									</div>
+								</button>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -2018,6 +2392,7 @@
 			class="flex-1 relative overflow-hidden"
 			ondrop={handleCanvasDrop}
 			ondragover={handleCanvasDragOver}
+			oncontextmenu={handleCanvasContextMenu}
 			role="application"
 			aria-label="Workflow canvas"
 		>
@@ -2049,18 +2424,69 @@
 					</div>
 				</div>
 			{:else}
-				<WorkflowCanvas
-					bind:this={canvasRef}
-					bind:nodes
-					bind:edges
-					bind:selectedNodeIds
-					bind:selectedEdgeIds
-					bind:zoom={canvasZoom}
-					{nodeStatusOverlay}
-					onNodesChange={handleNodesChange}
-					onEdgesChange={handleEdgesChange}
-					onNodeDoubleClick={handleNodeDoubleClick}
-				/>
+				{#if nodes.length === 0}
+					<!-- Empty canvas AI prompt -->
+					<div class="absolute inset-0 flex items-center justify-center">
+						<div
+							class="flex flex-col gap-3 w-full max-w-md rounded-xl p-5"
+							style="background: oklch(0.17 0.02 250); border: 1px solid oklch(0.27 0.04 85 / 0.4)"
+						>
+							<div class="flex items-center gap-2">
+								<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="oklch(0.75 0.15 85)">
+									<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" />
+								</svg>
+								<span class="text-sm font-semibold" style="color: oklch(0.80 0.02 250)">Generate with AI</span>
+							</div>
+							<textarea
+								class="w-full resize-none rounded-md px-3 py-2 text-sm outline-none"
+								style="background: oklch(0.20 0.01 250); color: oklch(0.88 0.02 250); border: 1px solid oklch(0.28 0.02 250); min-height: 5rem"
+								placeholder="Describe what this workflow should do…"
+								rows="3"
+								bind:value={emptyPrompt}
+								disabled={emptyGenerating}
+								onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generateWorkflow(emptyPrompt, false); } }}
+							></textarea>
+							{#if emptyError}
+								<p class="text-xs" style="color: oklch(0.70 0.15 25)">{emptyError}</p>
+							{/if}
+							<div class="flex items-center justify-between gap-2">
+								<p class="text-xs" style="color: oklch(0.40 0.02 250)">Or drag nodes from the palette on the left</p>
+								<button
+									class="btn btn-sm gap-1.5 shrink-0"
+									style="background: oklch(0.55 0.14 85); color: oklch(0.12 0.01 250); border: none"
+									onclick={() => generateWorkflow(emptyPrompt, false)}
+									disabled={emptyGenerating || !emptyPrompt.trim()}
+								>
+									{#if emptyGenerating}
+										<span class="loading loading-spinner loading-xs"></span>
+									{:else}
+										<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+											<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" />
+										</svg>
+									{/if}
+									Generate
+								</button>
+							</div>
+						</div>
+					</div>
+				{:else}
+					<WorkflowCanvas
+						bind:this={canvasRef}
+						bind:nodes
+						bind:edges
+						bind:selectedNodeIds
+						bind:selectedEdgeIds
+						bind:zoom={canvasZoom}
+						bind:showMinimap
+						{nodeStatusOverlay}
+					nodeResults={activeRunResults}
+					onNodeFocus={(nodeId) => { inspectorOpen = true; canvasRef?.focusNode(nodeId); }}
+					highlightedNodeIds={newAiNodeIds}
+						onNodesChange={handleNodesChange}
+						onEdgesChange={handleEdgesChange}
+						onNodeDoubleClick={handleNodeDoubleClick}
+					/>
+				{/if}
 			{/if}
 
 			<!-- Config Panel (overlays on right) -->
@@ -2089,6 +2515,103 @@
 					return await res.json();
 				}}
 			/>
+
+			<!-- Run Inspector Panel (overlays on right, shows after a run) -->
+			{#if inspectorOpen && activeRunResults}
+				{@const activeRun = selectedRun ?? lastRun}
+				{@const sortedResults = Object.entries(activeRunResults)
+					.map(([nodeId, result]) => ({
+						nodeId,
+						result: result as NodeExecutionResult,
+						label: nodes.find((n) => n.id === nodeId)?.label ?? nodeId
+					}))
+					.sort((a, b) => new Date((a.result as NodeExecutionResult).startedAt).getTime() - new Date((b.result as NodeExecutionResult).startedAt).getTime())}
+				<div
+					class="absolute top-0 right-0 h-full flex flex-col overflow-hidden z-30 animate-slide-down"
+					style="width: 280px; background: oklch(0.16 0.01 250); border-left: 1px solid oklch(0.22 0.02 250); box-shadow: -4px 0 16px oklch(0 0 0 / 0.3)"
+				>
+					<!-- Inspector header -->
+					<div class="flex items-center gap-2 px-3 py-2 shrink-0" style="border-bottom: 1px solid oklch(0.20 0.02 250)">
+						<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="oklch(0.60 0.15 145)" stroke-width="2">
+							<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+							<rect x="9" y="3" width="6" height="4" rx="1" />
+							<path d="M9 12h6M9 16h4" />
+						</svg>
+						<span class="text-xs font-semibold" style="color: oklch(0.80 0.02 250)">Run Inspector</span>
+						{#if activeRun}
+							<span class="text-[10px] px-1.5 py-0.5 rounded ml-1" style="background: {getStatusColor(activeRun.status)}15; color: {getStatusColor(activeRun.status)}">
+								{activeRun.status}
+							</span>
+						{/if}
+						<div class="flex-1"></div>
+						<button
+							class="btn btn-ghost btn-xs btn-square"
+							style="color: oklch(0.50 0.02 250)"
+							onclick={() => inspectorOpen = false}
+							aria-label="Close inspector"
+						>
+							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<!-- Run meta -->
+					{#if activeRun}
+						<div class="flex items-center gap-3 px-3 py-1.5 shrink-0 text-[10px]" style="color: oklch(0.45 0.02 250); border-bottom: 1px solid oklch(0.18 0.01 250)">
+							<span>{new Date(activeRun.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+							{#if activeRun.durationMs}
+								<span>{formatDuration(activeRun.durationMs)}</span>
+							{/if}
+							<span class="px-1 rounded" style="background: oklch(0.18 0.01 250)">{activeRun.trigger}</span>
+						</div>
+					{/if}
+
+					<!-- Node list -->
+					<div class="flex-1 overflow-y-auto">
+						{#each sortedResults as { nodeId, result, label }, idx}
+							{@const statusColor = getStatusColor((result as NodeExecutionResult).status)}
+							{@const r = result as NodeExecutionResult}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="px-3 py-2 cursor-pointer"
+								style="border-bottom: 1px solid oklch(0.18 0.01 250)"
+								onclick={() => canvasRef?.focusNode(nodeId)}
+								onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.18 0.01 250)'; }}
+								onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+							>
+								<!-- Row header -->
+								<div class="flex items-center gap-2">
+									<span class="text-[9px] tabular-nums font-mono w-4 shrink-0 text-right" style="color: oklch(0.35 0.02 250)">{idx + 1}</span>
+									<div class="w-1.5 h-1.5 rounded-full shrink-0" style="background: {statusColor}"></div>
+									<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.78 0.02 250)">{label}</span>
+									<span class="text-[10px] tabular-nums shrink-0" style="color: oklch(0.45 0.02 250)">{formatDuration(r.durationMs)}</span>
+								</div>
+
+								<!-- Output preview -->
+								{#if r.output !== undefined}
+									<div class="mt-1.5 ml-6">
+										<pre class="text-[10px] rounded px-2 py-1 overflow-x-auto" style="background: oklch(0.14 0.01 250); color: oklch(0.58 0.02 250); max-height: 60px; overflow-y: auto; white-space: pre-wrap; word-break: break-all">{typeof r.output === 'string' ? r.output.slice(0, 200) : JSON.stringify(r.output, null, 2).slice(0, 200)}{(typeof r.output === 'string' ? r.output.length : JSON.stringify(r.output).length) > 200 ? '…' : ''}</pre>
+									</div>
+								{/if}
+
+								<!-- Error -->
+								{#if r.error}
+									<div class="mt-1 ml-6 text-[10px] rounded px-2 py-1" style="background: oklch(0.55 0.15 25 / 0.12); color: oklch(0.72 0.14 25)">
+										{r.error}
+									</div>
+								{/if}
+							</div>
+						{/each}
+
+						{#if sortedResults.length === 0}
+							<div class="flex items-center justify-center py-8 text-xs" style="color: oklch(0.40 0.02 250)">
+								No node results
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -2269,6 +2792,30 @@
 					⚠ Unhealthy
 				</button>
 			</div>
+			<!-- Graph/List view toggle -->
+			<div class="flex items-center rounded shrink-0" style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
+				<button
+					class="btn btn-xs btn-ghost rounded-r-none"
+					style="color: {listViewMode === 'list' ? 'oklch(0.80 0.15 200)' : 'oklch(0.45 0.02 250)'}; background: {listViewMode === 'list' ? 'oklch(0.22 0.05 200 / 0.3)' : 'transparent'}"
+					onclick={() => (listViewMode = 'list')}
+					title="List view"
+				>
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+					</svg>
+				</button>
+				<button
+					class="btn btn-xs btn-ghost rounded-l-none"
+					style="color: {listViewMode === 'graph' ? 'oklch(0.80 0.15 200)' : 'oklch(0.45 0.02 250)'}; background: {listViewMode === 'graph' ? 'oklch(0.22 0.05 200 / 0.3)' : 'transparent'}"
+					onclick={() => (listViewMode = 'graph')}
+					title="Graph view — shows cross-workflow trigger dependencies"
+				>
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" />
+						<path d="M8.5 12h7M16.7 7.8l-6.4 3M16.7 16.2l-6.4-3" />
+					</svg>
+				</button>
+			</div>
 			<button
 				class="btn btn-xs gap-1 shrink-0"
 				style="background: oklch(0.22 0.05 145); color: oklch(0.80 0.15 145); border: 1px solid oklch(0.30 0.10 145 / 0.5)"
@@ -2281,6 +2828,12 @@
 			</button>
 		</div>
 
+		{#if listViewMode === 'graph'}
+			<!-- GRAPH VIEW -->
+			<div class="flex-1 overflow-hidden" style="height: calc(100% - 44px)">
+				<CrossWorkflowGraph onWorkflowClick={(id) => loadWorkflow(id)} />
+			</div>
+		{:else}
 		{#if loadingList}
 			<!-- Loading skeleton — matches wf-list-grid columns -->
 			{#each Array(4) as _}
@@ -2600,6 +3153,7 @@
 				</div>
 			{/each}
 		{/if}
+		{/if}
 	</div>
 	{/if}
 </div>
@@ -2739,6 +3293,81 @@
 				</button>
 			</div>
 		</div>
+	</div>
+{/if}
+
+<!-- SAVE SNIPPET MODAL -->
+{#if saveSnippetOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center"
+		style="background: oklch(0 0 0 / 0.5)"
+		onclick={() => (saveSnippetOpen = false)}
+		onkeydown={(e) => e.key === 'Escape' && (saveSnippetOpen = false)}
+	>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="rounded-xl p-5 w-80 mx-4"
+			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.25 0.02 250)"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
+			<h3 class="text-sm font-semibold mb-3" style="color: oklch(0.85 0.02 250)">Save as Snippet</h3>
+			<p class="text-xs mb-3" style="color: oklch(0.55 0.02 250)">
+				{selectedNodeIds.size} node{selectedNodeIds.size === 1 ? '' : 's'} will be saved as a reusable snippet.
+			</p>
+			<!-- svelte-ignore a11y_autofocus -->
+			<input
+				type="text"
+				class="input input-sm w-full mb-4"
+				style="background: oklch(0.22 0.02 250); color: oklch(0.85 0.02 250); border-color: oklch(0.30 0.02 250)"
+				placeholder="Snippet name…"
+				bind:value={saveSnippetName}
+				autofocus
+				onkeydown={(e) => { if (e.key === 'Enter') saveAsSnippet(); if (e.key === 'Escape') saveSnippetOpen = false; }}
+			/>
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn btn-sm btn-ghost"
+					style="color: oklch(0.55 0.02 250)"
+					onclick={() => (saveSnippetOpen = false)}
+					disabled={saveSnippetSaving}
+				>Cancel</button>
+				<button
+					class="btn btn-sm gap-1.5"
+					style="background: oklch(0.68 0.14 310); color: oklch(0.15 0.01 250); border: none"
+					onclick={saveAsSnippet}
+					disabled={saveSnippetSaving || !saveSnippetName.trim()}
+				>
+					{#if saveSnippetSaving}
+						<span class="loading loading-spinner loading-xs"></span>
+					{/if}
+					Save Snippet
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- CANVAS CONTEXT MENU -->
+{#if canvasCtxVisible}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed z-50 rounded-lg py-1 min-w-[180px] animate-scale-in"
+		style="left: {canvasCtxX}px; top: {canvasCtxY}px; background: oklch(0.18 0.01 250); border: 1px solid oklch(0.25 0.02 250); box-shadow: 0 8px 24px oklch(0 0 0 / 0.4)"
+		onclick={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.stopPropagation()}
+	>
+		<button
+			class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-[oklch(0.22_0.02_250)] transition-colors"
+			style="color: oklch(0.80 0.02 250)"
+			onclick={openSaveSnippetDialog}
+		>
+			<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="oklch(0.68 0.14 310)" stroke-width="2">
+				<path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+			</svg>
+			Save as snippet…
+		</button>
 	</div>
 {/if}
 

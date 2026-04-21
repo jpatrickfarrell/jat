@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { WorkflowNode, WorkflowEdge, Port, PortType, NodeType, NodeCategory } from '$lib/types/workflow';
+	import type { WorkflowNode, WorkflowEdge, Port, PortType, NodeType, NodeCategory, NodeExecutionResult } from '$lib/types/workflow';
 	import { NODE_CATEGORIES, getDefaultPorts } from '$lib/types/workflow';
 
 	// =========================================================================
@@ -13,12 +13,16 @@
 		selectedEdgeIds = $bindable<Set<string>>(new Set()),
 		gridSnap = $bindable(false),
 		zoom = $bindable(1),
+		showMinimap = $bindable(false),
 		gridSize = 20,
 		readonly = false,
 		nodeStatusOverlay = null,
+		nodeResults = null,
+		highlightedNodeIds = null,
 		onNodesChange,
 		onEdgesChange,
-		onNodeDoubleClick
+		onNodeDoubleClick,
+		onNodeFocus
 	}: {
 		nodes: WorkflowNode[];
 		edges: WorkflowEdge[];
@@ -26,12 +30,16 @@
 		selectedEdgeIds?: Set<string>;
 		gridSnap?: boolean;
 		zoom?: number;
+		showMinimap?: boolean;
 		gridSize?: number;
 		readonly?: boolean;
 		nodeStatusOverlay?: Record<string, string> | null;
+		nodeResults?: Record<string, NodeExecutionResult> | null;
+		highlightedNodeIds?: Set<string> | null;
 		onNodesChange?: (nodes: WorkflowNode[]) => void;
 		onEdgesChange?: (edges: WorkflowEdge[]) => void;
 		onNodeDoubleClick?: (nodeId: string) => void;
+		onNodeFocus?: (nodeId: string) => void;
 	} = $props();
 
 	// =========================================================================
@@ -126,6 +134,11 @@
 
 	// Context menu
 	let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
+
+	// Minimap drag
+	let isMinimapDragging = $state(false);
+	let minimapDragLastX = 0;
+	let minimapDragLastY = 0;
 
 	// =========================================================================
 	// EDGE SPRING PHYSICS
@@ -284,6 +297,71 @@
 		if (!source || !target) return null;
 		return computeEdgePath(source.x, source.y, target.x, target.y, sag);
 	}
+
+	// =========================================================================
+	// OUTPUT CHIP HELPERS
+	// =========================================================================
+
+	/** Truncate and stringify a value for the inline chip */
+	function formatOutputPreview(output: unknown): string {
+		if (output === undefined || output === null) return 'null';
+		if (typeof output === 'string') {
+			return output.length > 60 ? output.slice(0, 60) + '…' : output;
+		}
+		try {
+			const s = JSON.stringify(output);
+			return s.length > 60 ? s.slice(0, 60) + '…' : s;
+		} catch {
+			return String(output);
+		}
+	}
+
+	/** Detect the data type label for an output value */
+	function getOutputType(output: unknown): string {
+		if (output === null || output === undefined) return 'null';
+		if (Array.isArray(output)) return 'array';
+		return typeof output;
+	}
+
+	/** Get color for a data type badge on edges */
+	function getTypeColor(type: string): string {
+		switch (type) {
+			case 'string': return 'oklch(0.70 0.15 85)';
+			case 'number': return 'oklch(0.70 0.15 230)';
+			case 'boolean': return 'oklch(0.70 0.15 280)';
+			case 'object': return 'oklch(0.65 0.12 50)';
+			case 'array': return 'oklch(0.70 0.15 145)';
+			default: return 'oklch(0.50 0.02 250)';
+		}
+	}
+
+	/** Get the midpoint of an edge path for badge positioning */
+	function getEdgeMidpoint(edge: WorkflowEdge): { x: number; y: number } | null {
+		const source = getPortAbsolutePosition(edge.sourceNodeId, edge.sourcePort);
+		const target = getPortAbsolutePosition(edge.targetNodeId, edge.targetPort);
+		if (!source || !target) return null;
+		return {
+			x: (source.x + target.x) / 2,
+			y: (source.y + target.y) / 2
+		};
+	}
+
+	// Track which output chips are expanded
+	let expandedChips = $state<Set<string>>(new Set());
+
+	function toggleChip(nodeId: string) {
+		const next = new Set(expandedChips);
+		if (next.has(nodeId)) next.delete(nodeId);
+		else next.add(nodeId);
+		expandedChips = next;
+	}
+
+	// Reset expanded chips when nodeResults change
+	$effect(() => {
+		if (nodeResults) {
+			expandedChips = new Set();
+		}
+	});
 
 	function getEdgeColor(edge: WorkflowEdge): string {
 		const node = nodes.find((n) => n.id === edge.sourceNodeId);
@@ -689,20 +767,24 @@
 		};
 	});
 
-	function handleMinimapClick(e: MouseEvent) {
+	function handleMinimapMouseDown(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
 		const minimapEl = e.currentTarget as HTMLElement;
 		const rect = minimapEl.getBoundingClientRect();
 		const clickX = e.clientX - rect.left;
 		const clickY = e.clientY - rect.top;
 
-		// Convert minimap coordinates to canvas coordinates
+		// Snap viewport center to clicked position
 		const { minX, minY } = minimapBounds;
 		const canvasX = clickX / minimapScale + minX;
 		const canvasY = clickY / minimapScale + minY;
-
-		// Center the viewport on this point
 		panX = -(canvasX * zoom - containerRect.width / 2);
 		panY = -(canvasY * zoom - containerRect.height / 2);
+
+		isMinimapDragging = true;
+		minimapDragLastX = e.clientX;
+		minimapDragLastY = e.clientY;
 	}
 
 	// =========================================================================
@@ -728,6 +810,19 @@
 		panX = centerX - (centerX - panX) * scale;
 		panY = centerY - (centerY - panY) * scale;
 		zoom = newZoom;
+	}
+
+	/** Pan/zoom to bring a specific node into the center of the viewport */
+	export function focusNode(nodeId: string) {
+		const node = nodes.find((n) => n.id === nodeId);
+		if (!node || !containerEl) return;
+		updateContainerRect();
+		const nodeCenterX = node.position.x + NODE_WIDTH / 2;
+		const nodeCenterY = node.position.y + getNodeHeight(node) / 2;
+		panX = containerRect.width / 2 - nodeCenterX * zoom;
+		panY = containerRect.height / 2 - nodeCenterY * zoom;
+		// Highlight the node
+		selectedNodeIds = new Set([nodeId]);
 	}
 
 	export function fitView(padding = 60) {
@@ -768,6 +863,27 @@
 		if (isPanning || isDragging || isDrawingEdge) {
 			const onMove = (e: MouseEvent) => handleCanvasMouseMove(e);
 			const onUp = (e: MouseEvent) => handleCanvasMouseUp(e);
+			window.addEventListener('mousemove', onMove);
+			window.addEventListener('mouseup', onUp);
+			return () => {
+				window.removeEventListener('mousemove', onMove);
+				window.removeEventListener('mouseup', onUp);
+			};
+		}
+	});
+
+	// Minimap drag — window-level so cursor can leave the minimap while dragging
+	$effect(() => {
+		if (isMinimapDragging) {
+			const onMove = (e: MouseEvent) => {
+				const dx = e.clientX - minimapDragLastX;
+				const dy = e.clientY - minimapDragLastY;
+				minimapDragLastX = e.clientX;
+				minimapDragLastY = e.clientY;
+				panX -= (dx / minimapScale) * zoom;
+				panY -= (dy / minimapScale) * zoom;
+			};
+			const onUp = () => { isMinimapDragging = false; };
 			window.addEventListener('mousemove', onMove);
 			window.addEventListener('mouseup', onUp);
 			return () => {
@@ -900,6 +1016,7 @@
 			{@const isSelected = selectedNodeIds.has(node.id)}
 			{@const overlayStatus = nodeStatusOverlay?.[node.id]}
 			{@const overlayColors = overlayStatus ? STATUS_OVERLAY_COLORS[overlayStatus] : null}
+			{@const isNewAi = highlightedNodeIds?.has(node.id) ?? false}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -913,7 +1030,7 @@
 					--node-bg: {catColors.bg};
 					--node-accent: {catColors.accent};
 					--node-icon: {catColors.icon};
-					{overlayColors ? `border-color: ${overlayColors.border}; box-shadow: 0 0 12px ${overlayColors.glow}; background: ${overlayColors.bg};` : ''}
+					{overlayColors ? `border-color: ${overlayColors.border}; box-shadow: 0 0 12px ${overlayColors.glow}; background: ${overlayColors.bg};` : isNewAi ? 'border-color: oklch(0.78 0.17 85); box-shadow: 0 0 10px oklch(0.78 0.17 85 / 0.5);' : ''}
 				"
 				title="Double-click to configure"
 				onmousedown={(e) => handleNodeMouseDown(e, node.id)}
@@ -980,13 +1097,79 @@
 				{/each}
 			</div>
 		{/each}
+
+		<!-- Output Chips Layer (shown when nodeResults are available) -->
+		{#if nodeResults}
+			{#each nodes as node (node.id)}
+				{@const result = nodeResults[node.id]}
+				{#if result && result.output !== undefined}
+					{@const isExpanded = expandedChips.has(node.id)}
+					{@const outputType = getOutputType(result.output)}
+					{@const statusColor = result.status === 'success' ? 'oklch(0.65 0.18 145)' : result.status === 'error' ? 'oklch(0.60 0.20 25)' : 'oklch(0.50 0.02 250)'}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="wf-output-chip"
+						style="
+							left: {node.position.x}px;
+							top: {node.position.y + getNodeHeight(node) + 6}px;
+							width: {NODE_WIDTH}px;
+						"
+						onclick={(e) => { e.stopPropagation(); toggleChip(node.id); }}
+					>
+						<div
+							class="wf-output-chip-inner"
+							style="border-color: {statusColor}40; background: {statusColor}0D;"
+						>
+							<span class="wf-output-type-badge" style="background: {getTypeColor(outputType)}20; color: {getTypeColor(outputType)}">
+								{outputType}
+							</span>
+							<span class="wf-output-preview" style="color: oklch(0.65 0.02 250)">
+								{formatOutputPreview(result.output)}
+							</span>
+							<svg class="wf-output-chevron" style="color: oklch(0.40 0.02 250); transform: rotate({isExpanded ? '180deg' : '0deg'})" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+							</svg>
+						</div>
+						{#if isExpanded}
+							<pre class="wf-output-expanded" style="border-color: {statusColor}30">{typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2)}</pre>
+						{/if}
+					</div>
+				{/if}
+			{/each}
+		{/if}
+
+		<!-- Edge Data-Type Badges (shown when nodeResults are available) -->
+		{#if nodeResults}
+			{#each edges as edge (edge.id)}
+				{@const sourceResult = nodeResults[edge.sourceNodeId]}
+				{#if sourceResult?.output !== undefined}
+					{@const mid = getEdgeMidpoint(edge)}
+					{#if mid}
+						{@const outputType = getOutputType(sourceResult.output)}
+						<div
+							class="wf-edge-type-badge"
+							style="
+								left: {mid.x}px;
+								top: {mid.y}px;
+								transform: translate(-50%, -50%);
+								background: {getTypeColor(outputType)}20;
+								color: {getTypeColor(outputType)};
+								border-color: {getTypeColor(outputType)}40;
+							"
+						>
+							{outputType}
+						</div>
+					{/if}
+				{/if}
+			{/each}
+		{/if}
 	</div>
 
 	<!-- Minimap -->
-	{#if nodes.length > 0}
+	{#if showMinimap && nodes.length > 0}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<div class="wf-minimap" onclick={handleMinimapClick}>
+		<div class="wf-minimap" class:dragging={isMinimapDragging} onmousedown={handleMinimapMouseDown}>
 			<svg
 				width={MINIMAP_WIDTH}
 				height={MINIMAP_HEIGHT}
@@ -1301,6 +1484,10 @@
 		border-color: oklch(0.35 0.03 250);
 	}
 
+	.wf-minimap.dragging {
+		cursor: grabbing;
+	}
+
 	/* ===================================================================
 	   STATUS BAR
 	   =================================================================== */
@@ -1414,5 +1601,84 @@
 		height: 1px;
 		margin: 3px 6px;
 		background: oklch(0.25 0.02 250);
+	}
+
+	/* Output Chips */
+	.wf-output-chip {
+		position: absolute;
+		pointer-events: all;
+		cursor: pointer;
+		z-index: 5;
+	}
+
+	.wf-output-chip-inner {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 6px;
+		border-radius: 6px;
+		border: 1px solid;
+		font-size: 10px;
+		line-height: 1.3;
+		overflow: hidden;
+		transition: opacity 0.15s;
+	}
+
+	.wf-output-chip:hover .wf-output-chip-inner {
+		opacity: 0.85;
+	}
+
+	.wf-output-type-badge {
+		flex-shrink: 0;
+		padding: 1px 4px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 600;
+		font-family: monospace;
+		text-transform: lowercase;
+	}
+
+	.wf-output-preview {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: monospace;
+		font-size: 10px;
+	}
+
+	.wf-output-chevron {
+		flex-shrink: 0;
+		width: 10px;
+		height: 10px;
+		transition: transform 0.15s;
+	}
+
+	.wf-output-expanded {
+		margin-top: 3px;
+		padding: 6px 8px;
+		border-radius: 6px;
+		border: 1px solid;
+		font-size: 10px;
+		font-family: monospace;
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.14 0.01 250);
+		white-space: pre-wrap;
+		word-break: break-all;
+		max-height: 160px;
+		overflow-y: auto;
+	}
+
+	/* Edge Type Badges */
+	.wf-edge-type-badge {
+		position: absolute;
+		padding: 2px 5px;
+		border-radius: 4px;
+		border: 1px solid;
+		font-size: 9px;
+		font-weight: 600;
+		font-family: monospace;
+		pointer-events: none;
+		z-index: 4;
 	}
 </style>

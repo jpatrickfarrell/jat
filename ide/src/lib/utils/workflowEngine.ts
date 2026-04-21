@@ -26,6 +26,7 @@ import type {
 	ActionRunBashConfig,
 	ActionSpawnAgentConfig,
 	ActionBrowserConfig,
+	ActionRunWorkflowConfig,
 	ConditionConfig,
 	TransformConfig,
 	DelayConfig
@@ -556,6 +557,29 @@ async function executeBrowser(
 	}
 }
 
+/** Run Workflow: trigger another workflow by ID */
+async function executeRunWorkflow(
+	node: WorkflowNode,
+	input: unknown,
+	ctx: ExecutionContext
+): Promise<unknown> {
+	const config = node.config as ActionRunWorkflowConfig;
+	if (!config.workflowId) throw new Error('action_run_workflow: no workflowId configured');
+
+	const body: Record<string, unknown> = { trigger: 'workflow_call' };
+	if (config.passInput) body.testInput = input;
+
+	const res = await fetch(`${ctx.ideBaseUrl ?? 'http://127.0.0.1:3333'}/api/workflows/${encodeURIComponent(config.workflowId)}/run`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+
+	const data = await res.json();
+	if (data.error) throw new Error(`Run workflow ${config.workflowId} failed: ${data.error}`);
+	return data;
+}
+
 /** Condition: evaluate JS expression against input */
 async function executeCondition(
 	node: WorkflowNode,
@@ -646,6 +670,7 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
 	action_run_bash: executeRunBash,
 	action_spawn_agent: executeSpawnAgent,
 	action_browser: executeBrowser,
+	action_run_workflow: executeRunWorkflow,
 	condition: executeCondition,
 	transform: executeTransform,
 	delay: executeDelay

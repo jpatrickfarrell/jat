@@ -11,6 +11,7 @@
 	import RunBashConfig from './nodes/RunBashConfig.svelte';
 	import SpawnAgentConfig from './nodes/SpawnAgentConfig.svelte';
 	import BrowserConfig from './nodes/BrowserConfig.svelte';
+	import RunWorkflowConfig from './nodes/RunWorkflowConfig.svelte';
 	import ConditionConfig from './nodes/ConditionConfig.svelte';
 	import TransformConfig from './nodes/TransformConfig.svelte';
 	import DelayConfig from './nodes/DelayConfig.svelte';
@@ -218,6 +219,8 @@
 					<SpawnAgentConfig config={cfg} onUpdate={handleConfigUpdate} {upstreamVariables} />
 				{:else if node.type === 'action_browser'}
 					<BrowserConfig config={cfg} onUpdate={handleConfigUpdate} />
+				{:else if node.type === 'action_run_workflow'}
+					<RunWorkflowConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'condition'}
 					<ConditionConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'transform'}

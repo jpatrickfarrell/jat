@@ -223,6 +223,19 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		defaultConfig: { action: 'navigate', url: '' }
 	},
 
+	action_run_workflow: {
+		type: 'action_run_workflow',
+		label: 'Run Workflow',
+		description: 'Trigger another workflow by ID',
+		category: 'action',
+		icon: 'M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z',
+		color: 'oklch(0.72 0.17 220)',
+		bgColor: 'oklch(0.72 0.17 220 / 0.08)',
+		portColor: 'oklch(0.72 0.17 220)',
+		helpText: 'Runs another workflow synchronously. Select a workflow ID to trigger. The current node output is optionally passed as input to the target workflow.',
+		defaultConfig: { workflowId: '', passInput: false }
+	},
+
 	// ── LOGIC ─────────────────────────────────────────────────────────────────
 
 	condition: {

@@ -59,6 +59,7 @@ export const DEFAULT_GLOBAL_SHORTCUTS: GlobalShortcutDef[] = [
 	{ id: 'add-project', description: 'Add New Project', defaultShortcut: 'Alt+Shift+P', category: 'global' },
 	{ id: 'toggle-terminal', description: 'Toggle Terminal Drawer', defaultShortcut: 'Ctrl+`', category: 'global' },
 	{ id: 'global-search', description: 'Unified Search', defaultShortcut: 'Ctrl+K', category: 'global' },
+	{ id: 'push-to-talk', description: 'Push-to-Talk Voice Capture', defaultShortcut: 'Alt+Space', category: 'global' },
 
 	// Session actions (require hovered session)
 	{ id: 'attach-terminal', description: 'Attach Terminal to Session', defaultShortcut: 'Alt+A', context: 'Hovered session', category: 'session' },

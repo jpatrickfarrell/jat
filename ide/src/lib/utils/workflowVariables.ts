@@ -94,6 +94,9 @@ const NODE_OUTPUT_SCHEMAS: Record<NodeType, OutputField[]> = {
 	action_browser: [
 		{ name: 'Full output', path: 'input', description: 'Browser action result', insertText: '{{input}}' }
 	],
+	action_run_workflow: [
+		{ name: 'Full output', path: 'input', description: 'Called workflow run result', insertText: '{{input}}' }
+	],
 
 	// ── Logic ────────────────────────────────────────────────────────
 	// Condition passes input through to the matched branch
@@ -103,6 +106,10 @@ const NODE_OUTPUT_SCHEMAS: Record<NodeType, OutputField[]> = {
 	// Transform returns whatever the function body returns
 	transform: [
 		{ name: 'Full output', path: 'input', description: 'Transformed data', insertText: '{{input}}' }
+	],
+	// Delay passes input through after waiting
+	delay: [
+		{ name: 'Full output', path: 'input', description: 'Passed-through input data', insertText: '{{input}}' }
 	]
 };
 

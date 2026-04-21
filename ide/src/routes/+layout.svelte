@@ -36,7 +36,9 @@
 	import UnifiedSearch from '$lib/components/search/UnifiedSearch.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
-	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut, matchesShortcut, getGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+	import PushToTalkOverlay from '$lib/components/voice/PushToTalkOverlay.svelte';
+	import { startCapture, stopCapture, cancelCapture, getVoiceState } from '$lib/stores/voiceCapture.svelte';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import { loadAutoKillConfig } from '$lib/stores/autoKillConfig';
 	import { setReviewRules as setReviewRulesStore } from '$lib/stores/reviewRules.svelte';
@@ -1050,6 +1052,13 @@
 			}
 		},
 
+		'push-to-talk': async () => {
+			// keydown handler — start recording if not already
+			if (getVoiceState() === 'idle') {
+				await startCapture();
+			}
+		},
+
 		// Session actions (require hovered session)
 		'attach-terminal': async () => {
 			const sessionName = get(hoveredSessionName);
@@ -1313,6 +1322,28 @@
 			goto(url, { noScroll: true });
 			return;
 		}
+
+		// Escape cancels push-to-talk if recording
+		if (event.key === 'Escape') {
+			const vs = getVoiceState();
+			if (vs === 'listening' || vs === 'transcribing') {
+				event.preventDefault();
+				cancelCapture();
+				return;
+			}
+		}
+	}
+
+	function handleGlobalKeyup(event: KeyboardEvent) {
+		// Release push-to-talk key → stop recording
+		const vs = getVoiceState();
+		if (vs === 'listening') {
+			const pttShortcut = getGlobalShortcut('push-to-talk');
+			if (matchesShortcut(event, pttShortcut)) {
+				event.preventDefault();
+				stopCapture();
+			}
+		}
 	}
 
 	// Sync jat-feedback widget visibility with debug mode preference
@@ -1324,7 +1355,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} onkeyup={handleGlobalKeyup} />
 
 {#if isSetupPage}
 	<!-- Setup page: focused layout without sidebar/topbar -->
@@ -1429,6 +1460,9 @@
 
 <!-- Global Toast Notifications -->
 <ToastContainer />
+
+<!-- Push-to-Talk Voice Capture Overlay -->
+<PushToTalkOverlay />
 
 <!-- Global Search Modal (Ctrl+K from any page) -->
 <UnifiedSearch

@@ -30,14 +30,23 @@
 	let workflows = $state<WorkflowSummary[]>([]);
 	let loadingList = $state(true);
 	let listFilter = $state('');
+	// Unhealthy filter pill
+	let unhealthyFilter = $state(false);
+
 	const filteredWorkflows = $derived.by(() => {
 		const q = listFilter.trim().toLowerCase();
-		if (!q) return workflows;
-		return workflows.filter((wf) => {
-			const name = (wf.name ?? '').toLowerCase();
-			const desc = (wf.description ?? '').toLowerCase();
-			return name.includes(q) || desc.includes(q);
-		});
+		let list = workflows;
+		if (q) {
+			list = list.filter((wf) => {
+				const name = (wf.name ?? '').toLowerCase();
+				const desc = (wf.description ?? '').toLowerCase();
+				return name.includes(q) || desc.includes(q);
+			});
+		}
+		if (unhealthyFilter) {
+			list = list.filter((wf) => wf.healthStatus === 'degraded' || wf.healthStatus === 'critical');
+		}
+		return list;
 	});
 
 	// Bulk selection state (list view)
@@ -118,6 +127,18 @@
 	let testInputError = $state<string | null>(null);
 	let testInputTextareaRef: HTMLTextAreaElement | undefined = $state();
 
+	// AI generation (toolbar input bar + empty-canvas state)
+	let aiBarOpen = $state(false);
+	let aiPrompt = $state('');
+	let aiGenerating = $state(false);
+	let aiError = $state<string | null>(null);
+	let aiBarTextareaRef: HTMLTextAreaElement | undefined = $state();
+	let emptyPrompt = $state('');
+	let emptyGenerating = $state(false);
+	let emptyError = $state<string | null>(null);
+	// IDs of newly AI-generated nodes — amber highlight cleared after 3s
+	let newAiNodeIds = $state<Set<string>>(new Set());
+
 	// Load error
 	let loadError = $state<{ name: string; id: string } | null>(null);
 
@@ -128,9 +149,32 @@
 	let runHistoryRef: { refresh: () => Promise<void> } | undefined = $state();
 	let nodeStatusOverlay = $state<Record<string, string> | null>(null);
 
+
+	// Run Inspector panel
+	let inspectorOpen = $state(false);
+
+	// The active run whose results are shown inline on the canvas
+	const activeRunResults = $derived.by(() => {
+		const run = selectedRun ?? lastRun;
+		return run?.nodeResults ?? null;
+	});
+	// Minimap
+	let showMinimap = $state(false);
+
 	// Palette
 	let paletteCollapsed = $state(false);
 	let paletteSearch = $state('');
+
+	// Snippets
+	let snippets = $state<WorkflowSummary[]>([]);
+	let saveSnippetOpen = $state(false);
+	let saveSnippetName = $state('');
+	let saveSnippetSaving = $state(false);
+
+	// Canvas context menu (for save-as-snippet)
+	let canvasCtxX = $state(0);
+	let canvasCtxY = $state(0);
+	let canvasCtxVisible = $state(false);
 
 	// Undo/redo
 	let undoStack = $state<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
@@ -566,6 +610,49 @@
 	}
 
 	// =========================================================================
+	// AI GENERATION
+	// =========================================================================
+
+	async function generateWorkflow(prompt: string, appendToExisting: boolean) {
+		if (!prompt.trim()) return;
+		const setGen = appendToExisting ? (v: boolean) => { aiGenerating = v; } : (v: boolean) => { emptyGenerating = v; };
+		const setErr = appendToExisting ? (v: string | null) => { aiError = v; } : (v: string | null) => { emptyError = v; };
+		setGen(true);
+		setErr(null);
+		try {
+			const res = await fetch('/api/workflows/generate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ prompt: prompt.trim(), existingNodes: appendToExisting ? nodes : [] })
+			});
+			const data = await res.json();
+			if (!res.ok) { setErr(data.message || 'Could not generate workflow, try rephrasing'); return; }
+			pushUndoState();
+			const offsetX = appendToExisting && nodes.length > 0 ? Math.max(...nodes.map((n) => n.position.x)) + 320 : 0;
+			const genNodes = (data.nodes as typeof nodes).map((n) => ({ ...n, position: { x: n.position.x + offsetX, y: n.position.y } }));
+			const genEdges = data.edges as typeof edges;
+			if (appendToExisting) {
+				nodes = [...nodes, ...genNodes];
+				edges = [...edges, ...genEdges];
+			} else {
+				nodes = genNodes;
+				edges = genEdges;
+				if (workflowName === 'Untitled Workflow' && data.name) workflowName = data.name;
+			}
+			dirty = true;
+			const newIds = new Set(genNodes.map((n) => n.id));
+			newAiNodeIds = new Set([...newAiNodeIds, ...newIds]);
+			setTimeout(() => { newAiNodeIds = new Set([...newAiNodeIds].filter((id) => !newIds.has(id))); }, 3000);
+			arrangeNodes();
+			if (appendToExisting) { aiBarOpen = false; aiPrompt = ''; } else { emptyPrompt = ''; }
+		} catch {
+			setErr('Could not generate workflow, try rephrasing');
+		} finally {
+			setGen(false);
+		}
+	}
+
+	// =========================================================================
 	// API CALLS
 	// =========================================================================
 
@@ -575,7 +662,9 @@
 			const res = await fetch('/api/workflows');
 			if (res.ok) {
 				const data = await res.json();
-				workflows = data.workflows || [];
+				const all: WorkflowSummary[] = data.workflows || [];
+				workflows = all.filter((w) => !w.is_snippet);
+				snippets = all.filter((w) => w.is_snippet);
 			}
 		} catch (err) {
 			console.error('Failed to load workflows:', err);
@@ -603,6 +692,7 @@
 			workflowEnabled = wf.enabled;
 			nodes = wf.nodes;
 			edges = wf.edges;
+			showMinimap = wf.nodes.length >= 8;
 			dirty = false;
 			undoStack = [];
 			redoStack = [];
@@ -1290,6 +1380,34 @@
 	];
 
 	// =========================================================================
+	// HEALTH HELPERS
+	// =========================================================================
+
+	function getHealthColor(status: 'healthy' | 'degraded' | 'critical'): string {
+		switch (status) {
+			case 'healthy': return 'oklch(0.72 0.17 145)';
+			case 'degraded': return 'oklch(0.80 0.18 75)';
+			case 'critical': return 'oklch(0.70 0.20 25)';
+		}
+	}
+
+	function getHealthBg(status: 'healthy' | 'degraded' | 'critical'): string {
+		switch (status) {
+			case 'healthy': return 'oklch(0.55 0.15 145 / 0.12)';
+			case 'degraded': return 'oklch(0.60 0.15 75 / 0.15)';
+			case 'critical': return 'oklch(0.55 0.20 25 / 0.15)';
+		}
+	}
+
+	function getHealthTooltip(wf: WorkflowSummary): string {
+		if (!wf.healthStatus) return 'No runs yet';
+		const streak = wf.consecutiveFailures ?? 0;
+		const lastOk = wf.lastSuccessAt ? `Last success: ${formatTimeAgo(wf.lastSuccessAt)}` : 'No successful runs in last 10';
+		if (wf.healthStatus === 'healthy') return 'All recent runs succeeded';
+		return `${streak} consecutive failure${streak !== 1 ? 's' : ''}\n${lastOk}`;
+	}
+
+	// =========================================================================
 	// EXECUTION LOG HELPERS
 	// =========================================================================
 
@@ -1444,6 +1562,18 @@
 					{/if}
 				</svg>
 				<span class="text-xs">{workflowEnabled ? 'On' : 'Off'}</span>
+			</button>
+
+			<!-- AI generate button -->
+			<button
+				class="btn btn-sm btn-ghost btn-square"
+				style="color: {aiBarOpen ? 'oklch(0.75 0.15 85)' : 'oklch(0.65 0.02 250)'}"
+				onclick={() => { aiBarOpen = !aiBarOpen; aiError = null; if (aiBarOpen) setTimeout(() => aiBarTextareaRef?.focus(), 50); }}
+				title="Generate with AI (describe what the workflow should do)"
+			>
+				<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" />
+				</svg>
 			</button>
 
 			<!-- Separator -->
@@ -1694,6 +1824,58 @@
 	{/if}
 		</div>
 	</div>
+
+	<!-- ===== AI INPUT BAR ===== -->
+	{#if aiBarOpen}
+		<div
+			class="shrink-0 flex items-start gap-2 px-3 py-2 animate-slide-down"
+			style="background: oklch(0.17 0.02 250); border-bottom: 1px solid oklch(0.28 0.06 85 / 0.4)"
+		>
+			<svg class="w-4 h-4 mt-1.5 shrink-0" viewBox="0 0 24 24" fill="oklch(0.75 0.15 85)">
+				<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" />
+			</svg>
+			<div class="flex-1 flex flex-col gap-1.5">
+				<textarea
+					bind:this={aiBarTextareaRef}
+					class="w-full resize-none text-sm rounded-md px-2 py-1.5 outline-none"
+					style="background: oklch(0.20 0.01 250); color: oklch(0.88 0.02 250); border: 1px solid oklch(0.28 0.02 250); min-height: 2.5rem; max-height: 6rem"
+					placeholder="Describe nodes to add to this workflow…"
+					rows="2"
+					bind:value={aiPrompt}
+					disabled={aiGenerating}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generateWorkflow(aiPrompt, true); }
+						if (e.key === 'Escape') { aiBarOpen = false; aiError = null; }
+					}}
+				></textarea>
+				{#if aiError}
+					<p class="text-xs" style="color: oklch(0.70 0.15 25)">{aiError}</p>
+				{/if}
+			</div>
+			<button
+				class="btn btn-sm gap-1.5 shrink-0"
+				style="background: oklch(0.55 0.14 85); color: oklch(0.12 0.01 250); border: none"
+				onclick={() => generateWorkflow(aiPrompt, true)}
+				disabled={aiGenerating || !aiPrompt.trim()}
+			>
+				{#if aiGenerating}
+					<span class="loading loading-spinner loading-xs"></span>
+				{:else}
+					Generate
+				{/if}
+			</button>
+			<button
+				class="btn btn-sm btn-ghost btn-square shrink-0"
+				style="color: oklch(0.50 0.02 250)"
+				onclick={() => { aiBarOpen = false; aiError = null; }}
+				title="Close (Esc)"
+			>
+				<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+				</svg>
+			</button>
+		</div>
+	{/if}
 
 	<!-- ===== EDITOR CONTENT ===== -->
 	<div class="flex flex-1 overflow-hidden">
@@ -2076,6 +2258,16 @@
 						</button>
 					{/if}
 				</div>
+				<!-- Unhealthy filter pill -->
+				<button
+					type="button"
+					class="text-[10px] font-semibold px-2 py-1 rounded shrink-0"
+					style="background: {unhealthyFilter ? 'oklch(0.55 0.20 25 / 0.25)' : 'oklch(0.18 0.02 250)'}; color: {unhealthyFilter ? 'oklch(0.75 0.20 25)' : 'oklch(0.45 0.02 250)'}; border: 1px solid {unhealthyFilter ? 'oklch(0.55 0.20 25 / 0.5)' : 'oklch(0.22 0.02 250)'}"
+					onclick={() => (unhealthyFilter = !unhealthyFilter)}
+					title="Show only unhealthy workflows (amber or red health)"
+				>
+					⚠ Unhealthy
+				</button>
 			</div>
 			<button
 				class="btn btn-xs gap-1 shrink-0"
@@ -2106,6 +2298,8 @@
 					<div class="skeleton h-3 w-5 rounded" style="background: oklch(0.20 0.02 250)"></div>
 					<!-- Next run col -->
 					<div class="skeleton h-3 rounded" style="background: oklch(0.20 0.02 250); max-width: 60px"></div>
+					<!-- Health col -->
+					<div class="skeleton h-4 w-12 rounded-full" style="background: oklch(0.20 0.02 250)"></div>
 					<!-- Last run col -->
 					<div class="skeleton h-3 rounded" style="background: oklch(0.20 0.02 250); max-width: 96px"></div>
 					<!-- Hint col (empty) -->
@@ -2236,6 +2430,7 @@
 				</button>
 				<span>Nodes</span>
 				<span title="Next scheduled run (cron-triggered workflows only)">Next Run</span>
+				<span title="Health based on last 10 runs">Health</span>
 				<button
 					type="button"
 					class="wf-sort-header"
@@ -2258,13 +2453,19 @@
 			</div>
 
 			<!-- No-match filter state -->
-			{#if filteredWorkflows.length === 0 && listFilter.trim()}
+			{#if filteredWorkflows.length === 0 && (listFilter.trim() || unhealthyFilter)}
 				<div class="px-4 py-8 flex items-center gap-3" style="border-bottom: 1px solid oklch(0.18 0.01 250)">
-					<span class="text-xs" style="color: oklch(0.40 0.02 250)">No workflows match "{listFilter}".</span>
+					<span class="text-xs" style="color: oklch(0.40 0.02 250)">
+						{#if unhealthyFilter && !listFilter.trim()}
+							No unhealthy workflows.
+						{:else}
+							No workflows match "{listFilter}"{unhealthyFilter ? ' (unhealthy filter active)' : ''}.
+						{/if}
+					</span>
 					<button
 						class="text-xs underline"
 						style="color: oklch(0.55 0.15 200)"
-						onclick={() => (listFilter = '')}
+						onclick={() => { listFilter = ''; unhealthyFilter = false; }}
 					>
 						Clear filter
 					</button>
@@ -2329,6 +2530,21 @@
 							</span>
 						{:else}
 							<span style="color: oklch(0.30 0.02 250)">—</span>
+						{/if}
+					</div>
+
+					<!-- Health chip -->
+					<div class="flex items-center">
+						{#if wf.healthStatus}
+							<span
+								class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+								style="background: {getHealthBg(wf.healthStatus)}; color: {getHealthColor(wf.healthStatus)}"
+								title={getHealthTooltip(wf)}
+							>
+								{#if wf.healthStatus === 'healthy'}● OK{:else if wf.healthStatus === 'degraded'}▲ {wf.consecutiveFailures}f{:else}✕ {wf.consecutiveFailures}f{/if}
+							</span>
+						{:else}
+							<span style="color: oklch(0.30 0.02 250)" title="No runs yet">—</span>
 						{/if}
 					</div>
 
@@ -2778,7 +2994,7 @@
 	/* ===== LIST VIEW ===== */
 
 	.wf-list-grid {
-		grid-template-columns: 28px 1fr 60px 72px 96px 1fr 72px;
+		grid-template-columns: 28px 1fr 60px 72px 96px 72px 1fr 72px;
 		align-items: center;
 		gap: 0.75rem;
 	}

@@ -29,6 +29,7 @@ export type NodeType =
 	| 'action_run_bash'
 	| 'action_spawn_agent'
 	| 'action_browser'
+	| 'action_run_workflow'
 	// Logic
 	| 'condition'
 	| 'transform'
@@ -52,6 +53,7 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
 	action_run_bash: 'action',
 	action_spawn_agent: 'action',
 	action_browser: 'action',
+	action_run_workflow: 'action',
 	condition: 'logic',
 	transform: 'logic',
 	delay: 'logic'
@@ -169,6 +171,14 @@ export interface ActionBrowserConfig {
 	timeout?: number;
 }
 
+/** Run Workflow action: triggers another workflow */
+export interface ActionRunWorkflowConfig {
+	/** Target workflow ID to run */
+	workflowId: string;
+	/** Pass current node output as input to the target workflow */
+	passInput?: boolean;
+}
+
 /** Condition node: routes to true/false branch */
 export interface ConditionConfig {
 	/** JavaScript expression. Evaluates against `input` variable.
@@ -204,6 +214,7 @@ export type NodeConfig =
 	| ActionRunBashConfig
 	| ActionSpawnAgentConfig
 	| ActionBrowserConfig
+	| ActionRunWorkflowConfig
 	| ConditionConfig
 	| TransformConfig
 	| DelayConfig;
@@ -221,6 +232,7 @@ export interface NodeConfigMap {
 	action_run_bash: ActionRunBashConfig;
 	action_spawn_agent: ActionSpawnAgentConfig;
 	action_browser: ActionBrowserConfig;
+	action_run_workflow: ActionRunWorkflowConfig;
 	condition: ConditionConfig;
 	transform: TransformConfig;
 	delay: DelayConfig;
@@ -309,6 +321,8 @@ export interface Workflow {
 	createdAt: string;
 	/** ISO timestamp of last modification */
 	updatedAt: string;
+	/** If true, this record is a reusable snippet rather than a runnable workflow */
+	is_snippet?: boolean;
 }
 
 // =============================================================================
@@ -381,6 +395,7 @@ export interface WorkflowFile {
 	enabled: boolean;
 	createdAt: string;
 	updatedAt: string;
+	is_snippet?: boolean;
 }
 
 /**
@@ -429,6 +444,7 @@ export interface WorkflowSummary {
 	enabled: boolean;
 	nodeCount: number;
 	edgeCount: number;
+	is_snippet?: boolean;
 	/** Last run status (if any) */
 	lastRunStatus?: RunStatus;
 	/** Last run timestamp (if any) */
@@ -439,6 +455,12 @@ export interface WorkflowSummary {
 	timezone?: string;
 	/** Computed ISO timestamp of next scheduled run (cron-triggered workflows only) */
 	nextRunAt?: string;
+	/** Health status derived from last 10 runs */
+	healthStatus?: 'healthy' | 'degraded' | 'critical';
+	/** Number of consecutive failures at the head of the run history */
+	consecutiveFailures?: number;
+	/** ISO timestamp of the most recent successful run */
+	lastSuccessAt?: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -474,6 +496,7 @@ export function getDefaultPorts(type: NodeType): { inputs: Port[]; outputs: Port
 		case 'action_run_bash':
 		case 'action_spawn_agent':
 		case 'action_browser':
+		case 'action_run_workflow':
 			return {
 				inputs: [{ id: 'data_in', type: 'data', label: 'Input' }],
 				outputs: [{ id: 'data_out', type: 'data', label: 'Result' }]

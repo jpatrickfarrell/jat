@@ -385,7 +385,8 @@ function parseWorkflowFile(content: string, id: string): Workflow | null {
 			edges: data.edges || [],
 			enabled: data.enabled ?? false,
 			createdAt: data.createdAt || new Date().toISOString(),
-			updatedAt: data.updatedAt || new Date().toISOString()
+			updatedAt: data.updatedAt || new Date().toISOString(),
+			is_snippet: data.is_snippet ?? false
 		};
 	} catch (error) {
 		console.error(`[workflows] Failed to parse workflow ${id}:`, error);
@@ -403,7 +404,8 @@ function serializeWorkflow(workflow: Workflow): string {
 		edges: workflow.edges,
 		enabled: workflow.enabled,
 		createdAt: workflow.createdAt,
-		updatedAt: workflow.updatedAt
+		updatedAt: workflow.updatedAt,
+		...(workflow.is_snippet ? { is_snippet: true } : {})
 	};
 	return JSON.stringify(data, null, 2);
 }
@@ -494,8 +496,9 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 	const summaries: WorkflowSummary[] = [];
 
 	for (const wf of workflows) {
-		// Get last run status
-		const lastRun = await getLastRun(wf.id);
+		// Fetch last 10 runs for health computation (also covers lastRun)
+		const recentRuns = await getRuns(wf.id, 10);
+		const lastRun = recentRuns[0] || null;
 
 		// Extract cron trigger info (first trigger_cron node wins if multiple)
 		const cronNode = wf.nodes.find((n) => n.type === 'trigger_cron');
@@ -519,6 +522,35 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 			}
 		}
 
+		// Compute health from recent runs
+		let healthStatus: 'healthy' | 'degraded' | 'critical' | undefined;
+		let consecutiveFailures = 0;
+		let lastSuccessAt: string | undefined;
+
+		if (recentRuns.length > 0) {
+			// Count consecutive failures from the most recent run
+			for (const run of recentRuns) {
+				if (run.status === 'success') {
+					lastSuccessAt = run.startedAt;
+					break;
+				}
+				consecutiveFailures++;
+			}
+			// If no success found in the counted streak, search remaining runs
+			if (!lastSuccessAt) {
+				const successRun = recentRuns.find((r) => r.status === 'success');
+				lastSuccessAt = successRun?.startedAt;
+			}
+
+			if (consecutiveFailures === 0) {
+				healthStatus = 'healthy';
+			} else if (consecutiveFailures >= 3) {
+				healthStatus = 'critical';
+			} else {
+				healthStatus = 'degraded';
+			}
+		}
+
 		summaries.push({
 			id: wf.id,
 			name: wf.name,
@@ -526,11 +558,15 @@ export async function getWorkflowSummaries(): Promise<WorkflowSummary[]> {
 			enabled: wf.enabled,
 			nodeCount: wf.nodes.length,
 			edgeCount: wf.edges.length,
+			is_snippet: wf.is_snippet ?? false,
 			lastRunStatus: lastRun?.status,
 			lastRunAt: lastRun?.startedAt,
 			cronExpr,
 			timezone,
 			nextRunAt,
+			healthStatus,
+			consecutiveFailures: recentRuns.length > 0 ? consecutiveFailures : undefined,
+			lastSuccessAt,
 			createdAt: wf.createdAt,
 			updatedAt: wf.updatedAt
 		});
@@ -579,7 +615,8 @@ export async function saveWorkflow(
 		edges: workflow.edges,
 		enabled: workflow.enabled ?? false,
 		createdAt: exists ? workflow.createdAt || now : now,
-		updatedAt: now
+		updatedAt: now,
+		...(workflow.is_snippet ? { is_snippet: true } : {})
 	};
 
 	const path = getWorkflowPath(workflow.id);

@@ -420,6 +420,9 @@ export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean
 	// Special handling for backtick (`) - check event.code since event.key varies by keyboard/locale
 	if (shortcutKey === '`' && event.code === 'Backquote') return true;
 
+	// Space: event.key is ' ' but shortcut stores it as 'space'
+	if (shortcutKey === 'space' && event.code === 'Space') return true;
+
 	// Fallback: check event.code for single letter keys (more reliable with Alt modifier)
 	// Alt+key can produce special characters on some systems, but event.code is consistent
 	if (shortcutKey.length === 1 && /^[a-z]$/.test(shortcutKey)) {

@@ -50,16 +50,21 @@
 	});
 
 	async function loadPrerequisites(forceRefresh = false) {
-		// Use cache if valid (unless force-refreshing)
+		// Use cache only if valid AND all required tools passed.
+		// If any required tool was missing, the user may have just installed it
+		// (e.g. by running the printed install script) — always re-check so
+		// the UI picks up the fix without requiring a manual "Re-check" click.
 		if (!forceRefresh) {
 			const cached = getPrerequisiteResults();
 			if (cached && isCacheValid()) {
-				checks = cached;
-				loading = false;
-				// Check if all required tools passed from cached results
-				prereqsPassed = cached.every((c: PrerequisiteResult) => !c.required || c.installed);
-				if (prereqsPassed && currentStep === 1) currentStep = 2;
-				return;
+				const allRequiredPassed = cached.every((c: PrerequisiteResult) => !c.required || c.installed);
+				if (allRequiredPassed) {
+					checks = cached;
+					loading = false;
+					prereqsPassed = true;
+					if (currentStep === 1) currentStep = 2;
+					return;
+				}
 			}
 		}
 

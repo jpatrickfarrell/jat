@@ -1335,14 +1335,12 @@
 	}
 
 	function handleGlobalKeyup(event: KeyboardEvent) {
-		// Release push-to-talk key → stop recording
-		const vs = getVoiceState();
-		if (vs === 'listening') {
-			const pttShortcut = getGlobalShortcut('push-to-talk');
-			if (matchesShortcut(event, pttShortcut)) {
-				event.preventDefault();
-				stopCapture();
-			}
+		// Release push-to-talk → stop recording.
+		// Only check the key code (Space), not modifiers — on Linux, Ctrl+Space
+		// is often intercepted by the IME so ctrlKey may be gone by keyup.
+		if (getVoiceState() === 'listening' && event.code === 'Space') {
+			event.preventDefault();
+			stopCapture();
 		}
 	}
 

@@ -23,6 +23,7 @@ let mediaRecorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let cancelled = false;
 let stream: MediaStream | null = null;
+let autoStopTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getVoiceState(): VoiceState { return voiceState; }
 export function getTranscript(): string { return transcript; }
@@ -103,9 +104,13 @@ export async function startCapture(): Promise<void> {
 
 	mediaRecorder.start();
 	voiceState = 'listening';
+
+	// Fallback: auto-stop after 30s in case keyup never fires
+	autoStopTimer = setTimeout(() => stopCapture(), 30_000);
 }
 
 export function stopCapture(): void {
+	clearAutoStop();
 	if (mediaRecorder && mediaRecorder.state === 'recording') {
 		mediaRecorder.stop();
 	} else {
@@ -115,6 +120,7 @@ export function stopCapture(): void {
 }
 
 export function cancelCapture(): void {
+	clearAutoStop();
 	cancelled = true;
 	if (mediaRecorder && mediaRecorder.state === 'recording') {
 		mediaRecorder.stop();
@@ -128,6 +134,13 @@ export function resetVoiceState(): void {
 	voiceState = 'idle';
 	transcript = '';
 	errorMessage = '';
+}
+
+function clearAutoStop(): void {
+	if (autoStopTimer) {
+		clearTimeout(autoStopTimer);
+		autoStopTimer = null;
+	}
 }
 
 function stopStream(): void {

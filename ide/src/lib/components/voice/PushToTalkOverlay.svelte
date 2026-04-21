@@ -37,7 +37,7 @@
 					{/each}
 				</div>
 				<span class="ptl-label listening">Listening…</span>
-				<span class="ptl-hint">Release to transcribe · Esc to cancel</span>
+				<span class="ptl-hint">Release Space to transcribe · Esc to cancel</span>
 
 			{:else if voiceState === 'transcribing'}
 				<span class="ptl-spinner" aria-hidden="true"></span>

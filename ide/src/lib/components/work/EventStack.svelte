@@ -32,6 +32,7 @@
 	import type { SuggestedTask } from '$lib/types/signals';
 	import { workSessionsState, sendInput } from '$lib/stores/workSessions.svelte';
 	import { throttledFetch } from '$lib/utils/requestThrottler';
+	import { marked } from 'marked';
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -1376,7 +1377,7 @@
 													{/if}
 												</button>
 											</div>
-											<div class="text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/70 hover:text-base-content/80">{voiceSummary}</div>
+											<div class="voice-summary-md">{@html marked.parse(voiceSummary)}</div>
 										</div>
 									{/if}
 									<SuggestedTasksSection
@@ -1938,7 +1939,7 @@
 															{/if}
 														</button>
 													</div>
-													<div class="text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/80">{popupVoiceSummary}</div>
+													<div class="voice-summary-md">{@html marked.parse(popupVoiceSummary)}</div>
 												</div>
 											{/if}
 											<SuggestedTasksSection
@@ -3036,6 +3037,47 @@
 {/if}
 
 <style>
+	/* Voice inbox summary markdown rendering */
+	.voice-summary-md {
+		font-size: 0.75rem;
+		line-height: 1.55;
+		color: oklch(0.72 0.02 250);
+	}
+	:global(.voice-summary-md h2) {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.80 0.04 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin: 0.6rem 0 0.25rem 0;
+		padding-bottom: 0.15rem;
+		border-bottom: 1px solid oklch(0.28 0.02 250 / 0.6);
+	}
+	:global(.voice-summary-md h2:first-child) {
+		margin-top: 0;
+	}
+	:global(.voice-summary-md h3) {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.75 0.03 250);
+		margin: 0.5rem 0 0.2rem 0;
+	}
+	:global(.voice-summary-md ul),
+	:global(.voice-summary-md ol) {
+		margin: 0 0 0.4rem 0;
+		padding-left: 1.1rem;
+	}
+	:global(.voice-summary-md li) {
+		margin-bottom: 0.15rem;
+	}
+	:global(.voice-summary-md p) {
+		margin: 0 0 0.4rem 0;
+	}
+	:global(.voice-summary-md strong) {
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+	}
+
 	/* Animation for new events sliding in from top */
 	@keyframes slide-in-top {
 		0% {

@@ -208,6 +208,18 @@ The magic is in agent orchestration. Everything else is just table stakes.
 
 ## Keyboard Shortcuts
 
+Every route supports vim-style `j`/`k` navigation over its primary list, table, or card grid. Press `?` on any page for the shortcut overlay. Full reference: [`ide/docs/keyboard-navigation.md`](./ide/docs/keyboard-navigation.md).
+
+### List Navigation (Every Route)
+
+| Shortcut | Action |
+|----------|--------|
+| `j` / `↓` | Next item |
+| `k` / `↑` | Previous item |
+| `Enter` | Open focused item |
+| `?` | Show shortcuts overlay |
+| `Esc` | Clear focus / close overlay |
+
 ### Global (Work Everywhere)
 
 | Shortcut | Action |

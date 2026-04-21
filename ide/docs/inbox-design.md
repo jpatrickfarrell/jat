@@ -8,7 +8,7 @@
 
 ## The Problem
 
-A developer with 100+ client stories needs to process them fast. Most stories don't need an agent — they need a comment ("that feature already exists, here's how to use it") and a reassignment back to the requester. The current `/tasks` route is built for deep session management. `/triage` is built for grooming status. Neither is built for the **reply-and-route** workflow.
+A developer with 100+ client stories needs to process them fast. Most stories don't need an agent — they need a comment ("that feature already exists, here's how to use it") and a reassignment back to the routing target (approver → requester → creator, resolved via `resolveRoutingTarget()`). The current `/tasks` route is built for deep session management. `/triage` is built for grooming status. Neither is built for the **reply-and-route** workflow.
 
 The goal: get through 100 tasks in 20 minutes without touching the mouse.
 
@@ -130,13 +130,13 @@ Same behavior as the existing TaskDetailDrawer — full-screen overlay from the 
 This is the killer feature. One keystroke does:
 
 1. **Send comment** — POST to `/api/tasks/:id/comments` with comment text
-2. **Reassign** — PUT to `/api/tasks/:id` with `assignee = requester` (or previous human assignee if no requester set)
+2. **Reassign** — PUT to `/api/tasks/:id` with `assignee = resolveRoutingTarget(task)` (approver → requester → creator, first non-null). Sends `assignee_id` when the resolved target has a UUID.
 3. **Update status** — If task was `submitted` or `open`, set to `waiting`
 4. **Advance** — Move focus to next task automatically
 
 **Reassignment logic:**
-- If task has `requester` set → assign to requester
-- If task has a prior human assignee (not an agent name) → assign to that person
+- Resolve routing target via `resolveRoutingTarget(task)` in `ide/src/lib/utils/taskRouting.ts` — returns `{actor, role, id}` for the first non-null of approver/requester/creator
+- If no target resolved but task has a prior human assignee (not an agent name) → assign to that person
 - If neither → show a quick assign picker before sending
 
 **Visual feedback:**
@@ -172,7 +172,7 @@ Pressing `/` focuses an inline filter bar at the top of the list panel.
 ## Detail Panel Sections
 
 1. **Header** — Title (editable inline on click), task ID badge, issue type, priority badge
-2. **Meta row** — Status, created, updated, assignee, requester
+2. **Meta row** — Status, created, updated, assignee, reply-to (resolved via approver → requester → creator)
 3. **Description** — Markdown rendered, collapsible if long
 4. **Comments thread** — Existing `CommentsThread.svelte`, auto-scrolled to bottom
 5. **Compose box** — Autogrown textarea, placeholder "Reply... (Enter to send, Ctrl+↵ to send+route)"
@@ -278,7 +278,7 @@ Consider renaming to `/inbox` if it becomes the primary way to handle submitted 
 A developer can:
 1. Land on the route and see their submitted task queue
 2. Navigate to a task with j/k and read the description in 5 seconds
-3. Leave a reply and route it to the requester with Ctrl+Enter
+3. Leave a reply and route it to the routing target (approver → requester → creator) with Ctrl+Enter
 4. Process 10 tasks in under 3 minutes without touching the mouse
 
 ---

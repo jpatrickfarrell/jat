@@ -303,8 +303,14 @@ npm install
 
 ## Key Keyboard Shortcuts
 
+Every route with a list, table, or grid supports vim-style `j`/`k` navigation. Press `?` anywhere for the full route-specific overlay.
+
 | Shortcut | Action | Context |
 |----------|--------|---------|
+| `j` / `k` (or `↓` / `↑`) | Navigate list / rows / cards | Any route |
+| `Enter` | Open focused item | Any route |
+| `?` | Show shortcut overlay | Any route |
+| `Esc` | Clear focus / close overlay | Any route |
 | `Alt+N` | Create new task | Global |
 | `Alt+E` | Open Epic Swarm modal | Global |
 | `Alt+S` | Start next task | Global |
@@ -312,6 +318,8 @@ npm install
 | `Alt+K` | Kill session | Hovered session |
 | `Alt+1` to `Alt+9` | Jump to session | Work page |
 | `Cmd+K` | Command palette | Global |
+
+Full per-route reference: [`ide/docs/keyboard-navigation.md`](./ide/docs/keyboard-navigation.md).
 
 ---
 

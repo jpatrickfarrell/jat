@@ -3,6 +3,8 @@
 Who you are in JAT, how your identity maps into each Supabase-backed project,
 and how comments / routing resolve to the right profile everywhere.
 
+> **Related:** This doc covers **comment-author** identity resolution (who wrote a reply). For **task-actor** identity (creator / requester / approver — who owns, asked for, and must sign off on a task), see `shared/tasks.md` § *Task Identity & Routing* and the full spec at `ide/docs/prd-task-identity-routing.md`. Both systems use email as the cross-project anchor and resolve through `auth.users` in postgres projects.
+
 ## The problem
 
 JAT is one IDE that talks to many projects, each with its own Supabase database

@@ -2,6 +2,20 @@
 
 JAT uses keyboard shortcuts for fast navigation and common actions. All shortcuts use the Alt key as the primary modifier since its less likely to conflict with browser defaults.
 
+## List navigation (every route)
+
+Every route with a list, table, or card grid supports vim-style `j`/`k` navigation. The shortcuts below work on `/triage`, `/chores`, `/automation`, `/integrations`, `/servers`, `/kanban`, `/config`, `/clients`, `/search`, `/dash`, `/memory`, `/source`, `/files`, `/data`, `/bases`, and `/workflows`.
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `j` or `↓` | Next item | Move focus to the next row / card / node |
+| `k` or `↑` | Previous item | Move focus to the previous row / card / node |
+| `Enter` | Open | Open focused item (task detail, file, session, etc.) |
+| `?` | Overlay | Show route-specific shortcut overlay |
+| `Esc` | Clear | Clear focus or close the overlay |
+
+Some routes add route-specific keys (e.g. `n` for new rule on `/automation`, `Space` to toggle start/stop on `/servers`, `→`/`←` to drill into milestones on `/clients`). Press `?` on any page for the full list.
+
 ## Global shortcuts
 
 These work from any page in the IDE.

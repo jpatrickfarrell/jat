@@ -129,8 +129,8 @@ Agent-workable (agents pick these up via `jt ready`):
 Paused / mid-flight (agents do NOT pick these up):
 - `waiting` - Ball in counterparty's court (awaiting their input)
 - `blocked` - Blocked by external dependency
-- `submitted` - Submitted for review/triage
-- `accepted` - Stakeholder approved, pending deploy
+- `submitted` - In routing target's queue for acceptance (approver → requester → creator, first non-null)
+- `accepted` - Routing target approved, pending deploy
 - `deployed` - Shipped, pending archive/closeout
 
 Terminal / special:
@@ -317,6 +317,35 @@ jat-abc           (epic)
 - Set P0 on foundation tasks, P1 on features
 - Epic should describe verification criteria, not implementation work
 - Dependencies between siblings enable parallel work
+
+### Task Identity & Routing
+
+Every task carries three actor snapshots — `creator`, `requester`, `approver` — that drive reply-routing in `/tasks-fast` and the acceptance queue when `jt close` runs.
+
+| Field | Meaning | Mutability |
+|-------|---------|------------|
+| `creator` | Who pressed the button that spawned the task (authenticated ingest user, or the agent running `jt create`). Immutable snapshot. | Read-only |
+| `requester` | Who originally asked for the work (e.g. client emailing feedback). Defaults to creator. | Editable (advanced) |
+| `approver` | Who must sign off on completion. Defaults to requester. | Editable (advanced) |
+
+In 95% of cases all three are the same person — set nothing and ingest defaults handle it.
+
+```bash
+jt create "Title"                         # all three default to current user
+jt create "Title" --approver "mike"       # mike must accept when done
+jt create "Title" --requester "x@ex.com" --approver "x@ex.com"  # filed on someone else's behalf
+# --requester alone is a deprecated alias that sets both requester + approver
+```
+
+**Routing priority on close:** `jt close` resolves a target in order **`approver → requester → creator`**:
+
+| Condition | Outcome |
+|-----------|---------|
+| No target resolved | `closed` |
+| Target resolved, `previous_assignee != target` | `submitted` → target's queue |
+| Target resolved, `previous_assignee == target` | `accepted` (target delegated the work themselves) |
+
+All task-creation paths route through `buildTaskIdentity()` (`ide/src/lib/server/task-identity.ts`). New ingest sources MUST use this helper. Full spec: `ide/docs/prd-task-identity-routing.md`.
 
 Recommended conventions
 - **Single source of truth**: Use **JAT Tasks** for task status/priority/dependencies.

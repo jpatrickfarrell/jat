@@ -77,13 +77,20 @@ Sets up everything — swap, Node.js, Tailscale, Claude Code, firewall, JAT, and
 
 ### Keyboard Shortcuts
 
+Every route supports vim-style `j`/`k` navigation. Press `?` on any page for the full shortcut overlay.
+
 | Shortcut | Feature |
 |----------|---------|
+| `j` / `k` | **Navigate** — any list, table, or card grid on any route |
+| `Enter` | **Open** — selected item (task detail, file, session, etc.) |
+| `?` | **Shortcuts overlay** — route-specific shortcut reference |
 | `Cmd+K` | **Global Search** — files, tasks, agents |
 | `Cmd+Shift+T` | **Terminal** — integrated with agent sessions |
 | `Ctrl+S` | **Save** — save current file |
 | `Alt+N` | **New Task** — create from anywhere |
 | `Alt+E` | **Epic Swarm** — launch parallel agents |
+
+Full per-route reference: [`ide/docs/keyboard-navigation.md`](./ide/docs/keyboard-navigation.md).
 
 ### Code Editor (`/files`)
 

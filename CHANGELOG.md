@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Keyboard navigation everywhere** - Vim-style `j`/`k` navigation on every IDE route (`/triage`, `/chores`, `/automation`, `/integrations`, `/servers`, `/kanban`, `/config`, `/clients`, `/search`, `/dash`, `/memory`, `/source`, `/files`, `/data`, `/bases`, `/workflows`), plus `Enter` to open, `Esc` to clear, and `?` to show a route-specific shortcut overlay. Implemented via shared `listNav` action + `createListNav()` composable and `KeyboardShortcutsOverlay` component, propagated into JST template DNA (Flush, Meadow, Steelbridge, Headcount). See `ide/docs/keyboard-navigation.md`.
 - **`jat-search` unified search CLI** - Meta search across tasks (FTS5), memory (FTS5 + vector), and files (ripgrep) with subcommands, project filtering, and optional LLM synthesis (`--summarize`)
 - **Skill agent syncing** - Skills installed via `jat-skills install` are automatically discovered by all agent programs. Claude Code gets symlinks in `~/.claude/commands/`, Pi gets directory symlinks in `~/.pi/agent/skills/`, and non-native agents (Codex, Gemini, OpenCode, Aider) receive skill info via prompt injection at spawn time. New `jat-skills sync` command for manual repair.
 - **Task scheduling fields** - Command dropdown (default `/jat:start`), agent/model selector, schedule section (one-shot/recurring/cron), and due date picker in TaskCreationDrawer

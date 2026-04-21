@@ -322,8 +322,14 @@ Two contexts: workflow list and workflow editor.
 | `Shift+Tab` | Select previous node |
 | `Esc` | Back to workflow list |
 | `Del` / `⌫` | Delete selected node(s) or edge(s) |
+| `Ctrl+A` | Select all nodes |
+| `Ctrl+C` | Copy selected nodes (and edges between them) |
+| `Ctrl+V` | Paste copied nodes (offset +40px, new IDs) |
+| `Ctrl+D` | Duplicate selected node(s) (offset +30px) |
 | `Ctrl+S` | Save workflow |
 | `Ctrl+Enter` | Run workflow |
+| `Ctrl+=` / `Ctrl++` | Zoom in |
+| `Ctrl+-` | Zoom out |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
 

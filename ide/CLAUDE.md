@@ -3044,7 +3044,7 @@ All routes with lists support `j`/`k` (or `↓`/`↑`) to navigate, `Enter` to s
 | `/files` | File tree nodes | Toggle folder / open file | `→`/`←` expand/collapse; `Ctrl+S` save; `Alt+W`/`[`/`]` tabs |
 | `/data` | Table rows | Edit focused cell | `←`/`→` move columns; `Tab`/`Shift+Tab` switch tables |
 | `/bases` | Bases list | Open base in canvas | `Tab`/`Shift+Tab` cycle canvas blocks; `n` new base |
-| `/workflows` | Workflow list | Open workflow | `n` new; in editor: `Ctrl+S` save, `Ctrl+Enter` run, `Del` delete node |
+| `/workflows` | Workflow list | Open workflow | `n` new; in editor: `Ctrl+S` save, `Ctrl+Enter` run, `Del` delete node, `Ctrl+D` duplicate, `Ctrl+A/C/V` select/copy/paste, `Ctrl+=/−` zoom |
 
 ### Global App Shortcuts
 

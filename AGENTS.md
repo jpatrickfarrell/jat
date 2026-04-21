@@ -36,10 +36,11 @@ jt ready                    # Find available work (highest priority, no blockers
 jt show <id>                # View task details
 jt show <id> --json         # JSON format
 jt update <id> --status in_progress --assignee AgentName
-jt close <id> --reason "Completed"   # If requester is set → status=submitted, assignee=requester
+jt close <id> --reason "Completed"   # Routes to approver/requester/creator (see Task Identity below)
 jt list --status open       # List all open tasks
 jt search "keyword"         # Search tasks
-jt create "Title" --requester "username"  # Set who must review/accept completed work
+jt create "Title" --approver "username"   # Set who must review/accept completed work
+jt create "Title" --creator "username" --approver "username"  # Both actors (usually same person)
 ```
 
 **Status values** (use underscores, not hyphens):
@@ -51,8 +52,8 @@ Agent-workable (agents pick these up via `jt ready`):
 Paused / mid-flight (agents do NOT pick these up):
 - `waiting` - Ball in counterparty's court (awaiting their input)
 - `blocked` - Blocked by external dependency
-- `submitted` - In requester's queue for acceptance (see Requester Workflow below)
-- `accepted` - Requester approved, pending deploy
+- `submitted` - In routing target's queue for acceptance (see Task Identity below)
+- `accepted` - Routing target approved, pending deploy
 - `deployed` - Shipped, pending archive/closeout
 
 Terminal / special:
@@ -61,28 +62,44 @@ Terminal / special:
 
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task), `chat`
 
-### Requester Workflow
+### Task Identity: creator / requester / approver
 
-`requester` is the person who originally asked for the work. Set it at task creation so `jt close` knows where to route the completed task.
+Every task carries three actor fields, written once at creation time. These drive reply-routing in `/tasks-fast`, the "Reply to" header in compose, and the `jt close` acceptance queue.
+
+| Field | Meaning | Mutability |
+|-------|---------|------------|
+| `creator` | Who actually pressed the button that spawned the task (the ingest source's authenticated user, or the agent that ran `jt create`). Immutable snapshot. | Read-only after creation |
+| `requester` | Who originally *asked* for the work (e.g. a client emailing feedback). May differ from creator when someone files on behalf of another. | Editable (advanced) |
+| `approver` | Who must sign off when the work is done. Defaults to `requester`. Set this when the approver is different from the requester. | Editable (advanced) |
+
+Each field is a `{email, name, role, source, ...}` snapshot (JSONB in postgres, TEXT in SQLite) with an optional matching `_id` UUID column in postgres. In 95% of cases all three are the same person and you don't set anything — ingest paths call `buildTaskIdentity()` which fills them in from the authenticated user.
+
+**Flags on `jt create` / `jt update`:**
 
 ```bash
-jt create "Fix login bug" --requester "mike"   # mike must accept when done
-jt create "Refactor cache" --requester "jw"    # jw must accept (or auto-accepts if jw delegated it)
+jt create "Fix login bug" --approver "mike"                 # mike must accept; creator/requester default to current user
+jt create "Refactor cache"                                  # all three default to current user (most common)
+jt create "On behalf of X" --requester "x@client.com" --approver "x@client.com"  # filed on X's behalf
+jt update jat-abc --approver "mike"                         # change approver post-creation
+# --requester is a deprecated alias that sets both requester + approver to the same value
 ```
 
-**What happens on `jt close`:**
+**Routing priority on `jt close`:** the close handler resolves a routing target in order **`approver → requester → creator`** (first non-null wins), then decides the outcome:
 
 | Condition | Outcome |
 |-----------|---------|
-| No `requester` | `closed` immediately |
-| `requester` set, third party delegated | `submitted` → requester's queue for accept/reject |
-| `requester` set, requester delegated to agent themselves | `accepted` automatically (requester already endorsed the work by spawning the agent) |
+| No target resolved (all three null) | `closed` immediately |
+| Target resolved, `previous_assignee != target` | `submitted` → target's queue for accept/reject |
+| Target resolved, `previous_assignee == target` | `accepted` automatically (target delegated the work themselves) |
 
-**The self-accept rule:** when `previous_assignee == requester`, the requester was the one who handed the task to the agent — they've implicitly accepted the outcome. No review queue needed.
+**The self-accept rule:** `previous_assignee` is auto-stashed whenever `assignee` changes. When jw creates a task (`approver=jw`) and spawns an agent, the assignee flips from jw → agent, stashing `previous_assignee=jw`. At close time, `previous_assignee == approver` signals that jw delegated it — work is auto-accepted. When a third party (e.g. jw) works on a task that mike should sign off on (`approver=mike`), `previous_assignee=jw != approver=mike`, so it goes to `submitted` for mike to review. Match is by email OR UUID — either works.
 
-**Example:**
-- jw creates task (`requester=jw`), spawns agent → agent completes → **`accepted`** (jw delegated it)
-- mike creates task (`requester=mike`), jw spawns agent → agent completes → **`submitted`** to mike for review
+**Examples:**
+- jw creates task, spawns agent → agent completes → **`accepted`** (jw is creator + approver, delegated to agent)
+- mike files feedback via widget → jw's agent works on it → agent completes → **`submitted`** to mike (creator=mike, jw is transient assignee)
+- jw files on behalf of mike (`--approver mike`), spawns agent → agent completes → **`submitted`** to mike
+
+**Ingest contract:** all task-creation paths (API, voice, feedback widget, scheduler, Supabase ingest) route through `buildTaskIdentity()` (`ide/src/lib/server/task-identity.ts`). Any new ingest source MUST use this helper — do not write identity columns directly. See `ide/docs/prd-task-identity-routing.md` for the full spec.
 
 ### Dependencies
 

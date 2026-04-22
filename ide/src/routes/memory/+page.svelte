@@ -28,6 +28,10 @@
 	// Project colors for dropdown
 	let projectColors = $state<Record<string, string>>({});
 
+	// Status state (must be declared before projectFilterGroups derived)
+	let projectStatuses = $state<any[]>([]);
+	let statusLoading = $state(true);
+
 	// Project dropdown groups (derived from projectStatuses)
 	const projectFilterGroups = $derived.by<SearchDropdownGroup[]>(() => [{
 		label: 'Projects',
@@ -53,10 +57,6 @@
 	let browseProject = $state('');
 	let browseFiles = $state<any[]>([]);
 	let browseLoading = $state(false);
-
-	// Status state
-	let projectStatuses = $state<any[]>([]);
-	let statusLoading = $state(true);
 
 	// File viewer state
 	let viewingFile = $state<{ content: string; frontmatter: any; filename: string; project: string } | null>(null);
@@ -310,6 +310,12 @@
 	onMount(async () => {
 		fetchStatus();
 		projectColors = await fetchAndGetProjectColors();
+		// Auto-open file viewer if ?file=&project= params are present (navigated from search palette)
+		const fileParam = $page.url.searchParams.get('file');
+		const projParam = $page.url.searchParams.get('project');
+		if (fileParam && projParam) {
+			viewFile(projParam, fileParam);
+		}
 	});
 
 	onDestroy(() => {

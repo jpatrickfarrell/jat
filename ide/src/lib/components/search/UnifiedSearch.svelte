@@ -44,6 +44,7 @@
 
 	interface MemoryResult {
 		file: string;
+		project?: string;
 		taskId?: string;
 		section?: string;
 		snippet?: string;
@@ -818,8 +819,11 @@
 		closeModal();
 	}
 
-	function navigateToMemory(file: string) {
-		window.open(`/memory?file=${encodeURIComponent(file)}`, '_blank');
+	function navigateToMemory(file: string, project?: string) {
+		const params = new URLSearchParams({ file });
+		const proj = project || selectedProject;
+		if (proj) params.set('project', proj);
+		window.open(`/memory?${params}`, '_blank');
 	}
 
 	function navigateToFile(path: string, line?: number) {
@@ -1344,7 +1348,7 @@
 			{#each memoryResults as mem, index}
 				<button
 					data-nav-id={mem.file}
-					onclick={() => navigateToMemory(mem.file)}
+					onclick={() => navigateToMemory(mem.file, mem.project)}
 					onmouseenter={() => nav.focus(index)}
 					class="us-result-card w-full"
 					class:result-selected={index === selectedResultIndex}

@@ -178,6 +178,12 @@
 	let contentLoading = $state(false);
 	let contentTruncated = $state(false);
 
+	// Smart fill: pre-loaded results shown when query is empty
+	let recentTasks = $state<TaskResult[]>([]);
+	let recentFiles = $state<FilenameResult[]>([]);
+	let recentMemory = $state<{file: string; title: string; snippet: string; taskId?: string; date?: string}[]>([]);
+	let smartFillLoading = $state(false);
+
 	// Content tab options
 	let useRegex = $state(false);
 	let caseSensitive = $state(false);
@@ -279,12 +285,21 @@
 		}
 	}
 
-	const hasSearched = $derived(meta !== null || filenameResults.length > 0 || contentResults.length > 0 || (activeTab === 'routes'));
+	const hasSearched = $derived(
+		meta !== null || filenameResults.length > 0 || contentResults.length > 0 ||
+		(activeTab === 'routes') ||
+		activeTab === 'tasks' ||
+		activeTab === 'memory' ||
+		activeTab === 'filenames'
+	);
 	const currentTabHasResults = $derived(
 		tabCount(activeTab) > 0 ||
 		(activeTab === 'routes' && (cmdTaskResults.length > 0 || cmdTaskLoading)) ||
-		(activeTab === 'filenames' && filenameLoading) ||
-		(activeTab === 'content' && contentLoading)
+		(activeTab === 'filenames' && (filenameLoading || recentFiles.length > 0 || !query.trim())) ||
+		(activeTab === 'content' && contentLoading) ||
+		(activeTab === 'tasks' && (!query.trim() || taskResults.length > 0)) ||
+		(activeTab === 'memory' && (!query.trim() || memoryResults.length > 0)) ||
+		smartFillLoading
 	);
 
 	// --- Search Functions ---
@@ -430,6 +445,70 @@
 		}
 	}
 
+	async function fetchSmartFillForTab(tab: SourceTab) {
+		if (query.trim()) return;
+		if (tab === 'tasks') await fetchRecentTasks();
+		else if (tab === 'filenames') fetchRecentFilesFromStorage();
+		else if (tab === 'memory') await fetchRecentMemory();
+	}
+
+	async function fetchRecentTasks() {
+		smartFillLoading = true;
+		try {
+			const params = new URLSearchParams({ limit: '10' });
+			if (selectedProject) params.set('project', selectedProject);
+			const res = await fetch(`/api/tasks?${params}`);
+			if (res.ok) {
+				const data = await res.json();
+				recentTasks = (data.tasks || [])
+					.sort((a: TaskResult & {updated_at?: string}, b: TaskResult & {updated_at?: string}) =>
+						new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+					)
+					.slice(0, 10);
+			}
+		} catch {}
+		finally { smartFillLoading = false; }
+	}
+
+	function fetchRecentFilesFromStorage() {
+		if (!selectedProject) { recentFiles = []; return; }
+		try {
+			const stored = localStorage.getItem(`jat-files-open-${selectedProject}`);
+			if (stored) {
+				const data = JSON.parse(stored);
+				recentFiles = (data.openFiles || []).map((f: {path: string}) => ({
+					path: f.path,
+					name: f.path.split('/').pop() || f.path,
+					folder: f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : ''
+				}));
+			} else {
+				recentFiles = [];
+			}
+		} catch { recentFiles = []; }
+	}
+
+	async function fetchRecentMemory() {
+		if (!selectedProject) { recentMemory = []; return; }
+		smartFillLoading = true;
+		try {
+			const params = new URLSearchParams({ action: 'browse', project: selectedProject });
+			const res = await fetch(`/api/memory?${params}`);
+			if (res.ok) {
+				const data = await res.json();
+				recentMemory = (data.files || []).slice(0, 10).map((f: {
+					filename: string; title?: string; summary?: string; taskId?: string; modified?: string;
+				}) => ({
+					file: f.filename,
+					title: f.title || f.filename,
+					snippet: f.summary || '',
+					taskId: f.taskId,
+					date: f.modified
+				}));
+			}
+		} catch {}
+		finally { smartFillLoading = false; }
+	}
+
 	function filterRoutes(q: string) {
 		const projectActions: RouteAction[] = (projects ?? [])
 			.filter(p => p && p !== 'All Projects')
@@ -559,6 +638,8 @@
 			filterRoutes(query);
 		} else if (query.trim()) {
 			doSearchForActiveTab();
+		} else {
+			fetchSmartFillForTab(newTab);
 		}
 		return newTab;
 	}
@@ -586,6 +667,7 @@
 		// Tab key cycles tabs (Shift+Tab goes backward)
 		if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
+			e.stopPropagation();
 			const newTab = cycleTab(e.shiftKey ? -1 : 1); // cycleTab calls nav.clear()
 			searchInputEl?.focus();
 			return;
@@ -677,6 +759,7 @@
 			const direction = e.key === 'ArrowLeft' ? -1 : 1;
 			if (isTabButton) {
 				e.preventDefault();
+				e.stopPropagation();
 				const newTab = cycleTab(direction);
 				focusTabButton(newTab);
 			} else if (isInput) {
@@ -685,6 +768,7 @@
 				const atEnd = !input.value || (input.selectionStart === input.value.length && input.selectionEnd === input.value.length);
 				if ((e.key === 'ArrowLeft' && atStart) || (e.key === 'ArrowRight' && atEnd)) {
 					e.preventDefault();
+					e.stopPropagation();
 					cycleTab(direction);
 				}
 			}
@@ -707,6 +791,8 @@
 			filterRoutes(query);
 		} else if (query.trim()) {
 			doSearchForActiveTab();
+		} else {
+			fetchSmartFillForTab(tab);
 		}
 	}
 
@@ -715,6 +801,7 @@
 		onProjectChange?.(project);
 		if (mode === 'route') updateUrl();
 		if (query.trim()) doSearchForActiveTab();
+		else fetchSmartFillForTab(activeTab);
 	}
 
 	// --- Navigation ---
@@ -1066,6 +1153,9 @@
 			<div class="space-y-0.5">
 				{#each routeResults as action, i}
 					{@const isSelected = selectedResultIndex === i}
+					{@const isProjectSwitch = action.id.startsWith('switch-project-')}
+					{@const projectName = isProjectSwitch ? action.id.replace('switch-project-', '') : null}
+					{@const projectColor = projectName ? getSearchProjectColor(projectName) : null}
 					<button
 						data-nav-id={action.id}
 						class="result-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors duration-75"
@@ -1081,7 +1171,11 @@
 						}}
 						onmouseenter={() => nav.focus(i)}
 					>
-						<span class="font-mono text-[10px] w-4 text-center flex-shrink-0" style="color: {isSelected ? 'oklch(0.65 0.12 200)' : 'oklch(0.40 0.02 250)'};">/</span>
+						{#if projectColor}
+							<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background: {projectColor};"></span>
+						{:else}
+							<span class="font-mono text-[10px] w-4 text-center flex-shrink-0" style="color: {isSelected ? 'oklch(0.65 0.12 200)' : 'oklch(0.40 0.02 250)'};">/</span>
+						{/if}
 						<span class="flex-1 min-w-0">
 							<span class="text-xs font-medium font-mono block">{action.label}</span>
 							<span class="text-[10px] block truncate" style="color: {isSelected ? 'oklch(0.70 0.04 200)' : 'oklch(0.45 0.02 250)'};">{action.description}</span>
@@ -1167,86 +1261,171 @@
 {/snippet}
 
 {#snippet tasksList(isModal: boolean)}
+	{@const displayTasks = query.trim() ? taskResults : recentTasks}
 	<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1">
-		{#each taskResults as task, index}
-			<button
-				data-nav-id={task.id}
-				onclick={() => openTask(task.id)}
-				onmouseenter={() => nav.focus(index)}
-				class="us-result-card w-full"
-				class:result-selected={index === selectedResultIndex}
-			>
-				<div class="flex items-center gap-2 min-w-0">
-					<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
-					<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);"><FxText text={task.title} /></p>
-				</div>
-				{#if task.snippet || task.description}
-					<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">
-						{@html highlightMatch(truncate(task.snippet || task.description || '', 200), query)}
-					</p>
-				{/if}
-			</button>
-		{/each}
+		{#if !query.trim() && displayTasks.length > 0}
+			<p class="text-[10px] uppercase tracking-wider px-2 mb-1.5" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Recently Updated</p>
+		{/if}
+		{#if smartFillLoading && !query.trim()}
+			<div class="space-y-1 py-1">
+				{#each [1,2,3] as _}
+					<div class="rounded-md p-3" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.02 250);">
+						<div class="skeleton h-2.5 w-2/3 rounded mb-2" style="background: oklch(0.25 0.02 250);"></div>
+						<div class="skeleton h-2 w-full rounded" style="background: oklch(0.22 0.02 250);"></div>
+					</div>
+				{/each}
+			</div>
+		{:else}
+			{#each displayTasks as task, index}
+				<button
+					data-nav-id={task.id}
+					onclick={() => openTask(task.id)}
+					onmouseenter={() => nav.focus(index)}
+					class="us-result-card w-full"
+					class:result-selected={index === selectedResultIndex}
+				>
+					<div class="flex items-center gap-2 min-w-0">
+						<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
+						<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);"><FxText text={task.title} /></p>
+					</div>
+					{#if task.snippet || task.description}
+						<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">
+							{@html highlightMatch(truncate(task.snippet || task.description || '', 200), query)}
+						</p>
+					{/if}
+				</button>
+			{/each}
+		{/if}
 	</div>
 {/snippet}
 
 {#snippet memoryList(isModal: boolean)}
 	<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1">
-		{#each memoryResults as mem, index}
-			<button
-				data-nav-id={mem.file}
-				onclick={() => navigateToMemory(mem.file)}
-				onmouseenter={() => nav.focus(index)}
-				class="us-result-card w-full"
-				class:result-selected={index === selectedResultIndex}
-			>
-				<div class="flex items-center gap-2 flex-wrap">
-					{#if mem.taskId}
-						<TaskIdBadge task={{ id: mem.taskId, status: 'closed' }} size="xs" minimal />
-					{/if}
-					{#if mem.agent}
-						<span class="text-[10px] font-medium" style="color: oklch(0.65 0.10 200);">{mem.agent}</span>
-					{/if}
-					{#if mem.section}
-						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.04 145 / 0.3); color: oklch(0.65 0.12 145);">{mem.section}</span>
-					{/if}
+		{#if !query.trim()}
+			{#if !selectedProject}
+				<p class="text-[11px] px-2 py-4 text-center" style="color: oklch(0.50 0.02 250);">Select a project to see recent memory</p>
+			{:else if smartFillLoading}
+				<div class="space-y-1 py-1">
+					{#each [1,2,3] as _}
+						<div class="rounded-md p-3" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.02 250);">
+							<div class="skeleton h-2.5 w-2/3 rounded mb-2" style="background: oklch(0.25 0.02 250);"></div>
+							<div class="skeleton h-2 w-full rounded" style="background: oklch(0.22 0.02 250);"></div>
+						</div>
+					{/each}
 				</div>
-				<p class="text-xs font-mono truncate mt-0.5" style="color: oklch(0.60 0.02 250);">{mem.file}</p>
-				{#if mem.snippet}
-					<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">
-						{@html highlightMatch(truncate(mem.snippet, 200), query)}
-					</p>
-				{/if}
-			</button>
-		{/each}
+			{:else if recentMemory.length > 0}
+				<p class="text-[10px] uppercase tracking-wider px-2 mb-1.5" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Recent Memory</p>
+				{#each recentMemory as mem, index}
+					<button
+						data-nav-id={mem.file}
+						onclick={() => navigateToMemory(mem.file)}
+						onmouseenter={() => nav.focus(index)}
+						class="us-result-card w-full"
+						class:result-selected={index === selectedResultIndex}
+					>
+						<div class="flex items-center gap-2 flex-wrap">
+							{#if mem.taskId}
+								<TaskIdBadge task={{ id: mem.taskId, status: 'closed' }} size="xs" minimal />
+							{/if}
+							<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.80 0.04 250);">{mem.title}</span>
+							{#if mem.date}
+								<span class="text-[10px] flex-none" style="color: oklch(0.45 0.02 250);">{new Date(mem.date).toLocaleDateString()}</span>
+							{/if}
+						</div>
+						{#if mem.snippet}
+							<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">{mem.snippet}</p>
+						{/if}
+					</button>
+				{/each}
+			{:else}
+				<p class="text-[11px] px-2 py-4 text-center" style="color: oklch(0.50 0.02 250);">No memory entries yet</p>
+			{/if}
+		{:else}
+			{#each memoryResults as mem, index}
+				<button
+					data-nav-id={mem.file}
+					onclick={() => navigateToMemory(mem.file)}
+					onmouseenter={() => nav.focus(index)}
+					class="us-result-card w-full"
+					class:result-selected={index === selectedResultIndex}
+				>
+					<div class="flex items-center gap-2 flex-wrap">
+						{#if mem.taskId}
+							<TaskIdBadge task={{ id: mem.taskId, status: 'closed' }} size="xs" minimal />
+						{/if}
+						{#if mem.agent}
+							<span class="text-[10px] font-medium" style="color: oklch(0.65 0.10 200);">{mem.agent}</span>
+						{/if}
+						{#if mem.section}
+							<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.04 145 / 0.3); color: oklch(0.65 0.12 145);">{mem.section}</span>
+						{/if}
+					</div>
+					<p class="text-xs font-mono truncate mt-0.5" style="color: oklch(0.60 0.02 250);">{mem.file}</p>
+					{#if mem.snippet}
+						<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">
+							{@html highlightMatch(truncate(mem.snippet, 200), query)}
+						</p>
+					{/if}
+				</button>
+			{/each}
+		{/if}
 	</div>
 {/snippet}
 
 {#snippet filenamesList(isModal: boolean)}
 	<div class="{isModal ? 'px-1' : 'max-w-3xl mx-auto'}">
-		{#each filenameResults as file, index}
-			<button
-				data-nav-id={file.path}
-				class="us-filename-result"
-				class:result-selected={index === selectedResultIndex}
-				onclick={() => openFilename(file)}
-				onmouseenter={() => nav.focus(index)}
-			>
-				<span class="flex-none text-sm">{getFileIcon(file.name)}</span>
-				<div class="min-w-0 flex-1">
-					<div class="flex items-center gap-1">
-						{#if file.folder}
-							<span class="text-[11px] font-mono truncate" style="color: oklch(0.50 0.02 250); direction: rtl; text-align: left;">{file.folder}/</span>
-						{/if}
-						<span class="text-[12px] font-mono font-medium flex-none" style="color: oklch(0.80 0.12 220);">{@html highlightMatch(file.name, query)}</span>
+		{#if !query.trim()}
+			{#if recentFiles.length > 0}
+				<p class="text-[10px] uppercase tracking-wider px-2 py-1 mb-0.5" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Recently Opened</p>
+				{#each recentFiles as file, index}
+					<button
+						data-nav-id={file.path}
+						class="us-filename-result"
+						class:result-selected={index === selectedResultIndex}
+						onclick={() => openFilename(file)}
+						onmouseenter={() => nav.focus(index)}
+					>
+						<span class="flex-none text-sm">{getFileIcon(file.name)}</span>
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-1">
+								{#if file.folder}
+									<span class="text-[11px] font-mono truncate" style="color: oklch(0.50 0.02 250); direction: rtl; text-align: left;">{file.folder}/</span>
+								{/if}
+								<span class="text-[12px] font-mono font-medium flex-none" style="color: oklch(0.80 0.12 220);">{file.name}</span>
+							</div>
+						</div>
+					</button>
+				{/each}
+			{:else if !selectedProject}
+				<p class="text-[11px] px-2 py-4 text-center" style="color: oklch(0.50 0.02 250);">Select a project then type to search files</p>
+			{:else}
+				<p class="text-[11px] px-2 py-4 text-center" style="color: oklch(0.50 0.02 250);">Type to search files · open files in /files to see recent here</p>
+			{/if}
+		{:else}
+			{#each filenameResults as file, index}
+				<button
+					data-nav-id={file.path}
+					class="us-filename-result"
+					class:result-selected={index === selectedResultIndex}
+					onclick={() => openFilename(file)}
+					onmouseenter={() => nav.focus(index)}
+				>
+					<span class="flex-none text-sm">{getFileIcon(file.name)}</span>
+					<div class="min-w-0 flex-1">
+						<div class="flex items-center gap-1">
+							{#if file.folder}
+								<span class="text-[11px] font-mono truncate" style="color: oklch(0.50 0.02 250); direction: rtl; text-align: left;">{file.folder}/</span>
+							{/if}
+							<span class="text-[12px] font-mono font-medium flex-none" style="color: oklch(0.80 0.12 220);">{@html highlightMatch(file.name, query)}</span>
+						</div>
 					</div>
+				</button>
+			{/each}
+			{#if filenameResults.length === 0 && hasSearched}
+				<div class="text-center py-6">
+					<p class="text-sm" style="color: oklch(0.50 0.02 250);">No filename matches for "{query}"</p>
 				</div>
-			</button>
-		{/each}
-		{#if filenameResults.length === 0 && hasSearched}
-			<div class="text-center py-6">
-				<p class="text-sm" style="color: oklch(0.50 0.02 250);">No filename matches for "{query}"</p>
-			</div>
+			{/if}
 		{/if}
 	</div>
 {/snippet}

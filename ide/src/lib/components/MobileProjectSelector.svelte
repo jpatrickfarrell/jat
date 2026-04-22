@@ -1,7 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
+	import {
+		fetch as fetchServers,
+		start as startServer,
+		stop as stopServer,
+		restart as restartServer,
+		getSessionByProject,
+		serverSessionsState,
+	} from '$lib/stores/serverSessions.svelte';
+	import { isStartDropdownOpen, closeStartDropdown, startDropdownOpenedViaKeyboard } from '$lib/stores/drawerStore';
+	import { playServerStartSound, playServerStopSound } from '$lib/utils/soundEffects';
 
 	interface Props {
 		projects: string[];
@@ -15,6 +26,231 @@
 	let { projects = [], selected = '', onSelect, colorFn, onOpenSearch, sessionStates = [] }: Props = $props();
 
 	let projectColors = $state<Record<string, string>>({});
+
+	// Dropdown state
+	let showDropdown = $state(false);
+	let dropdownEl = $state<HTMLDivElement | null>(null);
+	let nameBtnEl = $state<HTMLButtonElement | null>(null);
+	// Keyboard-focused project (for visible focus ring on programmatic focus)
+	let kbdFocusedProject = $state<string | null>(null);
+
+	// Server state (mirrors ProjectSelector pattern)
+	interface ProjectServerInfo {
+		port: number;
+		serverPath: string | null;
+	}
+	let projectServerConfigs = $state<Map<string, ProjectServerInfo>>(new Map());
+	let serverLoading = $state(false);
+	let serverError = $state<string | null>(null);
+
+	const selectedServerSession = $derived(getSessionByProject(selected));
+	const selectedServerConfig = $derived(projectServerConfigs.get(selected));
+	const serverIsRunning = $derived(
+		selectedServerSession?.status === 'running' || selectedServerSession?.status === 'starting'
+	);
+	const effectiveServerConfig = $derived.by(() => {
+		if (selectedServerConfig) return selectedServerConfig;
+		if (selectedServerSession) {
+			return {
+				port: selectedServerSession.port ?? 0,
+				serverPath: null,
+			};
+		}
+		return null;
+	});
+
+	async function fetchProjectConfigs() {
+		try {
+			const response = await fetch('/api/projects');
+			if (!response.ok) return;
+			const data = await response.json();
+			const configs = new Map<string, ProjectServerInfo>();
+			for (const p of data.projects || []) {
+				if (p.port || p.serverPath) {
+					configs.set(p.name, {
+						port: p.port || 5173,
+						serverPath: p.serverPath || null,
+					});
+				}
+			}
+			projectServerConfigs = configs;
+		} catch {
+			// Non-fatal — dropdown still usable for project switching
+		}
+	}
+
+	async function handleServerStart() {
+		if (!selected) return;
+		serverLoading = true;
+		serverError = null;
+		try {
+			await startServer(selected);
+			playServerStartSound();
+		} catch (e) {
+			serverError = `Failed to start`;
+		} finally {
+			serverLoading = false;
+		}
+	}
+
+	async function handleServerStop() {
+		if (!selectedServerSession) return;
+		serverLoading = true;
+		serverError = null;
+		try {
+			await stopServer(selectedServerSession.sessionName);
+			playServerStopSound();
+		} catch (e) {
+			serverError = `Failed to stop`;
+		} finally {
+			serverLoading = false;
+		}
+	}
+
+	async function handleServerRestart() {
+		if (!selectedServerSession) return;
+		serverLoading = true;
+		serverError = null;
+		try {
+			await restartServer(selectedServerSession.sessionName);
+			playServerStartSound();
+		} catch (e) {
+			serverError = `Failed to restart`;
+		} finally {
+			serverLoading = false;
+		}
+	}
+
+	function handleServerOpenBrowser() {
+		const config = effectiveServerConfig;
+		if (!config?.port) return;
+		window.open(`http://localhost:${config.port}`, '_blank');
+	}
+
+	function openDropdown() {
+		showDropdown = true;
+		serverError = null;
+	}
+
+	function closeDropdown() {
+		showDropdown = false;
+		serverError = null;
+		// Keep the global Alt+S store in sync so the next press re-opens cleanly
+		if (get(isStartDropdownOpen)) closeStartDropdown();
+	}
+
+	function toggleDropdown() {
+		if (showDropdown) closeDropdown();
+		else openDropdown();
+	}
+
+	function handleProjectTap(project: string) {
+		closeDropdown();
+		if (project !== selected) onSelect(project);
+	}
+
+	function handleSearchTap() {
+		closeDropdown();
+		onOpenSearch?.();
+	}
+
+	// Mirror Alt+S global shortcut (`isStartDropdownOpen` store) on narrow screens.
+	// Desktop ProjectSelector owns this store on wide; here we take over under lg breakpoint.
+	$effect(() => {
+		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
+			if (typeof window === 'undefined') return;
+			const isNarrow = window.matchMedia('(max-width: 1023.98px)').matches;
+			if (!isNarrow) return;
+			if (isOpen && !showDropdown) {
+				openDropdown();
+				// If opened by keyboard, move focus into the panel so arrow keys navigate it
+				// instead of scrolling the page.
+				if (get(startDropdownOpenedViaKeyboard)) {
+					queueMicrotask(() => focusFirstMenuItem());
+				}
+			} else if (!isOpen && showDropdown) {
+				// Local-only close; avoid re-entering closeStartDropdown (already false)
+				showDropdown = false;
+				serverError = null;
+			}
+		});
+		return unsubscribe;
+	});
+
+	function getMenuItems(): HTMLElement[] {
+		if (!dropdownEl) return [];
+		return Array.from(dropdownEl.querySelectorAll<HTMLElement>('[role="menuitem"], .mps-server-btn'));
+	}
+
+	function setKbdFocus(el: HTMLElement | null | undefined) {
+		// Clear prior marker on non-project items (manual class management)
+		dropdownEl?.querySelectorAll('.mps-kbd-focus:not(.mps-project-row)').forEach((n) => n.classList.remove('mps-kbd-focus'));
+		if (!el) {
+			kbdFocusedProject = null;
+			return;
+		}
+		// Project rows: reactive class via Svelte (kbdFocusedProject === p)
+		const rowProject = el.getAttribute('data-project');
+		if (rowProject) {
+			kbdFocusedProject = rowProject;
+		} else {
+			kbdFocusedProject = null;
+			// Non-project menu items (server buttons, search footer): manual class
+			el.classList.add('mps-kbd-focus');
+		}
+		el.focus();
+		el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	}
+
+	function focusFirstMenuItem() {
+		// Prefer the current project row so arrow-up/down moves from the current position
+		const current = dropdownEl?.querySelector<HTMLElement>('.mps-project-row-current');
+		if (current) { setKbdFocus(current); return; }
+		const items = getMenuItems();
+		setKbdFocus(items[0]);
+	}
+
+
+	// Close on outside pointerdown
+	$effect(() => {
+		if (!showDropdown) return;
+		function onPointerDown(e: PointerEvent) {
+			const target = e.target as Node;
+			if (dropdownEl?.contains(target)) return;
+			if (nameBtnEl?.contains(target)) return;
+			closeDropdown();
+		}
+		function onKey(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				closeDropdown();
+				nameBtnEl?.focus();
+				return;
+			}
+			// Arrow keys navigate dropdown items — capture at document level so the
+			// page doesn't also scroll behind the panel.
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+				const active = document.activeElement as HTMLElement | null;
+				if (!active || !dropdownEl?.contains(active)) return;
+				const items = getMenuItems();
+				if (items.length === 0) return;
+				const activeIdx = items.indexOf(active);
+				let nextIdx = activeIdx;
+				if (e.key === 'ArrowDown') nextIdx = activeIdx < 0 ? 0 : (activeIdx + 1) % items.length;
+				else if (e.key === 'ArrowUp') nextIdx = activeIdx <= 0 ? items.length - 1 : activeIdx - 1;
+				else if (e.key === 'Home') nextIdx = 0;
+				else if (e.key === 'End') nextIdx = items.length - 1;
+				e.preventDefault();
+				setKbdFocus(items[nextIdx]);
+			}
+		}
+		document.addEventListener('pointerdown', onPointerDown, true);
+		document.addEventListener('keydown', onKey);
+		return () => {
+			document.removeEventListener('pointerdown', onPointerDown, true);
+			document.removeEventListener('keydown', onKey);
+		};
+	});
 
 	// Swipe state
 	let touchStartX = $state(0);
@@ -31,6 +267,8 @@
 		if (!colorFn) {
 			projectColors = await fetchAndGetProjectColors();
 		}
+		fetchProjectConfigs();
+		fetchServers();
 	});
 
 	function getColor(project: string): string {
@@ -109,6 +347,7 @@
 	{selected || ''}
 </div>
 
+<div class="mps-wrap">
 <div
 	class="mps-bar"
 	style="--mps-color: {selectedColor}"
@@ -154,13 +393,16 @@
 				</span>
 			{/if}
 
-			<!-- Project name button — tapping opens UnifiedSearch (Ctrl+K) -->
+			<!-- Project name button — tapping opens the mobile dropdown (server + switch + search) -->
 			<button
 				type="button"
 				class="mps-name-btn"
 				style="--mps-color: {selectedColor}"
-				onclick={() => onOpenSearch?.()}
-				aria-label="Search projects and commands"
+				bind:this={nameBtnEl}
+				onclick={toggleDropdown}
+				aria-label="Open project menu"
+				aria-haspopup="menu"
+				aria-expanded={showDropdown}
 			>
 				{#if sessionStates.length > 0}
 					<span class="mps-dots">
@@ -204,6 +446,97 @@
 	</button>
 </div>
 
+<!-- Mobile dropdown: server + switch project + search -->
+{#if showDropdown}
+	<div
+		bind:this={dropdownEl}
+		class="mps-panel"
+		role="menu"
+		aria-label="Project menu"
+		style="--mps-color: {selectedColor}"
+	>
+		<!-- Server section -->
+		{#if effectiveServerConfig}
+			<div class="mps-section">
+				<div class="mps-section-label">Server</div>
+				<div class="mps-server-row">
+					<div class="mps-server-info">
+						<span class="mps-server-dot" class:mps-server-dot-running={serverIsRunning}></span>
+						<span class="mps-server-port">:{effectiveServerConfig.port}</span>
+						<span class="mps-server-status">{serverIsRunning ? 'Running' : 'Stopped'}</span>
+					</div>
+					<div class="mps-server-actions">
+						{#if serverLoading}
+							<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250);"></span>
+						{:else if serverIsRunning}
+							<button type="button" class="mps-server-btn" onclick={handleServerOpenBrowser} aria-label="Open in browser">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+							</button>
+							<button type="button" class="mps-server-btn" onclick={handleServerRestart} aria-label="Restart server">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+							</button>
+							<button type="button" class="mps-server-btn mps-server-btn-danger" onclick={handleServerStop} aria-label="Stop server">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
+							</button>
+						{:else}
+							<button type="button" class="mps-server-btn mps-server-btn-success" onclick={handleServerStart} aria-label="Start server">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
+							</button>
+						{/if}
+					</div>
+				</div>
+				{#if serverError}
+					<div class="mps-server-error">{serverError}</div>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Switch project -->
+		{#if projects.length > 1}
+			<div class="mps-section">
+				<div class="mps-section-label">Switch project</div>
+				<ul class="mps-project-list" role="none">
+					{#each projects as p (p)}
+						{@const isCurrent = p === selected}
+						<li role="none">
+							<button
+								type="button"
+								class="mps-project-row"
+								class:mps-project-row-current={isCurrent}
+								class:mps-kbd-focus={kbdFocusedProject === p}
+								data-project={p}
+								onclick={() => handleProjectTap(p)}
+								role="menuitem"
+							>
+								<span class="mps-project-dot" style="background: {getColor(p)};"></span>
+								<span class="mps-project-name truncate">{p}</span>
+								{#if isCurrent}
+									<svg class="mps-project-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Current project">
+										<path d="M4.5 12.75l6 6 9-13.5" />
+									</svg>
+								{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+
+		<!-- Search / commands footer -->
+		{#if onOpenSearch}
+			<button type="button" class="mps-search-row" onclick={handleSearchTap} role="menuitem">
+				<svg class="mps-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="11" cy="11" r="7" />
+					<path d="M21 21l-4.3-4.3" />
+				</svg>
+				<span class="mps-search-label">Search &amp; commands</span>
+				<span class="mps-search-kbd">⌘K</span>
+			</button>
+		{/if}
+	</div>
+{/if}
+</div>
+
 <style>
 	.mps-live {
 		position: absolute;
@@ -212,6 +545,11 @@
 		overflow: hidden;
 		clip: rect(0, 0, 0, 0);
 		white-space: nowrap;
+	}
+
+	.mps-wrap {
+		position: relative;
+		width: 100%;
 	}
 
 	.mps-bar {
@@ -383,5 +721,252 @@
 		.mps-label-wrap {
 			transition: none;
 		}
+		.mps-panel {
+			animation: none;
+		}
+	}
+
+	/* ── Mobile dropdown panel ──────────────────────────────────────────────
+	   Anchored below the bar, width-capped for thumb reach. Three sections:
+	   Server (primary reason for the dropdown), Switch project, Search. */
+	.mps-panel {
+		position: absolute;
+		left: 50%;
+		top: calc(100% + 6px);
+		transform: translateX(-50%);
+		z-index: 50;
+		width: min(360px, 92vw);
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.625rem;
+		box-shadow: 0 10px 40px oklch(0 0 0 / 0.45);
+		animation: mps-panel-in 0.14s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		font-family: ui-monospace, monospace;
+		overflow: hidden;
+	}
+
+	@keyframes mps-panel-in {
+		from { opacity: 0; transform: translate(-50%, -6px); }
+		to   { opacity: 1; transform: translate(-50%, 0); }
+	}
+
+	.mps-section {
+		padding: 0.5rem 0.5rem 0.375rem;
+	}
+	.mps-section + .mps-section {
+		border-top: 1px solid oklch(0.24 0.02 250);
+	}
+
+	.mps-section-label {
+		font-size: 0.625rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: oklch(0.52 0.02 250);
+		padding: 0.125rem 0.5rem 0.3rem;
+	}
+
+	/* Server row (mirrors ProjectSelector's dropdown-server-row pattern) */
+	.mps-server-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.375rem 0.5rem;
+		border-radius: 0.375rem;
+	}
+	.mps-server-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+	.mps-server-dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 50%;
+		background: oklch(0.45 0.02 250);
+		flex-shrink: 0;
+	}
+	.mps-server-dot-running {
+		background: oklch(0.70 0.18 145);
+		box-shadow: 0 0 4px oklch(0.70 0.18 145);
+	}
+	.mps-server-port {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.75rem;
+		color: oklch(0.75 0.02 250);
+	}
+	.mps-server-status {
+		font-size: 0.6875rem;
+		color: oklch(0.55 0.02 250);
+	}
+	.mps-server-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		flex-shrink: 0;
+	}
+	.mps-server-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.875rem;
+		height: 1.875rem;
+		padding: 0;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.65 0.02 250);
+		cursor: pointer;
+		transition: background 0.12s, color 0.12s, border-color 0.12s;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.mps-server-btn svg {
+		width: 0.95rem;
+		height: 0.95rem;
+	}
+	.mps-server-btn:hover,
+	.mps-server-btn:active {
+		background: oklch(0.28 0.03 250);
+		color: oklch(0.88 0.02 250);
+		border-color: oklch(0.36 0.02 250);
+	}
+	.mps-server-btn:focus,
+	.mps-server-btn:global(.mps-kbd-focus) {
+		outline: none;
+		box-shadow: 0 0 0 2px oklch(0.65 0.14 220 / 0.8);
+	}
+	.mps-server-btn-success {
+		border-color: oklch(0.42 0.12 145 / 0.55);
+		color: oklch(0.68 0.14 145);
+	}
+	.mps-server-btn-success:hover,
+	.mps-server-btn-success:active {
+		background: oklch(0.28 0.08 145 / 0.3);
+		color: oklch(0.82 0.16 145);
+	}
+	.mps-server-btn-danger {
+		border-color: oklch(0.42 0.10 30 / 0.55);
+		color: oklch(0.68 0.12 30);
+	}
+	.mps-server-btn-danger:hover,
+	.mps-server-btn-danger:active {
+		background: oklch(0.28 0.08 30 / 0.3);
+		color: oklch(0.82 0.16 30);
+	}
+	.mps-server-error {
+		margin: 0.25rem 0.5rem 0;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.6875rem;
+		color: oklch(0.75 0.15 30);
+		background: oklch(0.22 0.05 30 / 0.2);
+		border-radius: 0.25rem;
+	}
+
+	/* Project list */
+	.mps-project-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 50vh;
+		overflow-y: auto;
+	}
+	.mps-project-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.45rem 0.5rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.375rem;
+		color: oklch(0.82 0.02 250);
+		font-family: ui-monospace, monospace;
+		font-size: 0.8125rem;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.12s;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.mps-project-row:hover,
+	.mps-project-row:active {
+		background: oklch(0.22 0.02 250);
+	}
+	.mps-project-row.mps-kbd-focus {
+		outline: none;
+		background: oklch(0.26 0.04 250);
+		box-shadow: inset 0 0 0 1.5px oklch(0.65 0.14 220 / 0.8);
+	}
+	.mps-project-row:focus { outline: none; }
+	.mps-project-row-current {
+		background: oklch(0.22 0.03 250);
+		color: oklch(0.92 0.02 250);
+	}
+	.mps-project-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+	.mps-project-name {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.mps-project-check {
+		width: 0.875rem;
+		height: 0.875rem;
+		color: oklch(0.70 0.15 145);
+		flex-shrink: 0;
+	}
+
+	/* Search footer */
+	.mps-search-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.625rem 0.75rem;
+		background: oklch(0.18 0.02 250);
+		border: none;
+		border-top: 1px solid oklch(0.24 0.02 250);
+		color: oklch(0.70 0.02 250);
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: background 0.12s, color 0.12s;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.mps-search-row:hover,
+	.mps-search-row:active {
+		background: oklch(0.22 0.03 250);
+		color: oklch(0.88 0.02 250);
+	}
+	.mps-search-row:focus,
+	.mps-search-row:global(.mps-kbd-focus) {
+		outline: none;
+		background: oklch(0.26 0.04 250);
+		color: oklch(0.92 0.02 250);
+		box-shadow: inset 0 0 0 1.5px oklch(0.65 0.14 220 / 0.8);
+	}
+	.mps-search-icon {
+		width: 0.9rem;
+		height: 0.9rem;
+		flex-shrink: 0;
+		opacity: 0.75;
+	}
+	.mps-search-label {
+		flex: 1;
+		text-align: left;
+	}
+	.mps-search-kbd {
+		font-size: 0.6875rem;
+		padding: 0.0625rem 0.3rem;
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.25rem;
+		color: oklch(0.60 0.02 250);
+		background: oklch(0.14 0.01 250);
 	}
 </style>

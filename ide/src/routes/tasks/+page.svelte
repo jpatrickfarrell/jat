@@ -43,6 +43,7 @@
 	} from "$lib/utils/completedTaskHelpers";
 	import { isHumanTask } from "$lib/utils/badgeHelpers";
 	import VoiceInbox from "$lib/components/voice/VoiceInbox.svelte";
+	import { addToast } from "$lib/stores/toasts.svelte";
 
 	interface TmuxSession {
 		name: string;
@@ -1260,9 +1261,15 @@
 			if (!response.ok) {
 				const data = await response.json();
 				console.error("Failed to resume session:", data.message);
+				addToast({
+					type: "error",
+					message: "Cannot resume session",
+					details: data.message || "Session files not found. The session history may have been cleared.",
+				});
 			}
 		} catch (error) {
 			console.error("Error resuming session:", error);
+			addToast({ type: "error", message: "Failed to resume session" });
 		} finally {
 			completedResumingTasks.delete(task.id);
 			completedResumingTasks = new Set(completedResumingTasks);
@@ -1306,9 +1313,15 @@
 			if (!response.ok) {
 				const data = await response.json();
 				console.error("Failed to resume paused session:", data.message);
+				addToast({
+					type: "error",
+					message: "Cannot resume paused session",
+					details: data.message || "Session files not found. The session history may have been cleared.",
+				});
 			}
 		} catch (error) {
 			console.error("Error resuming paused session:", error);
+			addToast({ type: "error", message: "Failed to resume paused session" });
 		} finally {
 			completedResumingTasks.delete(session.taskId);
 			completedResumingTasks = new Set(completedResumingTasks);

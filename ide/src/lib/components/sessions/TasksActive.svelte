@@ -2021,7 +2021,7 @@
 						</div>
 						<div class="ta-card-body">
 							<span class="ta-title" style="color: oklch(0.70 0.12 270);">
-								{effectiveState === 'planning' ? 'Planning session' : 'Idle — no task assigned'}
+								{effectiveState === 'planning' ? 'Planning session' : effectiveState === 'completed' ? 'Task completed' : 'Idle — no task assigned'}
 							</span>
 							<div class="ta-card-row2">
 								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />

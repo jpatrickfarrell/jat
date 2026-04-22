@@ -752,11 +752,19 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 			});
 
 		// Create a map of agent -> most recently closed task
-		// This helps show completion context when agent finishes work
+		// This helps show completion context when agent finishes work.
+		//
+		// When a task completes through the routing flow, the DB state is:
+		//   - status: 'accepted' or 'submitted' (not 'closed')
+		//   - assignee: routing target (e.g. 'jw')
+		//   - previous_assignee: the agent that did the work (e.g. 'GoldSanna')
+		// For tasks closed with no routing target, the assignee restore also sets
+		// previous_assignee to the agent via the stash trigger. So previous_assignee
+		// reliably identifies which agent completed the task.
 		/** @type {Map<string, Object>} */
 		const agentLastCompletedMap = new Map();
 		allTasks
-			.filter((/** @type {Task} */ t) => t.status === 'closed' && t.assignee)
+			.filter((/** @type {Task} */ t) => ['closed', 'accepted', 'submitted'].includes(t.status))
 			// Sort by updated_at descending to get most recent first
 			.sort((/** @type {Task} */ a, /** @type {Task} */ b) => {
 				const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
@@ -764,13 +772,15 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 				return dateB - dateA;
 			})
 			.forEach((/** @type {Task} */ t) => {
-				// Only keep the first (most recent) closed task per agent
-				if (t.assignee && !agentLastCompletedMap.has(t.assignee)) {
-					agentLastCompletedMap.set(t.assignee, {
+				// previous_assignee is the agent that did the work (set by trigger on close routing).
+				// Fall back to current assignee for 'closed' tasks with no routing history.
+				const agentName = t.previous_assignee || (t.status === 'closed' ? t.assignee : null);
+				if (agentName && !agentLastCompletedMap.has(agentName)) {
+					agentLastCompletedMap.set(agentName, {
 						id: t.id,
 						title: t.title,
 						description: t.description,
-						status: t.status,
+						status: 'closed',
 						priority: t.priority,
 						issue_type: t.issue_type,
 						closedAt: t.updated_at,

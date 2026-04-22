@@ -260,8 +260,14 @@
 		return configProjects[0];
 	}
 
+	// Routes that are intentionally cross-project (triage / aggregator views).
+	// We do NOT auto-inject ?project= on these — doing so scopes them to a single
+	// project and hides tasks from every other project.
+	const CROSS_PROJECT_ROUTES = new Set(['/inbox']);
+
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
+		const isCrossProject = CROSS_PROJECT_ROUTES.has($page.url.pathname);
 		if (projectParam && configProjects.includes(projectParam)) {
 			// URL param takes priority (for deep links)
 			selectedProject = projectParam;
@@ -275,11 +281,13 @@
 				selectedProject = getDefaultProject();
 			}
 			projectInitialized = true;
-			// Set URL param for the restored project
-			const url = new URL(window.location.href);
-			url.searchParams.set('project', selectedProject);
-			goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
-		} else if (projectInitialized && !projectParam && configProjects.length > 0) {
+			if (!isCrossProject) {
+				// Set URL param for the restored project
+				const url = new URL(window.location.href);
+				url.searchParams.set('project', selectedProject);
+				goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+			}
+		} else if (projectInitialized && !projectParam && configProjects.length > 0 && !isCrossProject) {
 			// URL param missing (e.g., sidebar link to /tasks without ?project=)
 			// Restore it so child pages that read from URL get the project.
 			if (!configProjects.includes(selectedProject)) {

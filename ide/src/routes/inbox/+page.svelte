@@ -1004,6 +1004,7 @@
 						id: m.id,
 						name: m.name,
 						status: m.status,
+						sort_order: typeof m.sort_order === "number" ? m.sort_order : undefined,
 						project,
 						linked_tasks: m.linked_tasks || [],
 					})),
@@ -1040,6 +1041,43 @@
 				filterMilestones = pruned;
 			}
 		});
+	});
+
+	// Reverse index: taskId → milestone (the first milestone it appears in —
+	// a task should only belong to one, but we take the earliest sort_order
+	// just in case). Recomputed when milestoneList changes. Used by the task
+	// row renderer to display an M{n} badge alongside P{priority}.
+	interface TaskMilestone {
+		id: string;
+		name: string;
+		status?: string;
+		sortOrder: number;
+	}
+	const milestoneByTaskId = $derived.by<Map<string, TaskMilestone>>(() => {
+		const _list = milestoneList;
+		const map = new Map<string, TaskMilestone>();
+		// Sort ascending so tasks linked to multiple milestones take the
+		// earliest one (stable, and matches how the filter chip group renders).
+		const sorted = [..._list].sort(
+			(a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity),
+		);
+		for (let i = 0; i < sorted.length; i++) {
+			const m = sorted[i];
+			// Fall back to positional index when sort_order is missing so every
+			// milestone still gets a stable badge number.
+			const sortOrder = m.sort_order ?? i;
+			const entry: TaskMilestone = {
+				id: m.id,
+				name: m.name,
+				status: m.status,
+				sortOrder,
+			};
+			for (const t of m.linked_tasks ?? []) {
+				const key = t.jat_id ?? t.id;
+				if (key && !map.has(key)) map.set(key, entry);
+			}
+		}
+		return map;
 	});
 
 	function clearAllFilters() {
@@ -1545,6 +1583,7 @@
 					{@const routedActor = task.approver || task.requester || task.creator || null}
 					{@const assigneeActor = !routedActor && task.assignee ? (assigneeToActor(task.assignee)) : null}
 					{@const actor = routedActor || assigneeActor}
+					{@const taskMilestone = milestoneByTaskId.get(task.id) ?? null}
 					{@const tooltipPrefix = routedActor ? "Routes to" : "Assigned to"}
 					{@const initials = getActorInitials(actor)}
 					{@const hue = actorHue(actor)}
@@ -1574,6 +1613,15 @@
 							>
 								P{task.priority ?? "?"}
 							</span>
+							{#if taskMilestone}
+								{@const done = taskMilestone.status === "paid" || taskMilestone.status === "closed"}
+								<span
+									class="milestone-badge badge badge-sm"
+									class:milestone-badge-done={done}
+									title="Milestone: {taskMilestone.name}{taskMilestone.status ? ` (${taskMilestone.status})` : ""}"
+									aria-label="Milestone {taskMilestone.name}"
+								>M{taskMilestone.sortOrder}</span>
+							{/if}
 							<span
 								class="type-badge badge badge-sm {getTypeBadge(task.issue_type)}"
 							>
@@ -2213,8 +2261,24 @@
 	}
 
 	.priority-badge,
-	.type-badge {
+	.type-badge,
+	.milestone-badge {
 		white-space: nowrap;
+	}
+
+	/* Milestone badge (M0, M1, M2 …) — deliberately echoes the priority badge's
+	 * dimensions so the row reads as two siblings (P1 M2 · feature · title).
+	 * Color matches the milestone filter chip (purple-ish) so the row badge
+	 * and filter chip are visually linked. */
+	.milestone-badge {
+		background: oklch(0.65 0.18 310 / 0.22);
+		border: 1px solid oklch(0.65 0.18 310 / 0.5);
+		color: oklch(0.92 0.10 310);
+		font-weight: 600;
+	}
+	.milestone-badge.milestone-badge-done {
+		/* Past milestones (paid/closed) fade so open work leads the eye. */
+		opacity: 0.55;
 	}
 
 	.task-title {

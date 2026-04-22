@@ -27,6 +27,10 @@
 
 	interface Task {
 		id: string;
+		// Postgres UUID, present on graduated/postgres-backed projects.
+		// Needed for operations whose backend columns are UUIDs
+		// (e.g. milestone_tasks.task_id on /api/clients linkTask).
+		db_id?: string | null;
 		title: string;
 		description?: string;
 		status: string;
@@ -127,7 +131,31 @@
 	let filterTypes = $state<string[]>([]);
 	let filterAssignee = $state<string>("");
 	let filterSearch = $state<string>("");
+	let filterMilestones = $state<string[]>([]);
 	let hydrated = $state(false);
+
+	// Milestones are Supabase-backed and project-scoped. We load them on-demand
+	// whenever the active project context changes, so the filter chip group can
+	// reflect real milestones (not just IDs typed into the URL).
+	interface MilestoneOption {
+		id: string;
+		name: string;
+		status?: string;
+		project?: string;
+		// `id` on a linked task is the Supabase UUID; `jat_id` is the
+		// human-readable form (e.g. "meadow-vmem4") that matches Task.id in
+		// this view. For SQLite-backed projects the two are the same, so we
+		// accept either when filtering.
+		linked_tasks?: { id: string; jat_id?: string | null }[];
+	}
+	let milestoneList = $state<MilestoneOption[]>([]);
+	let milestoneLoadedProject = $state<string>("__uninitialized__");
+	let milestonesLoading = $state(false);
+	// In-flight promise cache so concurrent effect runs coalesce to one fetch.
+	// Without this, a second call would early-return (because
+	// milestoneLoadedProject already matches) while milestoneList was still
+	// empty — and the follow-up prune would wipe valid URL-hydrated selections.
+	let milestoneLoadPromise: Promise<void> | null = null;
 
 	let currentUser = $state<string>("");
 	let currentUserEmail = $state<string>("");
@@ -186,9 +214,30 @@
 		const _project = filterProject;
 		const _assignee = filterAssignee;
 		const _search = filterSearch;
+		const _milestones = filterMilestones;
+		const _milestoneList = milestoneList;
 		const _sort = sortBy;
 		const _dir = sortDir;
 		const _user = currentUser;
+
+		// Build the set of task IDs belonging to any selected milestone. Empty set
+		// means "no milestone filter" (match all). We walk linked_tasks rather than
+		// expecting a milestone_id on each task because that's where the data lives
+		// in the /api/clients response. We collect BOTH `jat_id` (matches Task.id
+		// for postgres-backed projects) and `id` (Supabase UUID, and also the
+		// task id itself for sqlite-backed projects where jat_id is absent).
+		let milestoneTaskIds: Set<string> | null = null;
+		if (_milestones.length > 0) {
+			milestoneTaskIds = new Set<string>();
+			const selected = new Set(_milestones);
+			for (const m of _milestoneList) {
+				if (!selected.has(m.id)) continue;
+				for (const t of m.linked_tasks ?? []) {
+					if (t?.jat_id) milestoneTaskIds.add(t.jat_id);
+					if (t?.id) milestoneTaskIds.add(t.id);
+				}
+			}
+		}
 
 		const meName = _user.toLowerCase();
 		const search = _search.trim().toLowerCase();
@@ -222,6 +271,9 @@
 					t.description ?? ""
 				}`.toLowerCase();
 				if (!haystack.includes(search)) return false;
+			}
+			if (milestoneTaskIds && !milestoneTaskIds.has(t.id)) {
+				return false;
 			}
 			return true;
 		});
@@ -292,6 +344,7 @@
 			filterTypes.length > 0 ||
 			filterAssignee.trim() !== "" ||
 			filterSearch.trim() !== "" ||
+			filterMilestones.length > 0 ||
 			sortBy !== "priority" ||
 			sortDir !== DEFAULT_SORT_DIR.priority
 		);
@@ -332,6 +385,15 @@
 			chips.push(
 				`search: "${q.length > 20 ? q.slice(0, 18) + "…" : q}"`,
 			);
+		}
+		if (filterMilestones.length > 0) {
+			// Prefer human-readable names; fall back to IDs for unresolved selections
+			// (e.g. milestones still loading after URL hydrate).
+			const names = filterMilestones.map((id) => {
+				const m = milestoneList.find((x) => x.id === id);
+				return m?.name ?? id.slice(0, 8);
+			});
+			chips.push(`milestone: ${names.join(",")}`);
 		}
 		return chips;
 	});
@@ -795,6 +857,10 @@
 		const rawDir = searchParams.get("sortDir");
 		sortDir = rawDir === "asc" || rawDir === "desc" ? rawDir : DEFAULT_SORT_DIR[sortBy];
 		filterSearch = searchParams.get("q") ?? "";
+		const milestoneRaw = searchParams.get("milestone");
+		filterMilestones = milestoneRaw
+			? milestoneRaw.split(",").map((s) => s.trim()).filter(Boolean)
+			: [];
 	}
 
 	function buildSearchParams(): URLSearchParams {
@@ -823,6 +889,9 @@
 		}
 		if (filterAssignee.trim()) sp.set("assignee", filterAssignee.trim());
 		if (filterSearch.trim()) sp.set("q", filterSearch.trim());
+		if (filterMilestones.length > 0) {
+			sp.set("milestone", [...filterMilestones].sort().join(","));
+		}
 
 		return sp;
 	}
@@ -887,6 +956,90 @@
 			? filterTypes.filter((x) => x !== t)
 			: [...filterTypes, t];
 	}
+	function toggleMilestone(id: string) {
+		filterMilestones = filterMilestones.includes(id)
+			? filterMilestones.filter((x) => x !== id)
+			: [...filterMilestones, id];
+	}
+
+	// Load milestones for a given project key from /api/clients. The response
+	// groups milestones under contracts per project — we flatten them so the
+	// filter chip group can render a single list.
+	//
+	// Concurrent callers await the same in-flight promise instead of
+	// short-circuiting: otherwise a prune that runs in .then() sees an empty
+	// list and incorrectly drops URL-hydrated milestone selections.
+	function loadMilestonesForProject(project: string): Promise<void> {
+		if (milestoneLoadedProject === project && milestoneLoadPromise) {
+			return milestoneLoadPromise;
+		}
+		if (milestoneLoadedProject === project && !milestoneLoadPromise) {
+			// Already fully loaded for this project; nothing to do.
+			return Promise.resolve();
+		}
+		milestoneLoadedProject = project;
+		if (!project) {
+			milestoneList = [];
+			milestoneLoadPromise = null;
+			return Promise.resolve();
+		}
+		milestonesLoading = true;
+		milestoneLoadPromise = (async () => {
+			try {
+				const res = await fetch("/api/clients");
+				if (!res.ok) {
+					milestoneLoadedProject = "__uninitialized__";
+					return;
+				}
+				const data = await res.json();
+				const pLower = project.toLowerCase();
+				const projectData = (data.projects || []).find(
+					(p: any) =>
+						(p.projectKey || "").toLowerCase() === pLower ||
+						(p.name || "").toLowerCase() === pLower,
+				);
+				const flat: MilestoneOption[] = (projectData?.contracts || []).flatMap(
+					(c: any) => (c.milestones || []).map((m: any) => ({
+						id: m.id,
+						name: m.name,
+						status: m.status,
+						project,
+						linked_tasks: m.linked_tasks || [],
+					})),
+				);
+				milestoneList = flat;
+			} catch {
+				milestoneLoadedProject = "__uninitialized__";
+			} finally {
+				milestonesLoading = false;
+				milestoneLoadPromise = null;
+			}
+		})();
+		return milestoneLoadPromise;
+	}
+
+	// A project context for milestone loading: prefer the explicit filter, fall
+	// back to the sole project detected in the task list so users on a
+	// single-project inbox still see milestone chips without having to filter.
+	const milestoneProjectContext = $derived<string>(
+		filterProject || (projectOptions.length === 1 ? projectOptions[0] : ""),
+	);
+
+	// Load milestones when the project context changes. Also drop any currently
+	// selected milestone IDs that don't belong to the new project's list, so
+	// chip selections from a prior project don't silently filter out everything.
+	$effect(() => {
+		if (!hydrated || !browser) return;
+		const project = milestoneProjectContext;
+		loadMilestonesForProject(project).then(() => {
+			if (filterMilestones.length === 0) return;
+			const valid = new Set(milestoneList.map((m) => m.id));
+			const pruned = filterMilestones.filter((id) => valid.has(id));
+			if (pruned.length !== filterMilestones.length) {
+				filterMilestones = pruned;
+			}
+		});
+	});
 
 	function clearAllFilters() {
 		filterStatuses = [...DEFAULT_STATUSES];
@@ -895,6 +1048,7 @@
 		filterTypes = [];
 		filterAssignee = "";
 		filterSearch = "";
+		filterMilestones = [];
 		sortBy = "priority";
 		sortDir = DEFAULT_SORT_DIR.priority;
 	}
@@ -1067,7 +1221,14 @@
 		return src.slice(0, 2).toUpperCase();
 	}
 
-	// Deterministic hue from string so the same creator always gets the same color
+	// Build a synthetic TaskActor from a raw assignee string (used as the final
+	// fallback in the avatar chain when no identity columns are populated).
+	function assigneeToActor(s: string | null | undefined): { name?: string; email?: string; agent?: string } | null {
+		if (!s) return null;
+		return s.includes("@") ? { email: s } : { name: s };
+	}
+
+	// Deterministic hue from string so the same actor always gets the same color
 	function actorHue(actor: { name?: string; email?: string; agent?: string } | null | undefined): number {
 		const src = actor?.name || actor?.email || actor?.agent || "";
 		let h = 0;
@@ -1316,6 +1477,33 @@
 					</div>
 				</div>
 			{/if}
+
+			{#if milestoneProjectContext && (milestoneList.length > 0 || milestonesLoading || filterMilestones.length > 0)}
+				<div class="filter-row filter-row-milestones" transition:slide={{ duration: 150, axis: "y" }}>
+					<div class="chip-group chip-group-milestones" aria-label="Milestone">
+						<span class="filter-label">Milestone</span>
+						{#if milestonesLoading && milestoneList.length === 0}
+							<span class="filter-hint">Loading…</span>
+						{:else if milestoneList.length === 0}
+							<span class="filter-hint">No milestones</span>
+						{:else}
+							{#each milestoneList as m (m.id)}
+								{@const active = filterMilestones.includes(m.id)}
+								{@const done = m.status === "paid" || m.status === "closed"}
+								<button
+									type="button"
+									class="chip chip-milestone"
+									class:active
+									class:milestone-done={done}
+									onclick={() => toggleMilestone(m.id)}
+									aria-pressed={active}
+									title="Milestone: {m.name}{m.status ? ` (${m.status})` : ""}"
+								>{m.name}</button>
+							{/each}
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		{#if loading}
@@ -1353,7 +1541,10 @@
 				{#each filteredTasks as task, idx (task.id)}
 					{@const isSelected = idx === selectedIdx}
 					{@const isFlashing = task.id === flashTaskId}
-					{@const actor = task.creator || task.requester || null}
+					{@const routedActor = task.approver || task.requester || task.creator || null}
+					{@const assigneeActor = !routedActor && task.assignee ? (assigneeToActor(task.assignee)) : null}
+					{@const actor = routedActor || assigneeActor}
+					{@const tooltipPrefix = routedActor ? "Routes to" : "Assigned to"}
 					{@const initials = getActorInitials(actor)}
 					{@const hue = actorHue(actor)}
 					<li>
@@ -1394,11 +1585,12 @@
 								>
 							{/if}
 							{#if initials}
+								{@const actorLabel = actor?.name || actor?.email || actor?.agent || ""}
 								<span
 									class="creator-avatar"
 									style="background: oklch(0.40 0.12 {hue}); color: oklch(0.90 0.08 {hue});"
-									title={actor?.name || actor?.email || actor?.agent || ""}
-									aria-label="Created by {actor?.name || actor?.email || actor?.agent || ''}"
+									title="{tooltipPrefix} {actorLabel}"
+									aria-label="{tooltipPrefix} {actorLabel}"
 								>{initials}</span>
 							{:else}
 								<span class="creator-avatar creator-avatar-empty" aria-hidden="true"></span>
@@ -1865,6 +2057,32 @@
 		background: oklch(0.65 0.15 200 / 0.18);
 		border-color: oklch(0.65 0.15 200 / 0.7);
 		color: oklch(0.90 0.10 200);
+	}
+
+	.chip-milestone {
+		/* Milestones often have longer names; let them grow but stay compact. */
+		max-width: 14rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.chip-milestone.active {
+		background: oklch(0.65 0.18 310 / 0.20);
+		border-color: oklch(0.65 0.18 310 / 0.7);
+		color: oklch(0.92 0.10 310);
+	}
+	.chip-milestone.milestone-done {
+		/* De-emphasize paid/closed milestones so open ones lead the eye. */
+		opacity: 0.45;
+	}
+	.chip-milestone.milestone-done.active {
+		opacity: 0.9;
+	}
+
+	.filter-hint {
+		font-size: 0.7rem;
+		opacity: 0.55;
+		padding: 0.1rem 0.2rem;
 	}
 
 	.chip-group-sort {

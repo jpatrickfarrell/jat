@@ -4,7 +4,7 @@
 	 *
 	 * Sections (top to bottom):
 	 *   1. Header       → title + id/type/priority/status/project badges
-	 *   2. Meta         → status, created, assignee, requester
+	 *   2. Meta         → identity rows (Creator/Requester/Approver/Assignee) + timestamps
 	 *   3. Description  → markdown rendered, collapsible if rendered height > 400px
 	 *   4. Comments     → CommentsThread (built-in input hidden; parent owns the compose)
 	 *   5. Compose      → InboxCompose (Enter=send, Ctrl+Enter=send+route)
@@ -25,11 +25,7 @@
 	} from "$lib/utils/badgeHelpers";
 	import { formatRelativeTime } from "$lib/utils/dateFormatters";
 	import type { TaskActor } from "$lib/types/api.types";
-	import {
-		resolveRoutingTarget,
-		getActorDisplayName,
-		getActorHandle,
-	} from "$lib/utils/taskRouting";
+	import { getActorDisplayName } from "$lib/utils/taskRouting";
 
 	interface SelectedElement {
 		tagName?: string;
@@ -126,16 +122,6 @@
 
 	marked.setOptions({ gfm: true, breaks: true });
 
-	const routingTarget = $derived(resolveRoutingTarget(task as any));
-	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
-	const showSplitRoles = $derived(
-		!!(
-			task.approver &&
-			task.requester &&
-			task.approver !== task.requester &&
-			getActorHandle(task.approver) !== getActorHandle(task.requester)
-		),
-	);
 
 	const renderedDescription = $derived.by(() => {
 		if (!task.description) return "";
@@ -297,29 +283,31 @@
 	</header>
 
 	<div class="detail-meta">
-		<span>
-			<strong>Assignee:</strong>
-			{task.assignee || "—"}
-		</span>
-		<span>
-			<strong>Reply to:</strong>
-			{#if routingTarget}
-				{routingName}
-				<RoleChip role={routingTarget.actor.role} />
-				<span class="badge badge-xs badge-outline role-badge">
-					{routingTarget.role}
-				</span>
-			{:else}
-				<span class="reply-unknown">Unknown</span>
-			{/if}
-		</span>
-		{#if showSplitRoles && task.requester && task.approver}
-			<span class="detail-meta-split">
+		{#if task.creator}
+			<span>
+				<strong>Creator:</strong>
+				{getActorDisplayName(task.creator)}
+				<RoleChip role={task.creator.role} />
+			</span>
+		{/if}
+		{#if task.requester}
+			<span>
 				<strong>Requester:</strong>
 				{getActorDisplayName(task.requester)}
-				<span class="detail-meta-divider">·</span>
+				<RoleChip role={task.requester.role} />
+			</span>
+		{/if}
+		{#if task.approver}
+			<span>
 				<strong>Approver:</strong>
 				{getActorDisplayName(task.approver)}
+				<RoleChip role={task.approver.role} />
+			</span>
+		{/if}
+		{#if task.assignee}
+			<span>
+				<strong>Assignee:</strong>
+				{task.assignee}
 			</span>
 		{/if}
 		{#if task.created_at}
@@ -517,28 +505,6 @@
 		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
 		font-size: 0.8125rem;
 		opacity: 0.85;
-	}
-
-	.role-badge {
-		text-transform: capitalize;
-		margin-left: 0.25rem;
-		opacity: 0.75;
-	}
-
-	.reply-unknown {
-		opacity: 0.65;
-		font-style: italic;
-	}
-
-	.detail-meta-split {
-		flex-basis: 100%;
-		font-size: 0.75rem;
-		opacity: 0.7;
-	}
-
-	.detail-meta-divider {
-		margin: 0 0.5rem;
-		opacity: 0.5;
 	}
 
 	.detail-body {

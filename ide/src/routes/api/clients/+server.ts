@@ -201,17 +201,21 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 
 	// Fetch linked task details if any links exist
 	const linkedTaskIds = [...new Set(milestoneTaskLinks.map(l => l.task_id))];
-	let linkedTasks: Array<{ id: string; title: string; status: string; issue_type: string }> = [];
+	// Include `jat_id` so consumers can match against the human-readable IDs
+	// (e.g. "meadow-vmem4") that the rest of the IDE uses when rendering tasks.
+	// Without this, milestone-based task filtering can't correlate Supabase
+	// UUIDs to the task IDs the task list exposes.
+	let linkedTasks: Array<{ id: string; jat_id: string | null; title: string; status: string; issue_type: string }> = [];
 
 	if (linkedTaskIds.length > 0) {
 		const tasksResult = await supabaseQuery(
 			supabaseUrl,
 			serviceRoleKey,
 			'project_tasks',
-			`select=id,title,status,issue_type&id=in.(${linkedTaskIds.join(',')})`
+			`select=id,jat_id,title,status,issue_type&id=in.(${linkedTaskIds.join(',')})`
 		);
 		if (!tasksResult.error && tasksResult.data) {
-			linkedTasks = tasksResult.data as Array<{ id: string; title: string; status: string; issue_type: string }>;
+			linkedTasks = tasksResult.data as Array<{ id: string; jat_id: string | null; title: string; status: string; issue_type: string }>;
 		}
 	}
 
@@ -219,7 +223,7 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 	const taskById = new Map(linkedTasks.map(t => [t.id, t]));
 
 	// Build milestone → tasks mapping
-	const tasksByMilestone = new Map<string, Array<{ id: string; title: string; status: string; issue_type: string }>>();
+	const tasksByMilestone = new Map<string, Array<{ id: string; jat_id: string | null; title: string; status: string; issue_type: string }>>();
 	for (const link of milestoneTaskLinks) {
 		const task = taskById.get(link.task_id);
 		if (!task) continue;

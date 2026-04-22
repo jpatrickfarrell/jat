@@ -64,6 +64,7 @@ Voice-related infrastructure (transcription, LLM calling, credentials, privacy g
 5. No regression to the sub-400ms fast-path for utterances the algorithmic matcher already handles.
 6. Every dispatch surfaces a visible interpretation so the user can tell at a glance what the system decided (transparency beats silent correctness).
 7. Graceful degradation: if the subsystem's active LLM provider is unreachable, the feature silently falls back to the existing matcher.
+8. **Tenant-readiness: registration-based framework.** The Siri pipeline must cleanly separate framework (validation, prompt construction, dispatch, context budgeting) from application-specific content (action catalog, context builder, resolvers). All application-specific content flows in through registration APIs — never hardcoded imports. This is load-bearing for Fork 3 (the multi-tenant platform): every future tenant template (Meadow, Flush, Steelbridge, future customer apps) registers its own actions, context builder, and resolvers through the same APIs. The framework is reusable; only the registrations differ. Just as this feature depends on the voice subsystem's provider interfaces rather than implementing transcription itself, Siri's own internals expose registration surfaces so that "the JAT catalog" is one consumer among many.
 
 ### Non-goals
 
@@ -163,13 +164,24 @@ Resolution happens **server-side in `/api/voice/interpret`** using the `context`
 
 ### 5.4 Context assembly
 
-The client builds a context payload per-utterance and POSTs it to `/api/voice/interpret` alongside the transcript:
+Context assembly is split into generic framework machinery and an application-specific builder. This split is what lets future tenants reuse the pipeline without touching framework code.
+
+**Framework responsibilities (generic, tenant-agnostic):**
+
+1. Accept a context-builder function registered via `registerContextBuilder(fn)` at module-load time. Exactly one builder is registered per app instance.
+2. Call the builder at interpret time with the current route string. The builder returns the app's context payload (any shape the app chooses, subject to the 4KB budget).
+3. Enforce the **4KB size budget**. If the builder's return value exceeds the budget, trim oldest non-hovered items first — this trim logic is generic because the framework only needs to know which items the builder marked as "hovered/selected" vs "visible history". The builder indicates this via a stable shape convention (see below).
+4. Inject the resulting context blob as the **dynamic suffix** of the prompt (see 7.3), prepended with the current transcript.
+
+**JAT's context-builder implementation:**
+
+JAT registers a builder that returns:
 
 ```typescript
-interface InterpretContext {
+interface JatInterpretContext {
     route: string;                              // e.g. '/tasks', '/triage'
     hoveredSession: string | null;              // jat-EarlyShore or null
-    selectedTaskId: string | null;              // task currently focused via j/k
+    selectedTask: string | null;                // task currently focused via j/k
     visibleTasks: Array<{                       // max 40, from current route
         id: string;
         title: string;
@@ -182,11 +194,15 @@ interface InterpretContext {
         taskId: string | null;
     }>;
     projects: string[];                         // project names from projects.json
-    lastAction: string | null;                  // last-matched action ID (for compound)
+    lastMatchedAction: string | null;           // last-matched action ID (for compound)
 }
 ```
 
-Size budget: **≤ 4 KB**. Visible tasks are truncated to 40 most recent / highest priority; active sessions to 20. This keeps the prompt small and prefix-cache-friendly on whatever LLM provider the subsystem routes to.
+Visible tasks are truncated by the builder to 40 most recent / highest priority; active sessions to 20. The framework's 4KB enforcement is a second line of defence.
+
+**Future tenants.** A Meadow tenant would `registerContextBuilder()` with a function returning `{route, currentFellow, visibleFellows, activeCohorts, programs, lastMatchedAction}` — a completely different shape — without any framework changes. A Flush tenant would return `{route, currentContract, visibleContracts, counterparties, ...}`. The framework doesn't know or care what the builder returns, only that it fits the budget.
+
+Acceptance criteria unchanged: ≤ 4 KB total after framework enforcement, trim-oldest-non-hovered-first behavior, prefix-cache-friendly on whatever LLM provider the subsystem routes to.
 
 ### 5.5 JSON schema for LLM output
 
@@ -493,7 +509,21 @@ Transcription itself is delegated upstream — `voiceCapture.svelte.ts` already 
 
 ### 7.3 Prompt construction
 
-The prompt has **three stable sections** and **one dynamic section**. Keep the stable stuff at the top so prefix caching (when supported by the active provider) kicks in.
+The prompt is built at **init time** (module load) from registered actions, not at compile time from a statically imported constant. The framework builds a stable prefix (schema + rules + the registered action catalog) once, and a dynamic suffix (context from the registered builder + transcript) on every call. Keep the stable stuff at the top so prefix caching (when supported by the active provider) kicks in.
+
+**Framework responsibilities:**
+
+- On first `registerActions()` call, walk the registered catalog and render it into the prompt prefix using a fixed template (schema block, valid-action enumeration, parsing rules). Cache the rendered prefix.
+- On every interpret call, invoke the registered context builder, apply the 4KB trim if needed, and concatenate `prefix + contextBlock + transcript`.
+- Never import application-specific data directly. The framework only knows about action shapes (id, description, params schema, destructive flag) and the opaque context blob.
+
+**JAT's registration:**
+
+`voiceVocabulary.svelte.ts` remains the canonical source of JAT's action definitions, but its role shifts from "imported constant" to "registration input". A thin JAT-side module (see 7.4) calls `registerActions(vocabularyToActionCatalog(voiceVocabulary))` at module load. The context builder and resolvers live in sibling JAT-specific files and register themselves the same way. None of these files are imported by framework code; the framework only sees what registration callbacks provide.
+
+**Why this matters:** Future tenants swap in their own catalogs/builders/resolvers by calling the same three registration functions from their own app-specific modules. There is no forking of framework code, no if/else on tenant, no conditional imports — just a different set of registrants.
+
+A rendered prompt ends up looking like this (JAT's current registrants produce this output — another tenant would produce a different action catalog and different context block):
 
 ```
 You are a command router for the JAT IDE. Given a voice transcript,
@@ -543,17 +573,90 @@ Active sessions:
 ```
 
 Prompt budget:
-- **Stable prefix** (system prompt + action catalog + rules): ~800 tokens
-- **Dynamic suffix** (context + transcript): ~300-600 tokens
+- **Stable prefix** (system prompt + registered action catalog + rules): ~800 tokens
+- **Dynamic suffix** (context from builder + transcript): ~300-600 tokens
 - Total: ~1100-1400 tokens in, ≤ 150 tokens out
 
-### 7.4 Model selection
+Acceptance criteria unchanged: prompt <4KB for Phase 1, snapshot test over the rendered prefix, prefix caching enabled on providers that support it.
+
+### 7.4 Registration API surface
+
+All application-specific content flows into the Siri framework through three registration functions, called at module-load time from JAT-specific files (e.g. `src/lib/voice/register-jat.ts`). This is the *only* supported interface between "the framework" and "the app".
+
+```typescript
+// Action catalog registration.
+// Call once per app. Re-registration replaces the prior catalog (HMR-friendly).
+export function registerActions(catalog: ActionCatalog): void;
+
+interface ActionCatalog {
+    actions: ActionDefinition[];
+}
+
+interface ActionDefinition {
+    id: string;                          // stable ID, must match enum in LLM output
+    description: string;                 // shown in prompt
+    destructive: boolean;                // triggers confirmation overlay
+    params: Record<string, ParamSpec>;   // paramType → spec (see registerResolver)
+    handler: (params: unknown) => void | Promise<void>;  // dispatch target
+}
+
+interface ParamSpec {
+    type: string;                        // 'task-id', 'session-name', 'free-text', etc.
+    required: boolean;
+    description?: string;                // for prompt
+}
+
+// Context-builder registration.
+// Call once per app. Re-registration replaces the prior builder.
+export function registerContextBuilder(
+    fn: (route: string) => Promise<Context> | Context
+): void;
+
+type Context = Record<string, unknown>;  // opaque to framework; fits 4KB budget
+
+// Parameter-resolver registration.
+// Call once per parameter type. Re-registering the same paramType
+// replaces the prior resolver (HMR-friendly).
+export function registerResolver(
+    paramType: string,
+    fn: (text: string, ctx: Context) => ResolveResult
+): void;
+
+type ResolveResult =
+    | { status: 'resolved'; value: unknown }
+    | { status: 'ambiguous'; candidates: Array<{ value: unknown; label: string }> }
+    | { status: 'not-found' };
+```
+
+**JAT's registration layer** (approximate location: `src/lib/voice/register-jat.ts`) calls these three functions at module load:
+
+```typescript
+import { registerActions, registerContextBuilder, registerResolver } from './framework';
+import { voiceVocabulary } from '../stores/voiceVocabulary.svelte';
+import { buildJatContext } from './jat-context';
+import { resolveTaskId, resolveSessionName, resolveProjectName, resolveAgentName } from './jat-resolvers';
+
+registerActions(vocabularyToActionCatalog(voiceVocabulary));
+registerContextBuilder(buildJatContext);
+registerResolver('task-id', resolveTaskId);
+registerResolver('session-name', resolveSessionName);
+registerResolver('project-name', resolveProjectName);
+registerResolver('agent-name', resolveAgentName);
+```
+
+A Meadow tenant would ship its own `register-meadow.ts` calling the same three APIs with different inputs — `resolveFellowId`, `resolveCohortId`, a different context shape, and a different action catalog. Framework code stays unchanged.
+
+**Deduplication rule:** `registerActions()` and `registerContextBuilder()` replace on re-call. `registerResolver()` replaces per-paramType key. This is deliberately HMR-friendly so Vite hot reload doesn't accumulate stale registrations during development.
+
+**Type safety:** The framework does not know what values resolvers return — it treats them as `unknown` and hands them to the action's `handler`. Apps are responsible for typing their handler-to-resolver contracts.
+
+### 7.5 Model selection
 
 Model selection is a subsystem-level decision. Siri defaults to whichever intent provider is active in `voice.activeLlmId`. The subsystem's default is ollama with `gemma3:4b` (see subsystem PRD §5.2 for provider catalog and rationale); users on cloud providers get OpenAI `gpt-4o-mini` or Anthropic `claude-haiku-4-5` instead.
 
 Siri-specific model overrides (e.g., "always use a bigger model for interpret even when the user picked the smaller one for dictation polish") are **not supported in v1**. If that becomes necessary later, it's a subsystem-layer feature — a `model` override on the classify call — not a Siri-layer workaround.
 
-### 7.5 Tiered dispatch wiring
+### 7.6 Tiered dispatch wiring
 
 The existing `voiceCapture.svelte.ts` `stopCapture()` handler currently:
 1. Gets transcript via `voice.transcribe(blob)` (subsystem)
@@ -592,7 +695,7 @@ const hasUnusedTokens = unused.length > 0;
 
 Parameter-taking actions (per 5.1): `new-task`, `close-task`, `spawn-agent`, `update-task`, `attach-terminal` (only when not hovered), `kill-session`, `add-project`, `navigate`, `global-search`, `epic-swarm`, `delete-task`.
 
-### 7.6 Settings / opt-in
+### 7.7 Settings / opt-in
 
 Global voice settings live in `/config/voice` (subsystem). Siri adds a single feature toggle in the UserProfile dropdown:
 
@@ -714,17 +817,20 @@ No server-side telemetry in phase 1 — everything lives client-side. If users o
 **Goal:** The single most common command (`create a task called …`) goes from matcher-only (empty drawer) to LLM-aided (pre-filled title, priority, type).
 
 **Deliverables:**
+- `registerActions()`, `registerContextBuilder()`, `registerResolver()` framework APIs (see 7.4)
+- JAT's registration layer (`register-jat.ts`) wiring `voiceVocabulary.svelte.ts` into `registerActions()` and registering JAT's context builder
 - `POST /api/voice/interpret` endpoint (calls `voice.classify()`) with action enum limited to `new-task`, `navigate`, `global-search`, `toggle-terminal`, `start-next`, parameterless session actions
 - `dispatchNaturalLanguage()` function, tiered dispatch in `voiceCapture.svelte.ts`
 - `interpretDebugBuffer.ts` and `window.__jatVoiceInterpretDebug`
 - Settings toggle in UserProfile
-- Prompt built from `voiceVocabulary.svelte.ts` at compile time
+- Prompt built from registered actions at init time (not compile-time)
 - Overlay variant: "non-destructive interpretation preview"
 
 **Explicit exclusions:**
 - No task-id resolution (no close-task, no spawn-agent, no attach-terminal by name)
 - No confirmation UX (nothing destructive yet)
 - No disambiguation UX
+- No tenant/multi-app layer yet — JAT is the only registrant. The registration APIs exist and are exercised by JAT's own registration file, but the framework ships inside the JAT codebase and is not packaged or reused elsewhere in Phase 1.
 
 **Success gate:** p95 ≤ 3s, schema-parse ≥ 95%, zero regressions on existing fast-path metrics.
 
@@ -772,6 +878,8 @@ Hard checks before declaring done:
 - [ ] Every dispatch shows a visible interpretation string before firing (no silent mystery dispatches)
 - [ ] Cancelling a confirmation (Esc) fires no API calls and leaves no side effects
 - [ ] `window.__jatVoiceInterpretDebug` has 50-entry ring buffer with every required field populated
+- [ ] **Framework is tenant-ready:** swapping JAT's registered action catalog, context builder, and resolvers with test stubs produces a functioning Siri pipeline for the stub app with **zero framework code changes**.
+- [ ] **Registration is the only seam:** `registerActions()`, `registerContextBuilder()`, `registerResolver()` are the only mechanisms by which app-specific content enters the framework. No compile-time imports of JAT-specific data from framework modules (verified by a lint check on the framework directory's imports).
 
 ---
 

@@ -41,6 +41,11 @@
 
 	interface Task {
 		id: string;
+		// Postgres UUID for postgres-backed projects — required by
+		// /api/clients linkTask/unlinkTask because milestone_tasks.task_id
+		// is a UUID column, not a jat_id text column. Null/undefined for
+		// SQLite-only projects (which don't have milestones anyway).
+		db_id?: string | null;
 		title: string;
 		status: string;
 		priority: number;
@@ -221,7 +226,11 @@
 		id: string;
 		name: string;
 		status: string;
-		linked_tasks?: { id: string }[];
+		// `id` is the Supabase UUID in `project_tasks`; `jat_id` is the
+		// human-readable jat task id (e.g. "meadow-aef74"). We accept either
+		// when matching so SQLite-only projects (no jat_id column) and
+		// postgres projects both resolve the current milestone correctly.
+		linked_tasks?: { id: string; jat_id?: string | null }[];
 	}
 
 	let milestoneList = $state<MilestoneOption[]>([]);
@@ -249,9 +258,17 @@
 				(c: any) => c.milestones || [],
 			);
 			milestoneList = milestones;
-			// Detect current milestone from linked_tasks
+			// Detect current milestone from linked_tasks. Postgres projects
+			// carry both `id` (UUID) and `jat_id` per linked task, so match
+			// either against the jat id or the UUID we now propagate through
+			// the list API.
 			const linked = milestones.find((m) =>
-				(m.linked_tasks || []).some((t) => t.id === task.id),
+				(m.linked_tasks || []).some(
+					(t) =>
+						t.jat_id === task.id ||
+						(!!task.db_id && t.id === task.db_id) ||
+						t.id === task.id,
+				),
 			);
 			currentMilestoneId = linked?.id ?? "";
 		} catch {
@@ -295,6 +312,10 @@
 	async function handleMilestoneChange(milestoneId: string) {
 		if (milestoneId === currentMilestoneId) return;
 		const project = task.project || task.id.split("-")[0];
+		// `milestone_tasks.task_id` is a UUID column, so we must send the
+		// postgres UUID, not the JAT id ("meadow-aef74"). Prefer db_id; fall
+		// back to task.id for SQLite-only projects where the two are the same.
+		const linkTaskId = task.db_id || task.id;
 		errorMessage = null;
 		saving = "milestone";
 		try {
@@ -306,7 +327,7 @@
 						action: "unlinkTask",
 						projectKey: project,
 						milestoneId: currentMilestoneId,
-						taskId: task.id,
+						taskId: linkTaskId,
 					}),
 				});
 			}
@@ -318,7 +339,7 @@
 						action: "linkTask",
 						projectKey: project,
 						milestoneId,
-						taskId: task.id,
+						taskId: linkTaskId,
 					}),
 				});
 				if (!res.ok) {

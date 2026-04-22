@@ -125,10 +125,13 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				.then(r => r.json())
 				.then(data => {
 					const map: Record<string, string> = {};
+					const backends: Record<string, 'sqlite' | 'postgres'> = {};
 					for (const p of data.projects || []) {
 						if (p.defaultHarness) map[p.name] = p.defaultHarness;
+						backends[p.name] = p.backend === 'postgres' ? 'postgres' : 'sqlite';
 					}
 					projectHarnessMap = map;
+					projectBackends = backends;
 				})
 				.catch(() => {});
 		}
@@ -175,7 +178,33 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		if (formData.project && formData.project !== prevProject) {
 			prevProject = formData.project;
 			selectedHarness = projectHarnessMap[formData.project] || 'claude-code';
+			// Reset milestone state so it reloads for the new project
+			milestoneList = [];
+			milestoneLoadedProject = '';
+			formData.milestoneId = '';
 		}
+	});
+
+	// Load milestones from /api/clients when a postgres project is selected
+	$effect(() => {
+		const project = formData.project;
+		if (!isOpen || !project || projectBackends[project] !== 'postgres') return;
+		untrack(() => {
+			if (milestoneLoadedProject === project || milestonesLoading) return;
+			milestonesLoading = true;
+			milestoneLoadedProject = project;
+			fetch('/api/clients')
+				.then(r => r.json())
+				.then(data => {
+					const pLower = project.toLowerCase();
+					const projectData = (data.projects || []).find(
+						(p: any) => (p.projectKey || '').toLowerCase() === pLower || (p.name || '').toLowerCase() === pLower
+					);
+					milestoneList = (projectData?.contracts || []).flatMap((c: any) => c.milestones || []);
+				})
+				.catch(() => {})
+				.finally(() => { milestonesLoading = false; });
+		});
 	});
 
 	// Auto-focus when drawer opens.
@@ -312,6 +341,9 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		schedule_type: 'none' | 'one-shot' | 'recurring';
 		schedule_cron: string;
 		next_run_at: string;
+		// Postgres-project fields
+		assignee: string;
+		milestoneId: string;
 	}
 
 	let formData = $state<FormData>({
@@ -327,7 +359,41 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		due_date: '',
 		schedule_type: 'none',
 		schedule_cron: '',
-		next_run_at: ''
+		next_run_at: '',
+		assignee: '',
+		milestoneId: '',
+	});
+
+	// Per-project backend map ('sqlite' | 'postgres') — populated alongside projectHarnessMap
+	let projectBackends = $state<Record<string, 'sqlite' | 'postgres'>>({});
+
+	// Whether the currently selected project uses a postgres backend
+	const isPostgresProject = $derived(!!formData.project && projectBackends[formData.project] === 'postgres');
+
+	// Milestone list for postgres projects (flat list from /api/clients)
+	interface MilestoneItem { id: string; name: string; status: string; }
+	let milestoneList = $state<MilestoneItem[]>([]);
+	let milestonesLoading = $state(false);
+	let milestoneLoadedProject = $state('');
+
+	// Milestone dropdown groups for SearchDropdown
+	const milestoneGroups = $derived.by(() => {
+		if (milestoneList.length === 0) {
+			return [{
+				label: 'Milestones',
+				options: milestonesLoading
+					? [{ value: '', label: 'Loading…' }]
+					: [{ value: '', label: 'No milestones' }]
+			}];
+		}
+		const open = milestoneList.filter(m => m.status !== 'paid' && m.status !== 'closed');
+		const done = milestoneList.filter(m => m.status === 'paid' || m.status === 'closed');
+		const toOpt = (m: MilestoneItem) => ({ value: m.id, label: m.name });
+		const groups: { label: string; options: { value: string; label: string }[] }[] = [];
+		if (open.length) groups.push({ label: 'Open', options: open.map(toOpt) });
+		if (done.length) groups.push({ label: 'Completed', options: done.map(toOpt) });
+		groups.push({ label: 'Clear', options: [{ value: '', label: '— no milestone —' }] });
+		return groups;
 	});
 
 	// Knowledge base selection
@@ -1179,7 +1245,8 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				model: modelValue,
 				schedule_cron: scheduleCron,
 				next_run_at: nextRunAt,
-				due_date: formData.due_date || undefined
+				due_date: formData.due_date || undefined,
+				assignee: formData.assignee.trim() || undefined,
 			};
 
 			// POST to API endpoint
@@ -1234,6 +1301,24 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					} catch (err) {
 						console.warn(`Failed to attach table ${tableName}:`, err);
 					}
+				}
+			}
+
+			// Link milestone for postgres projects (fire-and-forget — task is created regardless)
+			if (isPostgresProject && formData.milestoneId && data.task?.db_id) {
+				try {
+					await fetch('/api/clients', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							action: 'linkTask',
+							projectKey: formData.project,
+							milestoneId: formData.milestoneId,
+							taskId: data.task.db_id,
+						})
+					});
+				} catch (err) {
+					console.warn('[TaskCreationDrawer] Failed to link milestone:', err);
 				}
 			}
 
@@ -1351,7 +1436,9 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 			due_date: '',
 			schedule_type: 'none',
 			schedule_cron: '',
-			next_run_at: ''
+			next_run_at: '',
+			assignee: '',
+			milestoneId: '',
 		};
 		selectedModel = '';
 		selectedBaseIds = [];
@@ -1372,6 +1459,11 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		selectedHarness = 'claude-code';
 		harnessDropdownOpen = false;
 		prevProject = '';
+
+		// Reset milestone state
+		milestoneList = [];
+		milestoneLoadedProject = '';
+		milestonesLoading = false;
 
 		// Reset disclosure states
 		attachmentsOpen = false;
@@ -2005,6 +2097,40 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					</div>
 					{#if validationErrors.type}
 						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
+					{/if}
+
+					<!-- Assignee + Milestone — first-class for postgres projects -->
+					{#if isPostgresProject}
+					<div class="grid grid-cols-2 gap-3">
+						<!-- Assignee -->
+						<div class="form-control">
+							<label class="label py-0.5" for="task-assignee">
+								<span class="label-text text-xs font-semibold text-base-content/75">Assignee</span>
+							</label>
+							<input
+								id="task-assignee"
+								type="text"
+								placeholder="Email or name"
+								class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+								bind:value={formData.assignee}
+								disabled={formDisabled || isSubmitting}
+							/>
+						</div>
+
+						<!-- Milestone -->
+						<div class="form-control">
+							<div class="label py-0.5">
+								<span class="label-text text-xs font-semibold text-base-content/75">Milestone</span>
+							</div>
+							<SearchDropdown
+								value={formData.milestoneId}
+								groups={milestoneGroups}
+								placeholder={milestonesLoading ? 'Loading…' : '— no milestone —'}
+								disabled={formDisabled || isSubmitting}
+								onChange={(v) => { formData.milestoneId = v; }}
+							/>
+						</div>
+					</div>
 					{/if}
 
 					<!-- Advanced (Optional) — collapsed disclosure: On behalf of -->

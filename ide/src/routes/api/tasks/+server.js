@@ -391,6 +391,8 @@ export async function POST({ request }) {
 		const approver_id  = body.approver_id  || defaultIdentity.approver_id  || null;
 		const sqliteRequester = actorToString(approver) || actorToString(requester) || actorToString(creator);
 
+		const assigneeValue = (typeof body.assignee === 'string' && body.assignee.trim()) ? body.assignee.trim() : null;
+
 		/** @type {any} */
 		const createdTask = pgBackendForCreate
 			? await pgBackendForCreate.create({
@@ -401,7 +403,7 @@ export async function POST({ request }) {
 				priority,
 				labels,
 				deps,
-				assignee: null,
+				assignee: assigneeValue,
 				creator,
 				creator_id,
 				requester,
@@ -419,7 +421,7 @@ export async function POST({ request }) {
 				priority,
 				labels,
 				deps,
-				assignee: null,
+				assignee: assigneeValue,
 				requester: sqliteRequester,
 				notes,
 				...schedulingFields

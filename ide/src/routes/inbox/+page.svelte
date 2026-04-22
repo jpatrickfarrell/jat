@@ -1400,6 +1400,24 @@
 					placeholder="Search title or description… · / to focus"
 					aria-label="Search title and description"
 				/>
+				<!-- Sort rides the search row because it's an *arrange* control,
+				     not a "narrow-the-set" filter. This also frees ~285px on the
+				     secondary row so Type + Assignee + Milestone can share a
+				     line at typical widths without wrapping. -->
+				<div class="chip-group chip-group-sort chip-group-inline-sort" aria-label="Sort by">
+					<span class="filter-label">Sort</span>
+					{#each ([["priority","Priority"],["age","Age"],["updated","Updated"],["status","Status"],["type","Type"]] as const) as [val, label]}
+						{@const active = sortBy === val}
+						<button
+							type="button"
+							class="chip chip-sort"
+							class:active
+							onclick={() => handleSortClick(val)}
+							aria-pressed={active}
+							title={active ? `Click to invert direction (currently ${sortDir})` : `Sort by ${label.toLowerCase()}`}
+						>{label}{active ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+					{/each}
+				</div>
 				{#if hasActiveFilters}
 					<button
 						type="button"
@@ -1446,6 +1464,7 @@
 						</button>
 					{/each}
 				</div>
+
 			</div>
 
 			<div class="filter-row filter-row-secondary">
@@ -1466,21 +1485,6 @@
 					{/each}
 				</div>
 
-				<div class="chip-group chip-group-sort" aria-label="Sort by">
-					<span class="filter-label">Sort</span>
-					{#each ([["priority","Priority"],["age","Age"],["updated","Updated"],["status","Status"],["type","Type"]] as const) as [val, label]}
-						{@const active = sortBy === val}
-						<button
-							type="button"
-							class="chip chip-sort"
-							class:active
-							onclick={() => handleSortClick(val)}
-							aria-pressed={active}
-							title={active ? `Click to invert direction (currently ${sortDir})` : `Sort by ${label.toLowerCase()}`}
-						>{label}{active ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
-					{/each}
-				</div>
-
 				<label class="filter-field filter-field-assignee">
 					<span class="filter-label">Assignee</span>
 					<input
@@ -1496,6 +1500,36 @@
 						{#each allAssignees as a}<option value={a} />{/each}
 					</datalist>
 				</label>
+
+				{#if milestoneProjectContext && (milestoneList.length > 0 || milestonesLoading || filterMilestones.length > 0)}
+					<!-- No label — M{n} chips are self-describing and the purple
+					     color distinguishes them from P{n}. Lives inside the
+					     secondary row so it shares horizontal space with
+					     Type/Sort/Assignee rather than claiming its own row. -->
+					<div class="chip-group chip-group-milestones" aria-label="Milestone">
+						{#if milestonesLoading && milestoneList.length === 0}
+							<span class="filter-hint">Loading milestones…</span>
+						{:else if milestoneList.length === 0}
+							<!-- Empty case suppressed — nothing to show. -->
+						{:else}
+							{#each [...milestoneList].sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity)) as m, i (m.id)}
+								{@const active = filterMilestones.includes(m.id)}
+								{@const done = m.status === "paid" || m.status === "closed"}
+								{@const n = m.sort_order ?? i}
+								<button
+									type="button"
+									class="chip chip-milestone"
+									class:active
+									class:milestone-done={done}
+									onclick={() => toggleMilestone(m.id)}
+									aria-pressed={active}
+									aria-label="Milestone {m.name}"
+									title="M{n} · {m.name}{m.status ? ` (${m.status})` : ""}"
+								>M{n}</button>
+							{/each}
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			{#if projectOptions.length > 1}
@@ -1517,32 +1551,6 @@
 				</div>
 			{/if}
 
-			{#if milestoneProjectContext && (milestoneList.length > 0 || milestonesLoading || filterMilestones.length > 0)}
-				<div class="filter-row filter-row-milestones" transition:slide={{ duration: 150, axis: "y" }}>
-					<div class="chip-group chip-group-milestones" aria-label="Milestone">
-						<span class="filter-label">Milestone</span>
-						{#if milestonesLoading && milestoneList.length === 0}
-							<span class="filter-hint">Loading…</span>
-						{:else if milestoneList.length === 0}
-							<span class="filter-hint">No milestones</span>
-						{:else}
-							{#each milestoneList as m (m.id)}
-								{@const active = filterMilestones.includes(m.id)}
-								{@const done = m.status === "paid" || m.status === "closed"}
-								<button
-									type="button"
-									class="chip chip-milestone"
-									class:active
-									class:milestone-done={done}
-									onclick={() => toggleMilestone(m.id)}
-									aria-pressed={active}
-									title="Milestone: {m.name}{m.status ? ` (${m.status})` : ""}"
-								>{m.name}</button>
-							{/each}
-						{/if}
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		{#if loading}
@@ -1621,6 +1629,12 @@
 									title="Milestone: {taskMilestone.name}{taskMilestone.status ? ` (${taskMilestone.status})` : ""}"
 									aria-label="Milestone {taskMilestone.name}"
 								>M{taskMilestone.sortOrder}</span>
+							{:else}
+								<!-- Placeholder cell keeps the grid column alignment
+								     consistent across rows that do / don't have a
+								     milestone. Renders nothing visible but occupies
+								     the milestone column slot. -->
+								<span class="milestone-placeholder" aria-hidden="true"></span>
 							{/if}
 							<span
 								class="type-badge badge badge-sm {getTypeBadge(task.issue_type)}"
@@ -2021,8 +2035,10 @@
 	.filter-bar {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
-		padding: 0 1rem 0.6rem;
+		/* Generous gap between filter rows — creates breathing room between
+		 * distinct filter concepts (search+sort / filter chips / secondary). */
+		gap: 0.55rem;
+		padding: 0.2rem 1rem 0.65rem;
 		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
 	}
 
@@ -2030,16 +2046,10 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem;
+		/* Tight within-row gap: groups feel anchored as a single composition.
+		 * Rhythm comes from the row-level gap above, not from group-level gaps. */
+		gap: 0.35rem 0.75rem;
 		min-width: 0;
-	}
-
-	.filter-row-chips {
-		gap: 0.4rem 1rem;
-	}
-
-	.filter-row-secondary {
-		gap: 0.4rem 0.75rem;
 	}
 
 	.filter-row-search {
@@ -2047,8 +2057,21 @@
 	}
 
 	.filter-search {
-		flex: 1 1 auto;
+		/* Flex-shrinkable with a modest basis so Sort pills share the row on
+		 * typical panel widths (~500px+). The input still grows to fill free
+		 * space when available, just doesn't demand 18rem up front. */
+		flex: 1 1 10rem;
 		min-width: 8rem;
+	}
+
+	/* Sort chips on the search row render slightly de-emphasized because Sort
+	 * is an arrange control, not a filter — visually receding keeps the eye
+	 * on Status/Priority/Milestone as the primary narrowing tools. */
+	.chip-group-inline-sort {
+		opacity: 0.85;
+	}
+	.chip-group-inline-sort .chip-sort {
+		font-size: 0.68rem;
 	}
 
 	.chip-group {
@@ -2109,10 +2132,11 @@
 	}
 
 	.chip-milestone {
-		/* Milestones often have longer names; let them grow but stay compact. */
-		max-width: 14rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		/* Milestone chips use the same M{n} shorthand as the row badges, so they
+		 * stay compact and the whole filter group fits on one line (usually).
+		 * Tabular numbers keep M0..M9 aligned visually. */
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
 		white-space: nowrap;
 	}
 	.chip-milestone.active {
@@ -2183,7 +2207,14 @@
 
 	.task-row {
 		display: grid;
-		grid-template-columns: auto auto auto auto 1fr auto auto;
+		/* 8 columns for 8 children:
+		 *   status-dot | task-id | priority | milestone | type | title (flex) | age | avatar
+		 *
+		 * The milestone column uses minmax(2.25rem, auto) so rows WITHOUT a
+		 * milestone still reserve the slot — otherwise type/title/age shift
+		 * left and rows lose vertical alignment. Matches the typical M{n}
+		 * badge width (~36px). */
+		grid-template-columns: auto auto auto minmax(2.25rem, auto) auto 1fr auto auto;
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;

@@ -141,6 +141,7 @@
 		id: string;
 		name: string;
 		status?: string;
+		sort_order?: number;
 		project?: string;
 		// `id` on a linked task is the Supabase UUID; `jat_id` is the
 		// human-readable form (e.g. "meadow-vmem4") that matches Task.id in

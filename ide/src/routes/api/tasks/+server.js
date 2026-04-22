@@ -78,6 +78,46 @@ export async function GET({ url }) {
 			if (closedBefore) filters.closedBefore = closedBefore;
 
 			tasks = getTasks(filters);
+
+			// Cross-project views (no `project` param) must also include tasks from
+			// postgres-backed projects (meadow, headcount, flush, steelbridge, ...).
+			// Otherwise /inbox and similar aggregators only see SQLite tasks.
+			if (!project) {
+				const { readProjectsConfig } = await import('../../../../../lib/projects-config.js');
+				const cfg = readProjectsConfig();
+				const pgProjectNames = Object.entries(cfg?.projects || {})
+					.filter(([, entry]) => entry && entry.backend === 'postgres')
+					.map(([name]) => name);
+
+				if (pgProjectNames.length > 0) {
+					const { getBackendForProject } = await import('../../../../../lib/tasks-backend.js');
+
+					/** @type {import('../../../../../lib/tasks-backend.js').ListOptions} */
+					const pgFilters = {};
+					if (status) pgFilters.status = status;
+					if (priority !== null) pgFilters.priority = parseInt(priority);
+					if (closedAfter) pgFilters.closedAfter = closedAfter;
+					if (closedBefore) pgFilters.closedBefore = closedBefore;
+					if (updatedAfter) pgFilters.updatedAfter = updatedAfter;
+					if (updatedBefore) pgFilters.updatedBefore = updatedBefore;
+
+					const pgResults = await Promise.all(
+						pgProjectNames.map(async (name) => {
+							try {
+								const backend = await getBackendForProject(name);
+								return await backend.list({ ...pgFilters, projectName: name });
+							} catch (err) {
+								console.warn(`[api/tasks] postgres backend "${name}" failed:`, err instanceof Error ? err.message : err);
+								return [];
+							}
+						})
+					);
+
+					for (const pgTasks of pgResults) {
+						if (pgTasks.length > 0) tasks = tasks.concat(pgTasks);
+					}
+				}
+			}
 		}
 		const projects = getProjects();
 

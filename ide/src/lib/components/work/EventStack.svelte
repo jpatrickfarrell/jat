@@ -1197,6 +1197,14 @@
 		expandedEventIdx = expandedEventIdx === idx ? null : idx;
 	}
 
+	// Svelte 5 event delegation is skipped for nodes inside `use:portalToBody`
+	// (MobileSessionDrawer). Use native addEventListener so clicks register there.
+	function directClick(node: HTMLElement, handler: (e: MouseEvent) => void) {
+		const wrapped: EventListener = (e) => handler(e as MouseEvent);
+		node.addEventListener('click', wrapped);
+		return { destroy() { node.removeEventListener('click', wrapped); } };
+	}
+
 	onMount(() => {
 		// Fetch existing task titles for "already created" detection
 		fetchExistingTaskTitles();
@@ -1288,7 +1296,7 @@
 					<div class="flex items-center">
 						<button
 							class="flex-1 px-3 py-2 flex items-center justify-between text-left min-w-0"
-							onclick={() => toggleEventExpand(idx)}
+							use:directClick={() => toggleEventExpand(idx)}
 						>
 							<div class="flex items-center gap-2 flex-1 min-w-0">
 								<span class="text-sm flex-shrink-0">{style.icon}</span>
@@ -1852,7 +1860,7 @@
 							<!-- Event header -->
 							<button
 								class="w-full px-3 py-1.5 flex items-center justify-between text-left"
-								onclick={() => toggleEventExpand(idx)}
+								use:directClick={() => toggleEventExpand(idx)}
 							>
 								<div class="flex items-center gap-2 flex-1 min-w-0">
 									<span class="text-sm flex-shrink-0">{style.icon}</span>

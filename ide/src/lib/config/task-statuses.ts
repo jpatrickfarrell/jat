@@ -13,12 +13,13 @@ export type TaskStatus =
 	| 'accepted'
 	| 'deployed'
 	| 'closed'
+	| 'rejected'
 	| 'dev';
 
 // All valid statuses in lifecycle order
 export const ALL_STATUSES: TaskStatus[] = [
 	'open', 'in_progress', 'waiting', 'blocked',
-	'submitted', 'accepted', 'deployed', 'closed', 'dev'
+	'submitted', 'accepted', 'deployed', 'closed', 'rejected', 'dev'
 ];
 
 // Work is permanently done — no further transitions expected
@@ -34,7 +35,7 @@ export const ACTIONABLE_BY_OTHER = new Set<TaskStatus>(['waiting', 'submitted'])
 export const INTERNAL_STATUSES = new Set<TaskStatus>(['dev']);
 
 // Agent queue: statuses where an agent should pick up work
-export const AGENT_WORKABLE = new Set<TaskStatus>(['open', 'in_progress']);
+export const AGENT_WORKABLE = new Set<TaskStatus>(['open', 'in_progress', 'rejected']);
 
 // Dropdown options for status pickers — all statuses with display labels + colors
 export const STATUS_OPTIONS: { value: TaskStatus; label: string; color: string }[] = [
@@ -46,6 +47,7 @@ export const STATUS_OPTIONS: { value: TaskStatus; label: string; color: string }
 	{ value: 'accepted', label: 'Accepted', color: 'oklch(0.70 0.18 200)' },
 	{ value: 'deployed', label: 'Deployed', color: 'oklch(0.65 0.20 160)' },
 	{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' },
+	{ value: 'rejected', label: 'Rejected', color: 'oklch(0.70 0.20 45)' },
 	{ value: 'dev', label: 'Dev', color: 'oklch(0.55 0.03 250)' }
 ];
 
@@ -57,6 +59,7 @@ export const STATUS_OPTIONS: { value: TaskStatus; label: string; color: string }
 //                    → submitted     (ready for review)
 //                    → accepted      (stakeholder approved)
 //                    → deployed      (shipped)
+//                    → rejected      (kicked back; dev revises and resubmits)
 //                    → closed        (archived)
 //
 //   dev = internal/hidden at any point

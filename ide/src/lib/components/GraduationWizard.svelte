@@ -416,7 +416,7 @@
 			{#if step === 2 && previewSummary}
 				{@const bd = previewSummary.breakdown}
 				{@const statusOrder = ALL_STATUSES}
-				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', waiting: 'text-info', blocked: 'text-error', submitted: 'text-secondary', accepted: 'text-success', deployed: 'text-primary', closed: 'text-success', dev: 'text-base-content/50' }}
+				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', waiting: 'text-info', blocked: 'text-error', submitted: 'text-secondary', accepted: 'text-success', deployed: 'text-primary', closed: 'text-success', rejected: 'text-warning', dev: 'text-base-content/50' }}
 				{@const typeOrder = ['task', 'bug', 'feature', 'epic', 'chore']}
 				{@const typeColors: Record<string, string> = { task: 'text-primary', bug: 'text-error', feature: 'text-success', epic: 'text-secondary', chore: 'text-base-content/60' }}
 				<div class="space-y-4">

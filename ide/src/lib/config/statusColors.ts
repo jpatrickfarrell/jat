@@ -213,6 +213,18 @@ export const TASK_STATUS_VISUALS: Record<string, TaskStatusVisual> = {
 		description: 'Shipped to production'
 	},
 
+	// REJECTED: Kicked back by customer — dev must revise and resubmit
+	rejected: {
+		badge: 'badge-warning badge-outline',
+		text: 'text-warning',
+		icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+		iconType: 'svg',
+		iconStyle: 'outline',
+		animation: undefined,
+		label: 'Rejected',
+		description: 'Kicked back — needs revision and resubmit'
+	},
+
 	// REOPENED: Previously closed, reopened for additional work
 	reopened: {
 		badge: 'badge-warning badge-outline',

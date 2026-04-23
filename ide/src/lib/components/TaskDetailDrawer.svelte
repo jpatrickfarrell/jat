@@ -60,7 +60,7 @@
 		id: string;
 		title: string;
 		description?: string;
-		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted' | 'accepted' | 'deployed';
+		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted' | 'accepted' | 'deployed' | 'rejected';
 		priority: number;
 		type?: string;
 		issue_type?: string;
@@ -674,7 +674,8 @@
 		dev: 'badge-ghost',
 		submitted: 'badge-secondary badge-outline',
 		accepted: 'badge-info badge-outline',
-		deployed: 'badge-success badge-outline'
+		deployed: 'badge-success badge-outline',
+		rejected: 'badge-warning badge-outline'
 	};
 
 	// Priority badge colors
@@ -2582,7 +2583,7 @@
 				<!-- Left accent bar -->
 				<div
 					class="absolute left-0 top-0 bottom-0 w-1"
-					style="background: {task?.status === 'in_progress' ? 'var(--anim-warning)' : task?.status === 'closed' ? 'var(--anim-success)' : task?.status === 'blocked' ? 'var(--anim-error)' : (task?.status === 'submitted' || task?.status === 'accepted' || task?.status === 'deployed') ? 'var(--anim-secondary)' : 'var(--anim-primary)'};"
+					style="background: {task?.status === 'in_progress' ? 'var(--anim-warning)' : task?.status === 'closed' ? 'var(--anim-success)' : task?.status === 'blocked' ? 'var(--anim-error)' : task?.status === 'rejected' ? 'var(--anim-warning)' : (task?.status === 'submitted' || task?.status === 'accepted' || task?.status === 'deployed') ? 'var(--anim-secondary)' : 'var(--anim-primary)'};"
 				></div>
 				<div class="flex-1 min-w-0">
 					<!-- Task Header: ID badge + title (shared TaskHeaderBlock) -->

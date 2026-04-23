@@ -18,7 +18,7 @@
 		id: string;
 		title: string;
 		description: string;
-		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted';
+		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted' | 'rejected';
 		priority: number;
 		issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
 		project: string;

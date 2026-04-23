@@ -120,6 +120,12 @@
 	let attachmentsLoading = $state(false);
 	let urlCopied = $state(false);
 
+	// Drag-drop state (whole-panel dropzone, same pattern as TaskDetailDrawer)
+	let isDraggingOver = $state(false);
+	let drawerDragCounter = $state(0);
+	let isUploading = $state(false);
+	let uploadError = $state<string | null>(null);
+
 	marked.setOptions({ gfm: true, breaks: true });
 
 
@@ -143,6 +149,10 @@
 		contextDetail = null;
 		attachments = [];
 		urlCopied = false;
+		isDraggingOver = false;
+		drawerDragCounter = 0;
+		isUploading = false;
+		uploadError = null;
 
 		// Fetch full task detail for feedback context fields (page_url, recording_url, etc.)
 		const id = task.id;
@@ -248,6 +258,80 @@
 		} catch {}
 	}
 
+	// Drag-drop handlers — whole-panel dropzone (drawerDragCounter prevents false leave events)
+	async function handleDrop(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		isDraggingOver = false;
+		drawerDragCounter = 0;
+
+		if (!event.dataTransfer) return;
+		const files = Array.from(event.dataTransfer.files);
+		if (files.length === 0) return;
+
+		isUploading = true;
+		uploadError = null;
+		const id = task.id;
+
+		try {
+			for (const file of files) {
+				await uploadAttachment(file, id);
+			}
+			// Refresh attachments list
+			const res = await fetch(`/api/tasks/${encodeURIComponent(id)}/image`);
+			if (res.ok) {
+				const data = await res.json();
+				if (task.id === id) attachments = data?.images ?? [];
+			}
+		} catch {
+			uploadError = 'Upload failed';
+		} finally {
+			isUploading = false;
+		}
+	}
+
+	function handleDragOver(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+	}
+
+	function handleDragEnter(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		drawerDragCounter++;
+		if (drawerDragCounter > 0) isDraggingOver = true;
+	}
+
+	function handleDragLeave(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		drawerDragCounter--;
+		if (drawerDragCounter <= 0) {
+			drawerDragCounter = 0;
+			isDraggingOver = false;
+		}
+	}
+
+	async function uploadAttachment(file: File, taskId: string) {
+		const fd = new FormData();
+		fd.append('file', file, file.name);
+		fd.append('sessionName', `task-${taskId}`);
+		fd.append('filename', file.name);
+
+		const uploadRes = await fetch('/api/work/upload-image', { method: 'POST', body: fd });
+		if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`);
+
+		const { filePath } = await uploadRes.json();
+		const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+		await fetch(`/api/tasks/${encodeURIComponent(taskId)}/image`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ path: filePath, id: fileId }),
+		});
+	}
+
 	// Merge task-level feedback fields with supplemental fetch results
 	const feedbackContext = $derived.by(() => {
 		// Prefer direct props (if list API ever includes them) over fetched detail
@@ -260,7 +344,25 @@
 	});
 </script>
 
-<div class="detail-root">
+<div
+	class="detail-root"
+	ondrop={handleDrop}
+	ondragover={handleDragOver}
+	ondragenter={handleDragEnter}
+	ondragleave={handleDragLeave}
+	role="region"
+>
+	<!-- Full-panel drop overlay -->
+	{#if isDraggingOver}
+		<div class="drop-overlay">
+			<svg class="drop-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+			</svg>
+			<p class="drop-label">Drop files anywhere</p>
+			<p class="drop-sublabel">Files will be added as attachments</p>
+		</div>
+	{/if}
+
 	<header class="detail-header">
 		<div class="detail-title-row">
 			<h2 class="detail-title">{task.title}</h2>
@@ -407,7 +509,7 @@
 			</section>
 		{/if}
 
-		{#if attachmentsLoading || attachments.length > 0}
+		{#if attachmentsLoading || attachments.length > 0 || isUploading || uploadError}
 			<section class="detail-attachments">
 				<h3 class="section-label">Attachments{#if attachments.length > 0}<span class="attachment-count">{attachments.length}</span>{/if}</h3>
 				{#if attachmentsLoading && attachments.length === 0}
@@ -432,7 +534,15 @@
 								/>
 							</a>
 						{/each}
+						{#if isUploading}
+							<div class="attachment-uploading">
+								<span class="loading loading-spinner loading-xs"></span>
+							</div>
+						{/if}
 					</div>
+					{#if uploadError}
+						<p class="attachment-error">{uploadError}</p>
+					{/if}
 				{/if}
 			</section>
 		{/if}
@@ -477,6 +587,43 @@
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
+		position: relative;
+	}
+
+	/* Drop overlay — shown while dragging files over the panel */
+	.drop-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		background: oklch(var(--b1) / 0.85);
+		backdrop-filter: blur(4px);
+		border: 2px dashed oklch(var(--p, 0.55 0.18 240));
+		border-radius: 0.5rem;
+		pointer-events: none;
+	}
+
+	.drop-icon {
+		width: 3.5rem;
+		height: 3.5rem;
+		color: oklch(var(--p, 0.55 0.18 240));
+		margin-bottom: 0.75rem;
+	}
+
+	.drop-label {
+		font-size: 1rem;
+		font-weight: 600;
+		color: oklch(var(--p, 0.55 0.18 240));
+		margin: 0;
+	}
+
+	.drop-sublabel {
+		font-size: 0.8125rem;
+		margin: 0.25rem 0 0;
+		opacity: 0.65;
 	}
 
 	.detail-header {
@@ -689,6 +836,24 @@
 	.attachment-loading {
 		opacity: 0.5;
 		padding: 0.25rem 0;
+	}
+
+	.attachment-uploading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 80px;
+		height: 60px;
+		border-radius: 0.375rem;
+		border: 1px dashed oklch(0.38 0.02 250);
+		background: oklch(0.16 0.02 250);
+		opacity: 0.7;
+	}
+
+	.attachment-error {
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: oklch(0.65 0.18 25);
 	}
 
 	.attachment-grid {

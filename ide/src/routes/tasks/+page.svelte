@@ -349,8 +349,25 @@
 		return result;
 	});
 
-	// Dismissed attention notifications (local session state — clears on reload)
-	let dismissedAttentionSessions = $state(new Set<string>());
+	// Dismissed attention notifications — persisted to localStorage so dismissals survive navigation
+	function loadDismissedAttention(): Set<string> {
+		if (typeof window === 'undefined') return new Set();
+		try { const s = localStorage.getItem('tasks-dismissed-attention'); if (s) return new Set(JSON.parse(s)); } catch {}
+		return new Set();
+	}
+	let dismissedAttentionSessions = $state(loadDismissedAttention());
+	$effect(() => {
+		try { localStorage.setItem('tasks-dismissed-attention', JSON.stringify([...dismissedAttentionSessions])); } catch {}
+	});
+	// Auto-clear dismissed entries for sessions that are no longer in an attention state
+	$effect(() => {
+		const current = new Set(attentionAgents.map(a => a.sessionName));
+		let changed = false;
+		for (const name of dismissedAttentionSessions) {
+			if (!current.has(name)) { dismissedAttentionSessions.delete(name); changed = true; }
+		}
+		if (changed) dismissedAttentionSessions = new Set(dismissedAttentionSessions);
+	});
 
 	// Voice inbox collapsed state (section hidden entirely when empty)
 	let voiceInboxCollapsed = $state(false);

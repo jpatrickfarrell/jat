@@ -393,6 +393,8 @@ export async function POST({ request }) {
 
 		const assigneeValue = (typeof body.assignee === 'string' && body.assignee.trim()) ? body.assignee.trim() : null;
 
+		const parentId = (body.parent_id && typeof body.parent_id === 'string') ? body.parent_id.trim() : null;
+
 		/** @type {any} */
 		const createdTask = pgBackendForCreate
 			? await pgBackendForCreate.create({
@@ -411,6 +413,7 @@ export async function POST({ request }) {
 				approver,
 				approver_id,
 				notes,
+				...(parentId ? { parent_id: parentId } : {}),
 				...schedulingFields
 			})
 			: createTask({

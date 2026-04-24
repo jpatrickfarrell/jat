@@ -16,6 +16,9 @@
 	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
 	import DiffPreviewDrawer from '$lib/components/files/DiffPreviewDrawer.svelte';
 	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
+	import PeekDrawer from '$lib/components/PeekDrawer.svelte';
+	import TaskPeekContent from '$lib/components/peek/TaskPeekContent.svelte';
+	import { registerPeek } from '$lib/peek/registry';
 	import { getTaskCountByProject, getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { classifySession } from '$lib/utils/sessionNaming';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
@@ -41,6 +44,15 @@
 	import { startCapture, stopCapture, cancelCapture, getVoiceState } from '$lib/stores/voiceCapture.svelte';
 	import { registerVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
+	import {
+		loadMarksFromStorage,
+		setMark,
+		jumpToMark,
+		jumpBack,
+		jumpForward,
+		pushJump,
+		isInternalJumping
+	} from '$lib/stores/marks.svelte';
 	import { loadAutoKillConfig } from '$lib/stores/autoKillConfig';
 	import { setReviewRules as setReviewRulesStore } from '$lib/stores/reviewRules.svelte';
 	import {
@@ -399,12 +411,23 @@
 		initPreferences(); // Initialize unified preferences store
 		syncSidebarFromPreferences(); // Restore sidebar collapsed state from localStorage
 		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
+		loadMarksFromStorage(); // Vim-style marks persist across sessions
 		// Expose global-shortcut handlers to the voice matcher so utterances like
 		// "new task" invoke the same function as Alt+N (no synthetic KeyboardEvent).
 		registerVoiceActionHandlers(globalActionHandlers);
 		initNotifications(); // Initialize push notification system (favicon badge, title badge)
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
+
+		// Register peek-drawer handlers. Task IDs follow `{project}-{hash}` —
+		// anything matching that shape gets a lightweight task preview.
+		registerPeek({
+			id: 'task',
+			label: 'Task',
+			match: (navId) => /^[a-z][a-z0-9_-]*-[a-z0-9]+(?:\.\d+)?$/i.test(navId),
+			component: TaskPeekContent,
+			propsForId: (navId) => ({ taskId: navId }),
+		});
 
 		// Easter egg for the curious
 		console.log('%c⬛ JAT MISSION CONTROL', 'color:oklch(0.70 0.18 240);font-size:13px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:0.1em;');
@@ -503,6 +526,82 @@
 		stopActivityPolling(); // Stop activity polling
 		stopGitStatusPolling(); // Stop git status polling for Files badge
 		clearAllBadges(); // Clear favicon and title badges on unmount
+	});
+
+	// Track route changes for the vim-style jump stack (Ctrl+O / Ctrl+I).
+	// We capture the OUTGOING position (not the incoming one) so Ctrl+O
+	// returns to where the user was before navigating. Internal jumps —
+	// those triggered by the marks store itself — are skipped to avoid
+	// polluting the stack with duplicates. Using a direct `page` store
+	// subscription (not `$effect`) so sub-property reads of $page.url
+	// don't slip past runes-compiler dependency tracking.
+	let lastJumpRoute: string | null = null;
+	let lastJumpFocusSnapshot: { navId: string | null; scrollY: number; label: string } | null = null;
+	let unsubJumpTracker: (() => void) | null = null;
+	onMount(() => {
+		unsubJumpTracker = page.subscribe(($p) => {
+			if (!browser) return;
+			const pathname = $p.url.pathname;
+			if (lastJumpRoute === null) {
+				lastJumpRoute = pathname;
+				return;
+			}
+			if (lastJumpRoute === pathname) return;
+
+			if (!isInternalJumping()) {
+				const snap = lastJumpFocusSnapshot ?? { navId: null, scrollY: 0, label: '' };
+				pushJump({
+					route: lastJumpRoute,
+					navId: snap.navId,
+					scrollY: snap.scrollY,
+					label: snap.label,
+					timestamp: Date.now()
+				});
+			}
+
+			lastJumpRoute = pathname;
+			lastJumpFocusSnapshot = null;
+		});
+	});
+	onDestroy(() => {
+		if (unsubJumpTracker) unsubJumpTracker();
+	});
+
+	// Keep the jump-stack focus snapshot fresh without paying the cost of
+	// observing the whole DOM. The listNav primitive changes focus on a
+	// small set of keys (j/k/Arrow keys/Enter/Space) — we re-snapshot on a
+	// microtask after those keys fire. We also snapshot on scroll so the
+	// stored scrollY stays accurate, and once on mount to capture the
+	// initial landing position.
+	$effect(() => {
+		if (!browser) return;
+		function snap() {
+			const el = document.querySelector<HTMLElement>('.jk-focused');
+			const navId = el?.getAttribute('data-nav-id') ?? null;
+			let label = '';
+			if (el) {
+				const explicit = el.getAttribute('data-nav-label');
+				label = explicit ?? (el.textContent ?? '').trim().slice(0, 40);
+			}
+			lastJumpFocusSnapshot = { navId, scrollY: window.scrollY, label };
+		}
+		function onScroll() { snap(); }
+		function onKeyCapture(e: KeyboardEvent) {
+			// Only re-snapshot on the keys listNav reacts to. This keeps the
+			// handler cheap — one DOM query per nav keystroke.
+			const k = e.key;
+			if (k === 'j' || k === 'k' || k === 'ArrowUp' || k === 'ArrowDown'
+				|| k === 'Enter' || k === ' ') {
+				queueMicrotask(snap);
+			}
+		}
+		window.addEventListener('scroll', onScroll, { passive: true });
+		window.addEventListener('keydown', onKeyCapture, true);
+		snap();
+		return () => {
+			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('keydown', onKeyCapture, true);
+		};
 	});
 
 	// Selective channel subscriptions: subscribe/unsubscribe 'output' channel on route changes.
@@ -1206,6 +1305,20 @@
 		'm': '/memory', 'c': '/clients',
 	};
 
+	// Vim-style chord state for marks: after `m` or `'` we wait up to 1.2s
+	// for the letter key that completes the chord. Any other key cancels.
+	let markChord: 'set' | 'jump' | null = null;
+	let markChordTimer: ReturnType<typeof setTimeout> | null = null;
+	function armMarkChord(kind: 'set' | 'jump') {
+		markChord = kind;
+		if (markChordTimer) clearTimeout(markChordTimer);
+		markChordTimer = setTimeout(() => { markChord = null; markChordTimer = null; }, 1200);
+	}
+	function clearMarkChord() {
+		markChord = null;
+		if (markChordTimer) { clearTimeout(markChordTimer); markChordTimer = null; }
+	}
+
 	async function handleGlobalKeydown(event: KeyboardEvent) {
 		// MobileSessionDrawer handles its own keyboard shortcuts when open
 		if (get(isMobileFullscreenOpen)) return;
@@ -1213,6 +1326,67 @@
 		const _t = event.target as HTMLElement | null;
 		const _tag = _t?.tagName ?? '';
 		const _isEditing = _tag === 'INPUT' || _tag === 'TEXTAREA' || _tag === 'SELECT' || !!_t?.isContentEditable;
+
+		// Vim-style marks & jumps. Skip while editing. Chord keys are
+		// consumed with stopImmediatePropagation so page-level window
+		// keydown handlers (e.g. /inbox's `c` → compose) don't double-fire
+		// when a chord completes on the same letter.
+		if (!_isEditing) {
+			// Complete a pending chord with a letter a-z.
+			if (markChord && !event.ctrlKey && !event.metaKey && !event.altKey && /^[a-z]$/i.test(event.key)) {
+				const letter = event.key.toLowerCase();
+				const kind = markChord;
+				clearMarkChord();
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				if (kind === 'set') {
+					setMark(letter, window.location.pathname);
+				} else {
+					await jumpToMark(letter, window.location.pathname);
+				}
+				return;
+			}
+			// Any other key while a chord is pending cancels it.
+			if (markChord && event.key !== 'Shift') clearMarkChord();
+
+			// Ctrl+O / Ctrl+I → jump back / forward in the jump stack.
+			// Ctrl+I is the same code as Tab on most browsers; require
+			// event.key === 'i' / 'o' explicitly and let the browser keep
+			// Tab behaviour.
+			if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+				if (event.key === 'o' || event.key === 'O') {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					await jumpBack(window.location.pathname);
+					return;
+				}
+				if (event.key === 'i' || event.key === 'I') {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					await jumpForward(window.location.pathname);
+					return;
+				}
+			}
+
+			// Arm chord on bare `m` or `'`. We claim these keys globally
+			// so they unambiguously mean "start a marks chord" (vim
+			// convention). Both are consumed so page-level handlers
+			// don't also react.
+			if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+				if (event.key === 'm') {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					armMarkChord('set');
+					return;
+				}
+				if (event.key === "'") {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					armMarkChord('jump');
+					return;
+				}
+			}
+		}
 
 		// ? → toggle help panel (editing-guarded)
 		if (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -1416,7 +1590,7 @@
 				{taskCounts}
 			/>
 
-			<!-- Review notification bar — slim strip below TopBar. Hidden on /tasks which has its own inline attention notifications covering the same review sessions. -->
+			<!-- Review notification bar — slim strip below TopBar, hidden on /tasks which has its own inline attention notifications -->
 			{#if $page.url.pathname !== '/tasks'}
 				<ReviewNotificationBar {reviewSessions} />
 			{/if}
@@ -1469,6 +1643,9 @@
 
 <!-- Terminal Drawer (Ctrl+` to toggle) -->
 <TerminalDrawer />
+
+<!-- Global Peek Drawer (Space on any listNav-backed route opted in via use:peek) -->
+<PeekDrawer />
 
 <!-- Global Toast Notifications -->
 <ToastContainer />

@@ -2054,10 +2054,15 @@ cmd_dep() {
   local subcmd="${1:-}"; shift || true
 
   if [[ "$(resolve_project_backend)" == "postgres" ]]; then
-    # project_tasks schema has no dependency table; deps not yet supported
-    echo "Warning: jt dep is not supported for postgres-backed projects." >&2
-    echo "The project_tasks schema has no dependency table." >&2
-    return 1
+    require_ide_reachable
+    case "$subcmd" in
+      add)    pg_dep_add "$@" ;;
+      remove) pg_dep_remove "$@" ;;
+      tree)   echo "Warning: jt dep tree is not yet supported for postgres-backed projects." >&2; return 1 ;;
+      cycles) echo "Warning: jt dep cycles is not yet supported for postgres-backed projects." >&2; return 1 ;;
+      *)      die "Usage: jt dep {add|remove|tree|cycles} ..." ;;
+    esac
+    return
   fi
 
   require_db
@@ -2068,6 +2073,51 @@ cmd_dep() {
     cycles) cmd_dep_cycles "$@" ;;
     *)      die "Usage: jt dep {add|remove|tree|cycles} ..." ;;
   esac
+}
+
+pg_dep_add() {
+  local task_id="${1:-}" depends_on="${2:-}"
+  [[ -n "$task_id" && -n "$depends_on" ]] || die "Usage: jt dep add TASK_ID DEPENDS_ON_ID"
+  [[ "$task_id" == "$depends_on" ]] && die "A task cannot depend on itself"
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name"
+
+  local payload response
+  payload="$(jq -n --arg t "$task_id" --arg d "$depends_on" --arg p "$project_name" \
+    '{depends_on: $d, project: $p}')"
+  response="$(pg_curl POST "/api/tasks/${task_id}/deps" "$payload")" \
+    || die "Failed to add dependency: ${task_id} -> ${depends_on}"
+
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // "unknown"')"
+    die "Failed to add dependency: ${err_msg}"
+  fi
+  echo "Added: $task_id depends on $depends_on"
+}
+
+pg_dep_remove() {
+  local task_id="${1:-}" depends_on="${2:-}"
+  [[ -n "$task_id" && -n "$depends_on" ]] || die "Usage: jt dep remove TASK_ID DEPENDS_ON_ID"
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name"
+
+  local payload response
+  payload="$(jq -n --arg t "$task_id" --arg d "$depends_on" --arg p "$project_name" \
+    '{depends_on: $d, project: $p}')"
+  response="$(pg_curl DELETE "/api/tasks/${task_id}/deps" "$payload")" \
+    || die "Failed to remove dependency: ${task_id} -> ${depends_on}"
+
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // "unknown"')"
+    die "Failed to remove dependency: ${err_msg}"
+  fi
+  echo "Removed: $task_id no longer depends on $depends_on"
 }
 
 cmd_dep_add() {

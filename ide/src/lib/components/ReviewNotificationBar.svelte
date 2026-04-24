@@ -15,7 +15,20 @@
 
 	let { reviewSessions = [] }: { reviewSessions?: ReviewSession[] } = $props();
 
-	let dismissed = $state<Set<string>>(new Set());
+	function loadDismissed(): Set<string> {
+		if (typeof window === 'undefined') return new Set();
+		try {
+			const stored = localStorage.getItem('rnb-dismissed');
+			if (stored) return new Set(JSON.parse(stored));
+		} catch {}
+		return new Set();
+	}
+
+	let dismissed = $state<Set<string>>(loadDismissed());
+
+	$effect(() => {
+		localStorage.setItem('rnb-dismissed', JSON.stringify([...dismissed]));
+	});
 
 	// Clear dismissed state for sessions that have left review (so they re-notify next time)
 	$effect(() => {

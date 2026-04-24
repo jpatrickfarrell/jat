@@ -21,6 +21,7 @@
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { createListNav } from '$lib/actions/listNav';
 	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
+	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 
 	interface Task {
@@ -139,7 +140,12 @@
 	// Epics for assignment
 	let epics = $state<Task[]>([]);
 
-	// listNav composable for j/k navigation with wraparound
+	// Bulk-selection state (populated by listNav's selection layer)
+	let selectedIds = $state<Set<string>>(new Set());
+	let bulkAssignOpen = $state(false);
+	let bulkWorking = $state(false);
+
+	// listNav composable for j/k navigation with wraparound + V/Shift+J range-select
 	const nav = createListNav({
 		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
 		onSelect: (_el, idx) => {
@@ -149,7 +155,9 @@
 		onFocusChange: (_el, idx) => {
 			if (idx >= 0) selectedIdx = idx;
 		},
-		wraparound: true
+		wraparound: true,
+		selectable: true,
+		onSelectionChange: (ids) => { selectedIds = ids; }
 	});
 
 	onMount(() => {
@@ -426,12 +434,128 @@
 		await load();
 	}
 
+	// --- Bulk actions (operate on nav.selectedIds) ---
+
+	async function bulkClose() {
+		const ids = Array.from(selectedIds);
+		if (ids.length === 0 || bulkWorking) return;
+		if (!window.confirm(`Close ${ids.length} task${ids.length === 1 ? '' : 's'}?`)) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			for (const id of ids) {
+				try {
+					const res = await fetch(`/api/tasks/${id}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ status: 'closed', close_reason: 'Bulk-closed from triage' })
+					});
+					if (res.ok) { success++; broadcastTaskEvent('task-updated', id); }
+				} catch { /* continue */ }
+			}
+			addToast({ message: `Closed ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
+			nav.clearSelection();
+			await load();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkDelete() {
+		const ids = Array.from(selectedIds);
+		if (ids.length === 0 || bulkWorking) return;
+		if (!window.confirm(`Delete ${ids.length} task${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			for (const id of ids) {
+				try {
+					const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+					if (res.ok) { success++; broadcastTaskEvent('task-updated', id); }
+				} catch { /* continue */ }
+			}
+			addToast({ message: `Deleted ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
+			nav.clearSelection();
+			await load();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkSetStatus(status: string) {
+		const ids = Array.from(selectedIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			for (const id of ids) {
+				try {
+					const res = await fetch(`/api/tasks/${id}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ status })
+					});
+					if (res.ok) { success++; broadcastTaskEvent('task-updated', id); }
+				} catch { /* continue */ }
+			}
+			addToast({ message: `Updated ${success}/${ids.length} tasks → ${status}`, type: success === ids.length ? 'success' : 'info' });
+			nav.clearSelection();
+			await load();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkAssignToEpic(epicId: string) {
+		const ids = Array.from(selectedIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			for (const id of ids) {
+				try {
+					const res = await fetch(`/api/tasks/${id}/deps`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ parentId: epicId, childId: id })
+					});
+					if (res.ok) success++;
+				} catch { /* continue */ }
+			}
+			addToast({ message: `Assigned ${success}/${ids.length} tasks to epic`, type: success === ids.length ? 'success' : 'info' });
+			bulkAssignOpen = false;
+			nav.clearSelection();
+			await load();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
-		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape when not editing
+		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape/V/Shift+J/K when not editing
 		if (!editing && nav.handleKeydown(e)) return;
 
 		// Don't capture when typing in inputs
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+		// Bulk-action keys fire only when a selection exists; otherwise fall
+		// through to the single-task shortcuts so pre-selection behaviour is
+		// unchanged.
+		if (!editing && selectedIds.size > 0) {
+			switch (e.key) {
+				case 'c':
+					e.preventDefault(); bulkClose(); return;
+				case 'a':
+					e.preventDefault();
+					if (epics.length > 0) bulkAssignOpen = true;
+					else addToast({ message: 'No epics available to assign to', type: 'info' });
+					return;
+				case 'd':
+					e.preventDefault(); bulkDelete(); return;
+				case 's':
+					e.preventDefault(); bulkSetStatus('open'); return;
+			}
+		}
 
 		switch (e.key) {
 			case 's':
@@ -451,6 +575,7 @@
 				break;
 			case 'Escape':
 				if (editing) cancelEdit();
+				if (bulkAssignOpen) bulkAssignOpen = false;
 				break;
 			case '/':
 				if (!editing) {
@@ -827,15 +952,69 @@
 		{ key: 'j / ↓', description: 'Next item (wraps)' },
 		{ key: 'k / ↑', description: 'Previous item (wraps)' },
 		{ key: 'Enter', description: 'Open detail drawer' },
-		{ key: 's', description: 'Spawn agent (solve)' },
+		{ key: 'Space', description: 'Toggle selection (adds to bulk)' },
+		{ key: 'V', description: 'Enter/exit visual range-select mode' },
+		{ key: 'Shift+J / Shift+K', description: 'Range-select down/up' },
+		{ key: 's', description: 'Spawn agent (solve) / bulk: set status open' },
 		{ key: 'p', description: 'Promote to open' },
 		{ key: 'e', description: 'Edit task' },
 		{ key: 'r', description: 'Close task' },
-		{ key: 'd', description: 'Delete task' },
+		{ key: 'c', description: 'Bulk: close selected' },
+		{ key: 'a', description: 'Bulk: assign selected to epic' },
+		{ key: 'd', description: 'Delete task / bulk: delete selected' },
 		{ key: '/', description: 'Focus search' },
-		{ key: 'Esc', description: 'Cancel edit' },
+		{ key: 'Esc', description: 'Cancel edit / exit visual / clear selection' },
 	]}
 />
+
+<BulkActionBar
+	count={selectedIds.size}
+	label={selectedIds.size === 1 ? 'task selected' : 'tasks selected'}
+	actions={[
+		{ key: 's', label: 'Open', onAction: () => bulkSetStatus('open'), disabled: bulkWorking },
+		{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking },
+		{ key: 'a', label: 'Assign to Epic', onAction: () => { if (epics.length > 0) bulkAssignOpen = true; }, disabled: bulkWorking || epics.length === 0 },
+		{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking }
+	]}
+	onClear={() => nav.clearSelection()}
+/>
+
+{#if bulkAssignOpen}
+	<div
+		class="bulk-modal-overlay"
+		role="button"
+		tabindex="-1"
+		onclick={() => { bulkAssignOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') bulkAssignOpen = false; }}
+	>
+		<div
+			class="bulk-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Assign tasks to epic"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			tabindex="-1"
+		>
+			<div class="bulk-modal-header">
+				<h3>Assign {selectedIds.size} task{selectedIds.size === 1 ? '' : 's'} to epic</h3>
+				<button class="bulk-modal-close" onclick={() => { bulkAssignOpen = false; }} aria-label="Close">×</button>
+			</div>
+			<div class="bulk-modal-body">
+				{#each epics as epic (epic.id)}
+					<button
+						class="bulk-epic-btn"
+						disabled={bulkWorking}
+						onclick={() => bulkAssignToEpic(epic.id)}
+					>
+						<span class="bulk-epic-priority" style="color: {getPriorityColor(epic.priority)};">P{epic.priority}</span>
+						<span class="bulk-epic-title">{epic.title}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* ========== Layout ========== */
@@ -1354,5 +1533,99 @@
 		.filter-search-wrap { max-width: 100%; }
 		.header-actions { gap: 0.25rem; }
 		.btn-promote-all, .btn-dismiss-all { display: none; }
+	}
+
+	/* ========== Bulk Assign Modal ========== */
+	.bulk-modal-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		background: oklch(0 0 0 / 0.5);
+		backdrop-filter: blur(4px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		border: none;
+		cursor: default;
+	}
+	.bulk-modal {
+		background: oklch(0.16 0.02 250);
+		border: 1px solid oklch(0.30 0.03 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 20px 50px oklch(0 0 0 / 0.5);
+		width: 100%;
+		max-width: 480px;
+		max-height: 70vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.bulk-modal-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.875rem 1rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+	.bulk-modal-header h3 {
+		margin: 0;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+	}
+	.bulk-modal-close {
+		background: transparent;
+		border: none;
+		color: oklch(0.65 0.03 250);
+		font-size: 1.25rem;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+	}
+	.bulk-modal-close:hover {
+		background: oklch(0.24 0.03 250);
+		color: oklch(0.90 0.02 250);
+	}
+	.bulk-modal-body {
+		padding: 0.5rem;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.bulk-epic-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: transparent;
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.85 0.03 250);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s, border-color 0.1s;
+	}
+	.bulk-epic-btn:hover:not(:disabled) {
+		background: oklch(0.22 0.03 250);
+		border-color: oklch(0.40 0.05 250);
+	}
+	.bulk-epic-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.bulk-epic-priority {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.6875rem;
+		font-weight: 600;
+	}
+	.bulk-epic-title {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

@@ -23,12 +23,17 @@ export async function GET({ url }) {
 
 	try {
 		if (isPostgresProject(project)) {
-			const [tables, views, systemTables] = await Promise.all([
-				pgGetDataTables(project),
-				pgGetAllViews(project),
-				pgGetSystemTables(project),
-			]);
-			return json({ tables, views, systemTables });
+			try {
+				const [tables, views, systemTables] = await Promise.all([
+					pgGetDataTables(project),
+					pgGetAllViews(project),
+					pgGetSystemTables(project),
+				]);
+				return json({ tables, views, systemTables });
+			} catch (pgErr) {
+				console.warn(`[api/data/tables] postgres backend "${project}" unavailable:`, pgErr instanceof Error ? pgErr.message : pgErr);
+				return json({ tables: [], views: [], systemTables: [] });
+			}
 		}
 
 		const { path, exists } = await getProjectPath(project);

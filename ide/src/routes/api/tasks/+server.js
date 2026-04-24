@@ -54,18 +54,23 @@ export async function GET({ url }) {
 
 		if (pgBackend) {
 			// Async postgres path for graduated projects
-			if (scheduled === 'true') {
-				tasks = await pgBackend.getScheduled({ projectName: project });
-			} else {
-				/** @type {import('../../../../../lib/tasks-backend.js').ListOptions} */
-				const filters = { projectName: project };
-				if (status) filters.status = status;
-				if (priority !== null) filters.priority = parseInt(priority);
-				if (closedAfter) filters.closedAfter = closedAfter;
-				if (closedBefore) filters.closedBefore = closedBefore;
-				if (updatedAfter) filters.updatedAfter = updatedAfter;
-				if (updatedBefore) filters.updatedBefore = updatedBefore;
-				tasks = await pgBackend.list(filters);
+			try {
+				if (scheduled === 'true') {
+					tasks = await pgBackend.getScheduled({ projectName: project });
+				} else {
+					/** @type {import('../../../../../lib/tasks-backend.js').ListOptions} */
+					const filters = { projectName: project };
+					if (status) filters.status = status;
+					if (priority !== null) filters.priority = parseInt(priority);
+					if (closedAfter) filters.closedAfter = closedAfter;
+					if (closedBefore) filters.closedBefore = closedBefore;
+					if (updatedAfter) filters.updatedAfter = updatedAfter;
+					if (updatedBefore) filters.updatedBefore = updatedBefore;
+					tasks = await pgBackend.list(filters);
+				}
+			} catch (err) {
+				console.warn(`[api/tasks] postgres backend "${project}" unavailable:`, err instanceof Error ? err.message : err);
+				tasks = [];
 			}
 		} else if (scheduled === 'true') {
 			tasks = getScheduledTasks({ projectName: project || undefined });

@@ -74,6 +74,40 @@ function getAudioDate(filePath) {
 }
 
 /**
+ * Duration of an audio file in seconds via ffprobe. Returns null on failure.
+ * @param {string} filePath
+ * @returns {number|null}
+ */
+function getAudioDurationSec(filePath) {
+	try {
+		const result = execSync(
+			`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}" 2>/dev/null`,
+			{ encoding: 'utf-8', timeout: 5000 }
+		).trim();
+		const n = parseFloat(result);
+		return isNaN(n) ? null : n;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Calculate a dynamic whisperx timeout based on audio duration.
+ * Uses 3x the audio length as the budget, with a 10-minute floor and
+ * 12-hour ceiling. Accounts for ffmpeg conversion + transcription + diarization.
+ * @param {number|null} durationSec
+ * @returns {number} timeout in milliseconds
+ */
+function whisperxTimeout(durationSec) {
+	const MULTIPLIER = 3;
+	const FLOOR_MS = 10 * 60 * 1000;       // 10 minutes minimum
+	const CEILING_MS = 12 * 60 * 60 * 1000; // 12 hours maximum
+	if (!durationSec) return 60 * 60 * 1000; // 1hr fallback if ffprobe fails
+	const budget = Math.round(durationSec * 1000 * MULTIPLIER);
+	return Math.min(CEILING_MS, Math.max(FLOOR_MS, budget));
+}
+
+/**
  * Transcribe audio file with diarization and organize into suggested tasks
  * (runs in background).
  * @param {string} audioPath
@@ -84,7 +118,10 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
 
-	vlog(`Received audio (diarize): ${audioPath}`);
+	// Measure duration before ffmpeg deletes the original file
+	const durationSec = getAudioDurationSec(audioPath);
+	const timeout = whisperxTimeout(durationSec);
+	vlog(`Received audio (diarize): ${audioPath}${durationSec ? ` — ${Math.round(durationSec)}s audio, ${Math.round(timeout/60000)}min timeout` : ''}`);
 
 	// Step 1: Convert to 16kHz mono WAV
 	vlog('Converting to WAV...');
@@ -104,7 +141,7 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 		vlog('Transcribing with whisperx (diarize)...');
 		let text;
 		try {
-			text = await transcribe(wavPath, { diarize: true });
+			text = await transcribe(wavPath, { diarize: true, timeout });
 		} catch (transcribeErr) {
 			vlog(`ERROR: ${transcribeErr.message}`);
 			try { unlinkSync(wavPath); } catch {}

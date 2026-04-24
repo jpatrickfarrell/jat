@@ -203,9 +203,17 @@ export async function GET({ url }) {
 
 		// Route to postgres for graduated projects; fall through to SQLite otherwise.
 		const pgUrl = getPostgresUrlForProject(project);
-		const bases = pgUrl
-			? await pgBases.listBases(pgUrl, { project, alwaysInjectOnly })
-			: getBases(path, { alwaysInjectOnly });
+		let bases;
+		if (pgUrl) {
+			try {
+				bases = await pgBases.listBases(pgUrl, { project, alwaysInjectOnly });
+			} catch (pgErr) {
+				console.warn(`[api/bases] postgres backend "${project}" unavailable:`, pgErr instanceof Error ? pgErr.message : pgErr);
+				bases = [];
+			}
+		} else {
+			bases = getBases(path, { alwaysInjectOnly });
+		}
 		// Mark project notes bases with _projectNotes flag
 		let allBases = bases.map(b => {
 			if (b.id?.startsWith('_notes_')) {

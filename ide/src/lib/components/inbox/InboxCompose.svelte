@@ -28,6 +28,11 @@
 		requester_id?: string | null;
 		creator?: TaskActor | null;
 		creator_id?: string | null;
+		// Needed by the action-preview panel so it can honestly describe the
+		// state transitions the buttons will cause. Optional so the component
+		// still works with the lighter task shapes callers pass today.
+		status?: string | null;
+		assignee?: string | null;
 	}
 
 	interface Props {
@@ -48,6 +53,12 @@
 		// reassignment + advance. Returning a promise keeps the compose in its
 		// submitting state until the route finishes.
 		onSendAndRoute?: (text: string) => void | Promise<void>;
+		// Called when the dev sends an internal note + wants to hand the task
+		// off to a freshly-spawned agent instead of routing back to the reporter.
+		// Parent is responsible for calling /api/work/spawn (with preserveAssignee:
+		// true) and advancing to the next task. If unset, Internal+Spawn falls
+		// back to onSendAndRoute behaviour so the UI never dead-ends.
+		onSendAndSpawn?: (text: string) => void | Promise<void>;
 		onEscape?: () => void;
 		onFocus?: () => void;
 	}
@@ -59,6 +70,7 @@
 		currentUserEmail = "",
 		onSent,
 		onSendAndRoute,
+		onSendAndSpawn,
 		onEscape,
 		onFocus,
 	}: Props = $props();
@@ -71,6 +83,18 @@
 	const routingTarget = $derived(task ? resolveRoutingTarget(task as any) : null);
 	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
 
+	// Preview helpers — formatters for the expand-on-focus panel. Mirror the
+	// actual server-side logic so the panel never lies about what will happen.
+	// External route: status submitted/open → waiting, else unchanged.
+	const taskStatus = $derived<string>(task?.status ?? "unknown");
+	const currentAssignee = $derived<string>(task?.assignee?.trim() || "you");
+	const externalNextStatus = $derived(
+		taskStatus === "submitted" || taskStatus === "open"
+			? "waiting"
+			: taskStatus,
+	);
+	const statusWillChange = $derived(externalNextStatus !== taskStatus);
+
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	let draft = $state("");
 	let submitting = $state(false);
@@ -80,6 +104,14 @@
 	// true = internal (dev-only). Resets to external after every successful
 	// submit so you can't accidentally leak the next reply.
 	let isInternal = $state(false);
+
+	// Action-preview UI: expands on textarea focus OR button hover, describing
+	// the state deltas each button will cause. Goal: kill any mystery about
+	// what the routing/spawn buttons do before the click lands.
+	let composerFocused = $state(false);
+	let hoveredAction = $state<"send" | "route" | null>(null);
+	const previewOpen = $derived(composerFocused || hoveredAction !== null);
+	const previewAction = $derived(hoveredAction ?? "route");
 
 	export function focus() {
 		textarea?.focus();
@@ -154,22 +186,37 @@
 		if (submitting) return;
 		const text = draft.trim();
 
-		// Empty comment → confirm before routing (per jat-nm0nq.4 spec).
+		// Two flows behind one button, depending on the visibility toggle:
+		//
+		//   External  → post comment + route-to-reporter (reassign, status=waiting)
+		//   Internal  → post internal note + spawn an agent to work the task
+		//               (status=in_progress, dev stays as assignee)
+		//
+		// The external path is the legacy "Send + Route". The internal path is
+		// "Brief and Spawn" — the dev is handing off to an agent with context,
+		// not bouncing the task back to the reporter.
+		const sendInternal = isInternal;
+		const isSpawnFlow = sendInternal && !!onSendAndSpawn;
+
+		// Empty comment → confirm before acting (per jat-nm0nq.4 spec). Wording
+		// adapts to the active flow so the consequence is explicit.
 		if (!text) {
-			const ok = confirm(
-				"Route without sending a comment? The task will be reassigned and marked waiting.",
-			);
+			const msg = isSpawnFlow
+				? "Spawn an agent without a note? The task will move to in_progress and a new session will start."
+				: sendInternal
+					? "Route without sending a note? The task will be reassigned and marked waiting — nothing is sent to the reporter."
+					: "Route without sending a comment? The task will be reassigned and marked waiting.";
+			const ok = confirm(msg);
 			if (!ok) return;
 		}
 
 		submitting = true;
 		error = null;
 
-		// Track whether the comment actually landed so a retry after a routing
-		// failure doesn't double-post.
+		// Track whether the comment actually landed so a retry after the
+		// downstream step fails doesn't double-post.
 		let commentSent = false;
 
-		const sendInternal = isInternal;
 		try {
 			// Post the comment first (skip when empty so we don't create blank notes).
 			if (text) {
@@ -196,19 +243,22 @@
 				commentSent = true;
 				onSent?.(data.comment);
 				// Drop the now-posted draft so a retry won't duplicate the comment
-				// if the downstream route fails.
+				// if the downstream step fails.
 				draft = "";
-				// Reset visibility to external — the routing still proceeds below,
-				// but the *next* draft should start fresh.
 				isInternal = false;
 			}
 
-			// Hand off to the page: reassign to requester + status=waiting + advance.
-			// If the parent throws we keep the (empty) draft and surface the error.
-			await onSendAndRoute?.(text);
+			// Hand off to the parent. If the parent throws we keep the (empty)
+			// draft and surface the error.
+			if (isSpawnFlow) {
+				await onSendAndSpawn?.(text);
+			} else {
+				await onSendAndRoute?.(text);
+			}
 		} catch (e: any) {
-			const base = e?.message || "Failed to send and route";
-			error = commentSent ? `Comment sent but routing failed: ${base}` : base;
+			const action = isSpawnFlow ? "spawn" : "route";
+			const base = e?.message || `Failed to send and ${action}`;
+			error = commentSent ? `Comment sent but ${action} failed: ${base}` : base;
 		} finally {
 			submitting = false;
 		}
@@ -302,7 +352,13 @@
 			: "Reply… (Enter to send, Ctrl+↵ to send+route)"}
 		disabled={submitting}
 		onkeydown={handleKey}
-		onfocus={() => onFocus?.()}
+		onfocus={() => {
+			composerFocused = true;
+			onFocus?.();
+		}}
+		onblur={() => {
+			composerFocused = false;
+		}}
 		aria-label={isInternal ? "Internal note" : "Reply to task"}
 	></textarea>
 	<div class="compose-actions">
@@ -368,6 +424,10 @@
 				class="btn btn-xs {isInternal ? 'btn-warning' : 'btn-ghost'}"
 				disabled={submitting || !draft.trim()}
 				onclick={send}
+				onmouseenter={() => (hoveredAction = "send")}
+				onmouseleave={() => (hoveredAction = null)}
+				onfocus={() => (hoveredAction = "send")}
+				onblur={() => (hoveredAction = null)}
 				title={isInternal
 					? "Post internal note (Enter) — not sent to reporter"
 					: "Send comment (Enter)"}
@@ -379,17 +439,67 @@
 				class="btn btn-xs btn-primary"
 				disabled={submitting}
 				onclick={sendAndRoute}
+				onmouseenter={() => (hoveredAction = "route")}
+				onmouseleave={() => (hoveredAction = null)}
+				onfocus={() => (hoveredAction = "route")}
+				onblur={() => (hoveredAction = null)}
 				title={isInternal
-					? "Post internal note and route to requester (Ctrl+Enter). Note stays hidden from reporter."
+					? "Post internal note and spawn an agent (Ctrl+Enter). Dev stays as assignee."
 					: "Send and route to requester (Ctrl+Enter)"}
 			>
 				{#if submitting}
 					<span class="loading loading-spinner loading-xs"></span>
 				{/if}
-				{isInternal ? "Internal + Route" : "Send + Route"}
+				{isInternal ? "Internal + Spawn" : "Send + Route"}
 			</button>
 		</div>
 	</div>
+
+	<!-- Action preview — expands on textarea focus or button hover/focus.
+	     Describes state deltas so you know exactly what each button will do
+	     before committing to the click. Reads from the same logic the
+	     handlers use so it can't drift from reality. -->
+	{#if previewOpen}
+		<div class="action-preview" role="note" aria-live="polite">
+			{#if previewAction === "send"}
+				<span class="preview-label">On click:</span>
+				{#if isInternal}
+					Posts an <b class="label-internal">internal</b> note · task status
+					<code>{taskStatus}</code> unchanged · no assignee change · reporter
+					sees nothing.
+				{:else}
+					Posts an <b class="label-external">external</b> reply · task
+					status <code>{taskStatus}</code> unchanged · reporter sees it in
+					the widget.
+				{/if}
+			{:else if isInternal}
+				<span class="preview-label">On click:</span>
+				Posts an <b class="label-internal">internal</b> note · spawns a new
+				agent · status <code>{taskStatus}</code>
+				<span class="arrow">→</span>
+				<code class="code-next">in_progress</code> ·
+				<b>you stay as assignee</b> ({currentAssignee}).
+			{:else if statusWillChange}
+				<span class="preview-label">On click:</span>
+				Posts an <b class="label-external">external</b> reply · status
+				<code>{taskStatus}</code>
+				<span class="arrow">→</span>
+				<code class="code-next">{externalNextStatus}</code> · assignee
+				<code>{currentAssignee}</code>
+				<span class="arrow">→</span>
+				<code class="code-next">{routingName}</code> · advances to next
+				task.
+			{:else}
+				<span class="preview-label">On click:</span>
+				Posts an <b class="label-external">external</b> reply · status
+				<code>{taskStatus}</code> unchanged · assignee
+				<code>{currentAssignee}</code>
+				<span class="arrow">→</span>
+				<code class="code-next">{routingName}</code> · advances to next
+				task.
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -538,5 +648,73 @@
 		background: oklch(0.70 0.18 25 / 0.08);
 		border: 1px solid oklch(0.70 0.18 25 / 0.25);
 		border-radius: 0.25rem;
+	}
+
+	.action-preview {
+		margin-top: 0.125rem;
+		padding: 0.375rem 0.625rem;
+		font-size: 0.6875rem;
+		line-height: 1.4;
+		color: oklch(0.80 0.03 250);
+		background: oklch(0.15 0.01 250 / 0.6);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 0.25rem;
+		animation: preview-fade-in 120ms ease-out;
+	}
+
+	.action-preview .preview-label {
+		font-weight: 600;
+		opacity: 0.7;
+		margin-right: 0.25rem;
+	}
+
+	.action-preview code {
+		padding: 0 0.25rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.625rem;
+		background: oklch(0.20 0.02 250);
+		border-radius: 0.1875rem;
+	}
+
+	.action-preview .code-next {
+		background: oklch(0.25 0.05 200 / 0.6);
+		color: oklch(0.90 0.08 200);
+	}
+
+	.action-preview .arrow {
+		margin: 0 0.125rem;
+		opacity: 0.6;
+	}
+
+	.action-preview .label-internal {
+		color: oklch(0.75 0.15 85);
+	}
+
+	.action-preview .label-external {
+		color: oklch(0.75 0.12 200);
+	}
+
+	/* When internal mode tints the whole compose, the preview panel picks up
+	 * a matching border so it reads as part of the same surface. */
+	.compose-internal .action-preview {
+		background: oklch(0.75 0.15 85 / 0.05);
+		border-color: oklch(0.75 0.15 85 / 0.3);
+	}
+
+	@keyframes preview-fade-in {
+		from {
+			opacity: 0;
+			transform: translateY(-2px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.action-preview {
+			animation: none;
+		}
 	}
 </style>

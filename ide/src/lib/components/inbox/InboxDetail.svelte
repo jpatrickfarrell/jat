@@ -73,6 +73,7 @@
 		onEscapeCompose?: () => void;
 		onComposeFocus?: () => void;
 		onSendAndRoute?: (taskId: string, text: string) => void;
+		onSendAndSpawn?: (taskId: string, text: string) => void;
 		onTaskUpdated?: (patch: Partial<Task> & { id: string }) => void;
 		onDismissed?: (taskId: string) => void;
 	}
@@ -85,6 +86,7 @@
 		onEscapeCompose,
 		onComposeFocus,
 		onSendAndRoute,
+		onSendAndSpawn,
 		onTaskUpdated,
 		onDismissed,
 	}: Props = $props();
@@ -248,6 +250,10 @@
 
 	function handleSendAndRoute(text: string) {
 		onSendAndRoute?.(task.id, text);
+	}
+
+	function handleSendAndSpawn(text: string) {
+		onSendAndSpawn?.(task.id, text);
 	}
 
 	async function copyPageUrl(url: string) {
@@ -567,6 +573,7 @@
 		{currentUserEmail}
 		onSent={handleSent}
 		onSendAndRoute={handleSendAndRoute}
+		onSendAndSpawn={handleSendAndSpawn}
 		onEscape={() => onEscapeCompose?.()}
 		onFocus={() => onComposeFocus?.()}
 	/>

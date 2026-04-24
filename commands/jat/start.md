@@ -180,6 +180,8 @@ DATE_7=$(date -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d); jt
 jt update "$TASK_ID" --status in_progress --assignee "$AGENT_NAME" --files "relevant/files/**"
 ```
 
+**Preserve-assignee mode.** If you were spawned with a `--preserve-assignee` argument (or the invocation otherwise signals that the human dev should remain as the task assignee — e.g. the IDE's "Internal + Spawn" flow), **omit `--assignee "$AGENT_NAME"`** from the command above. Still set `--status in_progress` and `--files`. The spawn API has already recorded your agent program/model on the task; session pairing on /tasks is driven by signals, not assignee. Do not attempt to set the assignee back later in this session.
+
 #### 3B: Emit Working Signal
 
 ```bash

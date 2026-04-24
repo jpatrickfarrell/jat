@@ -721,6 +721,52 @@
 		advanceAfterRoute(taskId);
 	}
 
+	// --- Send + Spawn ----------------------------------------------------
+	//
+	// Called by InboxCompose in Internal + Spawn mode. The composer has
+	// already posted the internal note. Our job:
+	//   1. POST /api/work/spawn with preserveAssignee=true so the dev stays
+	//      as task.assignee and the agent picks up the note + starts work.
+	//      The spawn API handles the status→in_progress flip server-side.
+	//   2. Update local task state so the UI reacts immediately.
+	//   3. Flash the row + advance selection, same shape as route.
+	//
+	// Any thrown error propagates back into the compose for error display.
+	async function handleSendAndSpawn(taskId: string, _text: string) {
+		const task = tasks.find((t) => t.id === taskId);
+		if (!task) {
+			throw new Error("Task not found");
+		}
+
+		const res = await fetch("/api/work/spawn", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ taskId, preserveAssignee: true }),
+		});
+		if (!res.ok) {
+			const errBody = await res.json().catch(() => ({}));
+			throw new Error(
+				errBody.error || errBody.message || `Spawn failed (HTTP ${res.status})`,
+			);
+		}
+
+		// Reflect status=in_progress locally. Assignee stays put by design —
+		// that's the whole point of preserveAssignee. Session pairing will
+		// surface via the signals layer on /tasks.
+		const idx = tasks.findIndex((t) => t.id === taskId);
+		if (idx >= 0) {
+			tasks[idx] = {
+				...tasks[idx],
+				status: "in_progress",
+			};
+		}
+
+		triggerFlash(taskId);
+
+		await tick();
+		advanceAfterRoute(taskId);
+	}
+
 	function triggerFlash(taskId: string) {
 		flashTaskId = taskId;
 		if (flashTimer) clearTimeout(flashTimer);
@@ -1769,6 +1815,7 @@
 				onEscapeCompose={handleEscapeCompose}
 				onComposeFocus={() => (focusZone = "compose")}
 				onSendAndRoute={handleSendAndRoute}
+				onSendAndSpawn={handleSendAndSpawn}
 				onTaskUpdated={handleTaskUpdated}
 				onDismissed={handleTaskDismissed}
 			/>

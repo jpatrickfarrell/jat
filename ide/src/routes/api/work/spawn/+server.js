@@ -629,9 +629,10 @@ function buildNonNativePrompt({ agentName, taskId, taskTitle, taskCommand, projN
  * @param {string} [params.taskCommand] - Task command (e.g. '/jat:start', '/jat:chat')
  * @param {string} [params.mode] - Spawn mode (e.g. 'planning')
  * @param {string} [params.basesContent] - Pre-rendered knowledge bases XML block
+ * @param {boolean} [params.preserveAssignee] - When true, pass `--preserve-assignee` to /jat:start so the agent skips its auto-claim of task.assignee
  * @returns {{ command: string, env: Record<string, string>, needsJatStart: boolean }}
  */
-function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle, taskCommand, mode, basesContent }) {
+function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle, taskCommand, mode, basesContent, preserveAssignee = false }) {
 	// Build environment variables
 	/** @type {Record<string, string>} */
 	const env = { AGENT_MAIL_URL };
@@ -752,8 +753,12 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 				// as the first user message in interactive mode. If a YOLO permissions
 				// dialog appears, the prompt queues behind it automatically.
 				const taskCmd = taskCommand || '/jat:start';
+				// When preserveAssignee=true, the dev stays as task.assignee.
+				// Pass --preserve-assignee so /jat:start skips its auto-claim step
+				// in Round 3A (see commands/jat/start.md).
+				const preserveFlag = preserveAssignee && taskId ? ' --preserve-assignee' : '';
 				const initialPrompt = taskId
-					? `${taskCmd} ${agentName} ${taskId}`
+					? `${taskCmd} ${agentName} ${taskId}${preserveFlag}`
 					: `/jat:start ${agentName}`;
 				const escapedPrompt = initialPrompt.replace(/'/g, "'\\''");
 				agentCmd += ` '${escapedPrompt}'`;
@@ -816,7 +821,13 @@ export async function POST({ request }) {
 			imagePath = null,
 			project = null,
 			mode = 'task',
-			command: explicitCommand = null
+			command: explicitCommand = null,
+			// When true, the spawn step does NOT change task.assignee — the
+			// caller (e.g. /inbox Internal + Spawn) wants the human dev to stay
+			// as the assignee of record while the agent does the work. Status
+			// still flips to in_progress and agent_program/model still update
+			// so session pairing on /tasks works normally.
+			preserveAssignee = false
 		} = body;
 		const explicitProjectProvided =
 			project !== null && project !== undefined && String(project).trim() !== '';
@@ -1019,21 +1030,28 @@ export async function POST({ request }) {
 
 		// Step 2: Assign task to new agent in JAT (if taskId provided)
 		// Route to postgres backend for graduated projects, sqlite otherwise.
+		//
+		// When preserveAssignee=true the dev stays as task.assignee — we only
+		// bump status + link the agent program/model. Session pairing on /tasks
+		// is driven by signals, so the agent still shows as actively working.
 		if (taskId) {
 			try {
+				/** @type {Record<string, any>} */
 				const updates = {
 					status: 'in_progress',
-					assignee: agentName,
 					agent_program: selectedAgent.id,
 					model: selectedModel.shortName,
 				};
+				if (!preserveAssignee) {
+					updates.assignee = agentName;
+				}
 				if (pgBackend) {
 					// For graduated (postgres) projects, also set assignee_id to the
 					// configured JAT agent user so Meadow-style UIs show the task as
 					// being worked by an agent. The DB trigger auto-stashes the
 					// prior assignee_id into previous_assignee_id, so completion
 					// can restore the original owner.
-					if (projectName) {
+					if (!preserveAssignee && projectName) {
 						try {
 							const cfg = await getProjectConfig(projectName);
 							if (cfg?.jat_agent_user_id) {
@@ -1044,10 +1062,10 @@ export async function POST({ request }) {
 						}
 					}
 					await pgBackend.update(taskId, updates);
-					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in Postgres`);
+					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in Postgres${preserveAssignee ? ' (assignee preserved)' : ''}`);
 				} else {
 					updateTask(taskId, updates);
-					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in local SQLite`);
+					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in local SQLite${preserveAssignee ? ' (assignee preserved)' : ''}`);
 				}
 			} catch (err) {
 				const errorDetail = err instanceof Error ? err.message : String(err);
@@ -1237,7 +1255,8 @@ export async function POST({ request }) {
 			taskTitle: task?.title,
 			taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
 			mode,
-			basesContent: inlineBases
+			basesContent: inlineBases,
+			preserveAssignee
 		});
 
 		console.log(`[spawn] Agent command: ${agentCmd.substring(0, 100)}...`);
@@ -1270,7 +1289,8 @@ export async function POST({ request }) {
 				taskTitle: task?.title,
 				taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
 				mode,
-				basesContent: inlineBases
+				basesContent: inlineBases,
+				preserveAssignee
 			});
 			const escapedRemoteAgentCmd = shellEscape(remoteAgentCmd);
 

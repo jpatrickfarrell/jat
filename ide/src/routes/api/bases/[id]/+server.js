@@ -7,6 +7,17 @@
 import { json } from '@sveltejs/kit';
 import { getBase, updateBase, deleteBase } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../lib/bases-postgres.js';
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params, url }) {
@@ -23,7 +34,10 @@ export async function GET({ params, url }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = getBase(path, baseId);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = pgUrl
+			? await pgBases.getBase(pgUrl, baseId)
+			: getBase(path, baseId);
 		if (!base) {
 			return json({ error: `Base not found: ${baseId}` }, { status: 404 });
 		}
@@ -63,7 +77,10 @@ export async function PUT({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = updateBase(path, baseId, updates);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = pgUrl
+			? await pgBases.updateBase(pgUrl, baseId, updates)
+			: updateBase(path, baseId, updates);
 		return json({ success: true, base });
 	} catch (error) {
 		if (error.message.includes('not found')) {
@@ -93,7 +110,10 @@ export async function DELETE({ params, url }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const result = deleteBase(path, baseId);
+		const pgUrl = getPostgresUrlForProject(project);
+		const result = pgUrl
+			? await pgBases.deleteBase(pgUrl, baseId)
+			: deleteBase(path, baseId);
 		if (result.changes === 0) {
 			return json({ error: `Base not found: ${baseId}` }, { status: 404 });
 		}

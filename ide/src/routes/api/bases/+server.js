@@ -9,9 +9,25 @@
 import { json } from '@sveltejs/kit';
 import { getBases, createBase, initBasesDb } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { resolveBackendForProject } from '../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../lib/bases-postgres.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
+
+/**
+ * Resolve a project's postgres DSN, or null if the project is sqlite-backed
+ * (or not found / misconfigured).  Errors are swallowed so routes can fall
+ * through to the SQLite path without leaking config details.
+ */
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 const GLOBAL_BASES_DIR = join(homedir(), '.config', 'jat', 'bases');
 
@@ -185,7 +201,11 @@ export async function GET({ url }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const bases = getBases(path, { alwaysInjectOnly });
+		// Route to postgres for graduated projects; fall through to SQLite otherwise.
+		const pgUrl = getPostgresUrlForProject(project);
+		const bases = pgUrl
+			? await pgBases.listBases(pgUrl, { project, alwaysInjectOnly })
+			: getBases(path, { alwaysInjectOnly });
 		// Mark project notes bases with _projectNotes flag
 		let allBases = bases.map(b => {
 			if (b.id?.startsWith('_notes_')) {
@@ -244,22 +264,38 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Auto-init bases tables in data.db if needed
-		initBasesDb(path);
-
-		const base = createBase(path, {
-			name,
-			project,
-			description,
-			blocks,
-			// Legacy fields — createBase handles conversion to blocks
-			content,
-			source_type,
-			context_query,
-			source_config,
-			always_inject,
-			token_estimate,
-		});
+		const pgUrl = getPostgresUrlForProject(project);
+		let base;
+		if (pgUrl) {
+			base = await pgBases.createBase(pgUrl, {
+				name,
+				project,
+				description,
+				blocks,
+				content,
+				source_type,
+				context_query,
+				source_config,
+				always_inject,
+				token_estimate,
+			});
+		} else {
+			// Auto-init bases tables in data.db if needed
+			initBasesDb(path);
+			base = createBase(path, {
+				name,
+				project,
+				description,
+				blocks,
+				// Legacy fields — createBase handles conversion to blocks
+				content,
+				source_type,
+				context_query,
+				source_config,
+				always_inject,
+				token_estimate,
+			});
+		}
 
 		return json({ success: true, base }, { status: 201 });
 	} catch (error) {

@@ -1,7 +1,29 @@
 /**
  * Server-side data store integration
- * Wraps lib/data.js for use in SvelteKit server routes
+ * Wraps lib/data.js for use in SvelteKit server routes.
+ *
+ * Postgres-backed projects use the `pg*` re-exports below (from
+ * lib/data-postgres.js). Call isPostgresProject(projectName) to decide
+ * which path to take; the SQLite exports remain sync, the pg exports
+ * are async.
  */
+
+export {
+	isPostgresProject,
+	getDataTables as pgGetDataTables,
+	getTableSchema as pgGetTableSchema,
+	getTableRows as pgGetTableRows,
+	getColumnMetadata as pgGetColumnMetadata,
+	createDataTable as pgCreateDataTable,
+	dropDataTable as pgDropDataTable,
+	insertRow as pgInsertRow,
+	updateRow as pgUpdateRow,
+	deleteRow as pgDeleteRow,
+	getAllViews as pgGetAllViews,
+	getSystemTables as pgGetSystemTables,
+	queryDataTable as pgQueryDataTable,
+	execDataSql as pgExecDataSql,
+} from '../../../../lib/data-postgres.js';
 
 export {
 	// Init

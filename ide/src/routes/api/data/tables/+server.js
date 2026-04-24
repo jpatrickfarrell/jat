@@ -5,7 +5,13 @@
  * DELETE /api/data/tables?project=X&table=Y - Drop table
  */
 import { json } from '@sveltejs/kit';
-import { getDataTables, createDataTable, dropDataTable, initDataDb, getAllViews, getSystemTables, isSystemTable } from '$lib/server/jat-data.js';
+import {
+	getDataTables, createDataTable, dropDataTable, initDataDb,
+	getAllViews, getSystemTables, isSystemTable,
+	isPostgresProject,
+	pgGetDataTables, pgCreateDataTable, pgDropDataTable,
+	pgGetAllViews, pgGetSystemTables,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -16,6 +22,15 @@ export async function GET({ url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			const [tables, views, systemTables] = await Promise.all([
+				pgGetDataTables(project),
+				pgGetAllViews(project),
+				pgGetSystemTables(project),
+			]);
+			return json({ tables, views, systemTables });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -50,6 +65,11 @@ export async function POST({ request }) {
 			return json({ error: 'At least one column is required' }, { status: 400 });
 		}
 
+		if (isPostgresProject(project)) {
+			await pgCreateDataTable(project, name, columns, { displayName, description });
+			return json({ success: true, table: name });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -80,6 +100,11 @@ export async function DELETE({ url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			await pgDropDataTable(project, table);
+			return json({ success: true });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });

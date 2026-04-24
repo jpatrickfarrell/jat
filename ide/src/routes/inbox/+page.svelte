@@ -725,46 +725,61 @@
 	//
 	// Called by InboxCompose in Internal + Spawn mode. The composer has
 	// already posted the internal note. Our job:
-	//   1. POST /api/work/spawn with preserveAssignee=true so the dev stays
-	//      as task.assignee and the agent picks up the note + starts work.
-	//      The spawn API handles the status→in_progress flip server-side.
-	//   2. Update local task state so the UI reacts immediately.
-	//   3. Flash the row + advance selection, same shape as route.
+	//   1. Fire POST /api/work/spawn with preserveAssignee=true (don't await
+	//      — the spawn API takes 30-45s because of Claude Code startup-stall
+	//      recovery, and we don't want the user staring at a spinner that
+	//      whole time).
+	//   2. Optimistically flip local status to in_progress + flash + advance
+	//      so the inbox reacts immediately, same feel as pressing Space or
+	//      the ActionBar spawn button.
+	//   3. If the spawn fetch errors after the fact, surface a toast-style
+	//      error via console + a status revert. The comment is already
+	//      posted regardless, so the user's note isn't lost.
 	//
-	// Any thrown error propagates back into the compose for error display.
-	async function handleSendAndSpawn(taskId: string, _text: string) {
+	// The returned promise resolves as soon as the optimistic update is done,
+	// so InboxCompose's submitting spinner clears immediately.
+	function handleSendAndSpawn(taskId: string, _text: string) {
 		const task = tasks.find((t) => t.id === taskId);
 		if (!task) {
 			throw new Error("Task not found");
 		}
 
-		const res = await fetch("/api/work/spawn", {
+		// Optimistic: flip local status + advance immediately. The session
+		// card will appear on /work once the signal layer catches up; no need
+		// to wait for the HTTP response.
+		const idx = tasks.findIndex((t) => t.id === taskId);
+		if (idx >= 0) {
+			tasks[idx] = { ...tasks[idx], status: "in_progress" };
+		}
+		triggerFlash(taskId);
+		tick().then(() => advanceAfterRoute(taskId));
+
+		// Fire the spawn in the background. Failures are logged + surface
+		// via a rollback so the inbox doesn't lie about the task state.
+		fetch("/api/work/spawn", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ taskId, preserveAssignee: true }),
-		});
-		if (!res.ok) {
-			const errBody = await res.json().catch(() => ({}));
-			throw new Error(
-				errBody.error || errBody.message || `Spawn failed (HTTP ${res.status})`,
-			);
-		}
-
-		// Reflect status=in_progress locally. Assignee stays put by design —
-		// that's the whole point of preserveAssignee. Session pairing will
-		// surface via the signals layer on /tasks.
-		const idx = tasks.findIndex((t) => t.id === taskId);
-		if (idx >= 0) {
-			tasks[idx] = {
-				...tasks[idx],
-				status: "in_progress",
-			};
-		}
-
-		triggerFlash(taskId);
-
-		await tick();
-		advanceAfterRoute(taskId);
+		})
+			.then(async (res) => {
+				if (!res.ok) {
+					const errBody = await res.json().catch(() => ({}));
+					const msg =
+						errBody.error ||
+						errBody.message ||
+						`Spawn failed (HTTP ${res.status})`;
+					console.error(`[inbox] Spawn for ${taskId} failed: ${msg}`);
+					// Roll back the optimistic status flip so the task
+					// reappears in the inbox on next filter pass.
+					const j = tasks.findIndex((t) => t.id === taskId);
+					if (j >= 0 && tasks[j].status === "in_progress") {
+						tasks[j] = { ...tasks[j], status: task.status };
+					}
+				}
+			})
+			.catch((err) => {
+				console.error(`[inbox] Spawn for ${taskId} errored:`, err);
+			});
 	}
 
 	function triggerFlash(taskId: string) {

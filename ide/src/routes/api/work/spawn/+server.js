@@ -23,7 +23,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
 import Database from 'better-sqlite3';
@@ -389,6 +389,67 @@ function registerAgentInDb(agentName, projectPath, model, program = 'claude-code
 }
 
 const execAsync = promisify(exec);
+
+/**
+ * Look for an active tmux session already working on the given taskId by
+ * scanning the signal files under /tmp/. Returns the session + agent name of
+ * the first match whose tmux session is still alive, or null if none.
+ *
+ * The normal spawn guard checks `jat-${task.assignee}` — that only works when
+ * the task was assigned to the agent on spawn. For preserveAssignee=true flows
+ * (e.g. /inbox Internal + Spawn) the assignee stays as the dev, so the normal
+ * check silently passes and duplicate spawns sneak through. This function is
+ * the catch-all: any active signal with a matching taskId means an agent is
+ * already on it.
+ *
+ * @param {string} taskId
+ * @returns {Promise<{ sessionName: string, agentName: string } | null>}
+ */
+async function findActiveSessionForTask(taskId) {
+	if (!taskId) return null;
+	const SIGNAL_DIR = '/tmp';
+	const PREFIX = 'jat-signal-tmux-jat-';
+	const SUFFIX = '.json';
+	let entries;
+	try {
+		entries = readdirSync(SIGNAL_DIR);
+	} catch {
+		return null;
+	}
+	for (const entry of entries) {
+		if (!entry.startsWith(PREFIX) || !entry.endsWith(SUFFIX)) continue;
+		// Extract just the agent name (e.g. "CalmCliff" from "jat-signal-tmux-jat-CalmCliff.json")
+		const agentName = entry.slice(PREFIX.length, -SUFFIX.length);
+		const sessionName = `jat-${agentName}`;
+		let signal;
+		try {
+			signal = JSON.parse(readFileSync(`${SIGNAL_DIR}/${entry}`, 'utf-8'));
+		} catch {
+			continue;
+		}
+		// Different signal shapes — check all the places the taskId lands.
+		const signalTaskId =
+			signal?.taskId ||
+			signal?.task_id ||
+			signal?.data?.taskId ||
+			signal?.data?.task_id;
+		if (signalTaskId !== taskId) continue;
+		// Task matches — verify the tmux session is actually alive. A stale
+		// signal file from a dead session shouldn't block a fresh spawn.
+		try {
+			const { stdout } = await execAsync(
+				`tmux has-session -t ${shellEscape(sessionName)} 2>/dev/null && echo "alive" || echo "dead"`
+			);
+			if (stdout.trim() === 'alive') {
+				return { sessionName, agentName };
+			}
+		} catch {
+			// tmux check failed — err on the side of NOT blocking (another
+			// guard or the eventual fetch will surface real problems).
+		}
+	}
+	return null;
+}
 
 /**
  * @typedef {Object} TaskForRouting
@@ -973,28 +1034,57 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Step 0a: Guard against duplicate spawns for the same task
-		// If task is already in_progress with an assigned agent that has an active tmux session,
-		// reject the spawn to prevent creating orphan "planning sessions"
-		if (task && task.status === 'in_progress' && task.assignee) {
-			const existingSessionName = `jat-${task.assignee}`;
-			try {
-				const { stdout } = await execAsync(`tmux has-session -t ${shellEscape(existingSessionName)} 2>/dev/null && echo "exists" || echo "none"`);
-				if (stdout.trim() === 'exists') {
-					console.log(`[spawn] Task ${taskId} already in_progress with agent ${task.assignee} (session ${existingSessionName} active)`);
-					return json({
-						error: 'Task already has an active agent',
-						message: `Task ${taskId} is already being worked on by agent ${task.assignee}`,
-						existingAgent: task.assignee,
-						existingSession: existingSessionName,
-						taskId
-					}, { status: 409 });
+		// Step 0a: Guard against duplicate spawns for the same task.
+		//
+		// This check runs in two passes:
+		//   1. FAST PATH — if task.assignee points at an agent (e.g. "CalmCliff"),
+		//      check whether tmux session jat-CalmCliff is alive. This catches
+		//      the normal spawn flow where the agent took assignee on start.
+		//   2. SIGNAL SCAN — if pass 1 didn't catch a conflict, scan signal
+		//      files for any active session signaling this taskId. This
+		//      catches preserveAssignee flows (e.g. /inbox Internal + Spawn)
+		//      where task.assignee is the dev, not an agent, so pass 1 is
+		//      structurally blind.
+		//
+		// Either way: task already being worked on → 409, don't orphan another
+		// agent on the same task.
+		if (task && task.status === 'in_progress') {
+			// Pass 1: assignee-keyed check (fast, covers the common case)
+			if (task.assignee) {
+				const existingSessionName = `jat-${task.assignee}`;
+				try {
+					const { stdout } = await execAsync(`tmux has-session -t ${shellEscape(existingSessionName)} 2>/dev/null && echo "exists" || echo "none"`);
+					if (stdout.trim() === 'exists') {
+						console.log(`[spawn] Task ${taskId} already in_progress with agent ${task.assignee} (session ${existingSessionName} active)`);
+						return json({
+							error: 'Task already has an active agent',
+							message: `Task ${taskId} is already being worked on by agent ${task.assignee}`,
+							existingAgent: task.assignee,
+							existingSession: existingSessionName,
+							taskId
+						}, { status: 409 });
+					}
+					// Session doesn't exist - agent died, allow respawn (signal
+					// scan below still runs to catch preserve-assignee cases).
+					console.log(`[spawn] Task ${taskId} was in_progress with ${task.assignee} but session is gone, checking signal scan next`);
+				} catch (err) {
+					// tmux check failed - fall through to signal scan
+					console.warn(`[spawn] Could not check existing session for ${task.assignee}:`, err);
 				}
-				// Session doesn't exist - agent died, allow respawn
-				console.log(`[spawn] Task ${taskId} was in_progress with ${task.assignee} but session is gone, allowing respawn`);
-			} catch (err) {
-				// tmux check failed - allow spawn to proceed
-				console.warn(`[spawn] Could not check existing session for ${task.assignee}:`, err);
+			}
+			// Pass 2: signal-file scan (catches preserveAssignee spawns where
+			// the assignee-keyed check is structurally unable to find the
+			// active agent).
+			const active = await findActiveSessionForTask(taskId);
+			if (active) {
+				console.log(`[spawn] Task ${taskId} already being worked on by ${active.agentName} (via signal scan)`);
+				return json({
+					error: 'Task already has an active agent',
+					message: `Task ${taskId} is already being worked on by agent ${active.agentName}`,
+					existingAgent: active.agentName,
+					existingSession: active.sessionName,
+					taskId
+				}, { status: 409 });
 			}
 		}
 

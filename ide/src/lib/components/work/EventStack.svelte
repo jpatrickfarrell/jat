@@ -596,6 +596,11 @@
 		return filteredEvents;
 	}
 
+	/** Force an immediate timeline refresh */
+	export function refresh() {
+		fetchTimeline();
+	}
+
 	// Generate a key for a suggested task
 	function getSuggestedTaskKey(task: SuggestedTask, index: number): string {
 		return `${task.title}-${index}`;
@@ -1256,7 +1261,7 @@
 				{@const eventKey = getEventKey(event)}
 				{@const swipeOffset = swipeOffsets.get(eventKey) ?? 0}
 				{@const isRevealed = revealedEventKey === eventKey}
-				<div class="swipe-event-wrap relative overflow-hidden rounded-lg">
+				<div class="swipe-event-wrap relative overflow-hidden rounded-lg" in:fly={{ y: -6, duration: 250, easing: cubicOut }}>
 					<!-- Reveal tray (behind card, visible when swiped left) -->
 					{#if isRevealed || swipeOffset < -10}
 						<div class="swipe-tray" style="width: 100px;">

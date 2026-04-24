@@ -92,7 +92,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		const dedupedLines = rawLines.filter(line => {
 			try {
 				const ev = JSON.parse(line);
-				const key = `${ev.timestamp}|${ev.type}`;
+				// Use voice_id+type as dedup key when present (more precise than timestamp for voice events)
+				const key = (ev as any).voice_id
+					? `vid:${(ev as any).voice_id}|${ev.type}`
+					: `${ev.timestamp}|${ev.type}`;
 				if (seen.has(key)) return false;
 				seen.add(key);
 				return true;
@@ -112,6 +115,26 @@ export const GET: RequestHandler = async ({ params, url }) => {
 			} catch {
 				// Skip malformed lines
 			}
+		}
+
+		// Collapse voice_id-linked entries: last write wins per voice_id.
+		// This makes processing → tasks → dismissed transitions seamless.
+		if (isVoiceSession) {
+			const voiceIdMap = new Map<string, TimelineEvent>();
+			const noIdEvents: TimelineEvent[] = [];
+			for (const event of events) {
+				const vid = (event as any).voice_id;
+				if (vid) {
+					voiceIdMap.set(vid, event); // last write per id wins
+				} else {
+					noIdEvents.push(event);
+				}
+			}
+			// Strip dismissed entries — they exist only to cancel their predecessor
+			const collapsed = Array.from(voiceIdMap.values()).filter(e => e.type !== 'dismissed');
+			events = [...noIdEvents, ...collapsed];
+			// Re-sort chronologically (collapsed events have their completion timestamp)
+			events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 		}
 
 		// Filter by timestamp if 'since' provided

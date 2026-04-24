@@ -14,11 +14,12 @@
 	 *   - Merge: multi-select events, concatenate transcripts, re-run organize-tasks
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import EventStack from '$lib/components/work/EventStack.svelte';
 	import type { SuggestedTaskWithState } from '$lib/types/signals';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
-	import { slide } from 'svelte/transition';
+	import { slide, fly } from 'svelte/transition';
+	import { cubicOut, cubicIn } from 'svelte/easing';
 
 	let {
 		availableProjects = [],
@@ -41,7 +42,15 @@
 	let hasItems = $state(false);
 	let itemCount = $state(0);
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
-	let eventStackRef = $state<{ dismissAll: () => void; dismissEvents: (keys: string[]) => void; getVisibleEvents: () => any[] } | null>(null);
+	let eventStackRef = $state<{ dismissAll: () => void; dismissEvents: (keys: string[]) => void; getVisibleEvents: () => any[]; refresh: () => void } | null>(null);
+
+	// In-flight and failed voice jobs
+	let processingItems = $state<{ voice_id: string; title: string; sizeBytes: number; stage: string; timestamp: string }[]>([]);
+	let failedItems = $state<{ voice_id: string; title: string; error: string; timestamp: string }[]>([]);
+
+	// Track processing→completed transition to trigger EventStack refresh
+	let prevProcessingCount = 0;
+	let prevCompletedCount = 0;
 
 	// Merge mode internal state
 	let mergeEvents = $state<any[]>([]);
@@ -49,12 +58,36 @@
 
 	async function checkForItems() {
 		try {
-			const res = await fetch('/api/sessions/jat-voice/timeline?limit=50');
+			const res = await fetch('/api/sessions/jat-voice/timeline?limit=100');
 			if (!res.ok) return;
 			const data = await res.json();
 			const events = Array.isArray(data.events) ? data.events : [];
-			const newHas = events.length > 0;
-			const newCount = events.length;
+
+			// Separate processing/failed from completed events
+			const newProcessing = events
+				.filter((e: any) => e.type === 'processing')
+				.map((e: any) => ({ voice_id: e.voice_id, title: e.data?.title || 'Voice note', sizeBytes: e.data?.sizeBytes || 0, stage: e.data?.stage || 'transcribing', timestamp: e.timestamp }));
+			const newFailed = events
+				.filter((e: any) => e.type === 'failed')
+				.map((e: any) => ({ voice_id: e.voice_id, title: e.data?.title || 'Voice note', error: e.data?.error || 'Processing failed', timestamp: e.timestamp }));
+
+			const completedEvents = events.filter((e: any) => e.type !== 'processing' && e.type !== 'failed');
+			const newCompletedCount = completedEvents.length;
+
+			// Detect processing→completed transition: force EventStack refresh + flash
+			const wasProcessing = prevProcessingCount > 0;
+			const nowDone = newProcessing.length === 0;
+			if (wasProcessing && nowDone && newCompletedCount > prevCompletedCount) {
+				eventStackRef?.refresh();
+			}
+			prevProcessingCount = newProcessing.length;
+			prevCompletedCount = newCompletedCount;
+
+			processingItems = newProcessing;
+			failedItems = newFailed;
+
+			const newHas = newCompletedCount > 0 || newProcessing.length > 0 || newFailed.length > 0;
+			const newCount = newCompletedCount + newProcessing.length + newFailed.length;
 			if (newHas !== hasItems || newCount !== itemCount) {
 				hasItems = newHas;
 				itemCount = newCount;
@@ -65,13 +98,27 @@
 		}
 	}
 
-	onMount(() => {
-		checkForItems();
-		pollTimer = setInterval(checkForItems, 30000);
+	async function dismissFailed(voiceId: string) {
+		failedItems = failedItems.filter(i => i.voice_id !== voiceId);
+		try {
+			await fetch('/api/tasks/voice-dismiss', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ voice_id: voiceId })
+			});
+		} catch { /* ignore */ }
+	}
+
+	// Poll faster when there are in-flight jobs
+	$effect(() => {
+		const hasInFlight = processingItems.length > 0;
+		if (pollTimer) clearInterval(pollTimer);
+		pollTimer = setInterval(checkForItems, hasInFlight ? 5000 : 30000);
+		return () => { if (pollTimer) clearInterval(pollTimer); };
 	});
 
-	onDestroy(() => {
-		if (pollTimer) clearInterval(pollTimer);
+	onMount(() => {
+		checkForItems();
 	});
 
 	export function dismissAll() {
@@ -244,6 +291,47 @@
 </div>
 {/if}
 
+<!-- Processing / failed in-flight jobs -->
+{#if processingItems.length > 0 || failedItems.length > 0}
+<div class="voice-inflight-list">
+	{#each processingItems as item (item.voice_id)}
+	<div class="voice-inflight-card processing" class:stage-generating={item.stage === 'generating'} transition:slide={{ duration: 150 }}>
+		<div class="voice-inflight-spinner" class:spinner-generating={item.stage === 'generating'}></div>
+		<div class="voice-inflight-body">
+			<span class="voice-inflight-title">{item.title}</span>
+			<div class="voice-inflight-status-wrap">
+				{#key item.stage}
+				<span
+					class="voice-inflight-status"
+					in:fly={{ y: 5, duration: 180, easing: cubicOut }}
+					out:fly={{ y: -5, duration: 120, easing: cubicIn }}
+				>
+					{#if item.stage === 'generating'}
+						Generating tasks
+					{:else if item.sizeBytes > 5_000_000}
+						Transcribing — large file, may take several minutes
+					{:else}
+						Transcribing
+					{/if}<span class="voice-inflight-dots"></span>
+				</span>
+				{/key}
+			</div>
+		</div>
+	</div>
+	{/each}
+	{#each failedItems as item (item.voice_id)}
+	<div class="voice-inflight-card failed" transition:slide={{ duration: 150 }}>
+		<div class="voice-inflight-icon">⚠</div>
+		<div class="voice-inflight-body">
+			<span class="voice-inflight-title">{item.title}</span>
+			<span class="voice-inflight-status">{item.error}</span>
+		</div>
+		<button class="voice-inflight-dismiss" onclick={() => dismissFailed(item.voice_id)} title="Dismiss">✕</button>
+	</div>
+	{/each}
+</div>
+{/if}
+
 <!-- EventStack renders nothing when there are no voice events -->
 <EventStack
 	bind:this={eventStackRef}
@@ -256,6 +344,132 @@
 />
 
 <style>
+
+.voice-inflight-list {
+	border-bottom: 1px solid oklch(0.25 0.02 250 / 0.5);
+}
+
+.voice-inflight-card {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	padding: 0.625rem 0.75rem;
+	border-bottom: 1px solid oklch(0.22 0.02 250 / 0.4);
+}
+
+.voice-inflight-card.processing {
+	background: oklch(0.65 0.14 240 / 0.07);
+	animation: inflight-pulse-blue 2.4s ease-in-out infinite;
+}
+
+.voice-inflight-card.processing.stage-generating {
+	background: oklch(0.65 0.14 85 / 0.07);
+	animation: inflight-pulse-amber 2.4s ease-in-out infinite;
+}
+
+@keyframes inflight-pulse-blue {
+	0%, 100% { background: oklch(0.65 0.14 240 / 0.07); }
+	50%       { background: oklch(0.65 0.14 240 / 0.13); }
+}
+
+@keyframes inflight-pulse-amber {
+	0%, 100% { background: oklch(0.65 0.14 85 / 0.07); }
+	50%       { background: oklch(0.65 0.14 85 / 0.13); }
+}
+
+.voice-inflight-card.failed {
+	background: oklch(0.60 0.14 25 / 0.08);
+}
+
+.voice-inflight-spinner {
+	width: 14px;
+	height: 14px;
+	border: 1.5px solid oklch(0.65 0.14 240 / 0.22);
+	border-top-color: oklch(0.72 0.18 240);
+	border-radius: 50%;
+	animation: spin 0.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+	flex-shrink: 0;
+	transition: border-top-color 0.4s ease, border-color 0.4s ease;
+}
+
+.voice-inflight-spinner.spinner-generating {
+	border-color: oklch(0.65 0.14 85 / 0.22);
+	border-top-color: oklch(0.78 0.17 85);
+}
+
+.voice-inflight-status-wrap {
+	position: relative;
+	overflow: hidden;
+	height: 1.1em;
+}
+
+.voice-inflight-status {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+}
+
+.voice-inflight-dots::after {
+	content: '';
+	animation: inflight-dots 1.4s steps(4, end) infinite;
+}
+
+@keyframes inflight-dots {
+	0%   { content: ''; }
+	25%  { content: '.'; }
+	50%  { content: '..'; }
+	75%  { content: '...'; }
+	100% { content: ''; }
+}
+
+.voice-inflight-icon {
+	font-size: 0.875rem;
+	color: oklch(0.70 0.15 50);
+	flex-shrink: 0;
+	width: 14px;
+	text-align: center;
+}
+
+.voice-inflight-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	min-width: 0;
+	flex: 1;
+}
+
+.voice-inflight-title {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: oklch(0.80 0.04 250);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.voice-inflight-status {
+	font-size: 0.6875rem;
+	color: oklch(0.55 0.04 250);
+	white-space: nowrap;
+}
+
+.voice-inflight-dismiss {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: oklch(0.55 0.04 250);
+	font-size: 0.75rem;
+	padding: 0.125rem 0.25rem;
+	border-radius: 0.25rem;
+	flex-shrink: 0;
+	line-height: 1;
+}
+
+.voice-inflight-dismiss:hover {
+	color: oklch(0.75 0.15 25);
+	background: oklch(0.60 0.14 25 / 0.15);
+}
 
 .voice-merge-list {
 	border-bottom: 1px solid oklch(0.25 0.02 250 / 0.5);
@@ -325,5 +539,16 @@
 
 @keyframes voice-spin {
 	to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.voice-inflight-card.processing,
+	.voice-inflight-card.processing.stage-generating {
+		animation: none;
+	}
+	.voice-inflight-dots::after {
+		content: '...';
+		animation: none;
+	}
 }
 </style>

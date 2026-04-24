@@ -74,7 +74,7 @@ export function loadProjects() {
  * @returns {Promise<string>} cleaned transcript text (optionally speaker-labeled)
  */
 export function transcribe(wavPath, opts = {}) {
-	const timeout = opts.timeout ?? 600_000;
+	const timeout = opts.timeout ?? 3_600_000; // 1 hour — long recordings need it
 	const maxBuffer = opts.maxBuffer ?? 10 * 1024 * 1024;
 
 	if (opts.diarize === true) {
@@ -256,6 +256,45 @@ function extractSpeakerLabels(transcript) {
  * @param {'organize'|'kb'|'summary'} [mode]
  * @returns {Promise<{tasks: Array, summary: string, title: string, knowledgeBase: Array}>}
  */
+/**
+ * Attempt to salvage truncated JSON from ollama by closing open structures.
+ * Strategy 1: append common suffixes to close arrays/objects.
+ * Strategy 2: walk back to the last complete `}`, close from there.
+ * Returns parsed object or null if unrecoverable.
+ * @param {string} str
+ * @param {Function} log
+ * @returns {object|null}
+ */
+function repairTruncatedJson(str, log) {
+	// Phase 1: simple suffix closures (truncated after a complete value)
+	const suffixes = ['"}', '"}]', '"]}', '"}]}', '],"summary":""}', ']}', '}'];
+	for (const s of suffixes) {
+		try {
+			const r = JSON.parse(str + s);
+			log(`ollama JSON repaired (+suffix), tasks=${Array.isArray(r.tasks) ? r.tasks.length : 0}`);
+			return r;
+		} catch {}
+	}
+
+	// Phase 2: find the last `}` and try closing from there
+	// This handles truncation mid-task-object — we lose the incomplete task but keep the rest
+	for (let i = str.length - 1; i > str.length / 3; i--) {
+		if (str[i] !== '}') continue;
+		const trunc = str.slice(0, i + 1);
+		for (const s of [']}', '],"summary":""}', '],"knowledgeBase":[],"summary":""}', '}']) {
+			try {
+				const r = JSON.parse(trunc + s);
+				const taskCount = Array.isArray(r.tasks) ? r.tasks.length : 0;
+				log(`ollama JSON repaired (truncated at last }, +suffix), tasks=${taskCount}`);
+				return r;
+			} catch {}
+		}
+		break; // only try the last `}` — don't walk the whole string
+	}
+
+	return null;
+}
+
 export async function organizeTranscript(transcript, projects = [], mode = 'organize') {
 	if (mode !== 'organize' && mode !== 'kb' && mode !== 'summary') {
 		throw new Error(`Unsupported organizeTranscript mode: ${mode}`);
@@ -333,7 +372,6 @@ ${transcript}`
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "title": "Short descriptive title for this voice note",
-  "summary": "<your detailed topic-by-topic notes here>"${speakersSchemaLine},
   "tasks": [
     {
       "type": "task",
@@ -351,7 +389,8 @@ Return ONLY valid JSON (no markdown, no explanation):
       "content": "Detailed reference content worth remembering long-term",
       "project": "project-name-here"
     }
-  ]
+  ],
+  "summary": "<your detailed topic-by-topic notes here>"${speakersSchemaLine}
 }
 
 Task types: task, feature, bug, chore
@@ -369,9 +408,8 @@ ${transcript}`;
 		body: JSON.stringify({
 			model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
 			prompt,
-			format: 'json',
 			stream: true,
-			options: { temperature: 0.3, num_predict: 2048 }
+			options: { temperature: 0.3, num_predict: -1, num_ctx: 131072 }
 		}),
 		signal: AbortSignal.timeout(300_000)
 	});
@@ -414,7 +452,19 @@ ${transcript}`;
 
 	vlog(`ollama done: ${tokenCount} tokens generated in ${((Date.now() - (firstTokenAt || ollamaStart)) / 1000).toFixed(1)}s`);
 
-	const parsed = JSON.parse(fullResponse);
+	// Strip markdown code fences if model wrapped the JSON (happens without format:'json')
+	const jsonStr = fullResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+	let parsed;
+	try {
+		parsed = JSON.parse(jsonStr);
+	} catch (jsonErr) {
+		parsed = repairTruncatedJson(jsonStr, vlog);
+		if (!parsed) {
+			const preview = jsonStr.slice(0, 200).replace(/\n/g, '\\n');
+			throw new Error(`ollama returned invalid JSON: ${jsonErr.message} — raw (first 200 chars): ${preview}`);
+		}
+	}
 	const title = typeof parsed.title === 'string' ? parsed.title : '';
 	const knowledgeBase = Array.isArray(parsed.knowledgeBase) ? parsed.knowledgeBase : [];
 	const speakers = diarized && parsed.speakers && typeof parsed.speakers === 'object' && !Array.isArray(parsed.speakers)
@@ -456,12 +506,13 @@ ${transcript}`;
  * @param {Array} knowledgeBase
  * @param {Object|null} speakers — map of SPEAKER_XX labels to names (diarized only)
  */
-export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = [], speakers = null) {
+export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = [], speakers = null, voiceId = null) {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const timelineFile = getVoiceTimelineFile();
 	mkdirSync(dirname(timelineFile), { recursive: true });
 	const event = {
 		type: 'tasks',
+		...(voiceId ? { voice_id: voiceId } : {}),
 		session_id: 'voice',
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
@@ -470,6 +521,53 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 	const line = JSON.stringify(event) + '\n';
 	appendFileSync(timelineFile, line);
 	// Also write to SSE timeline so VoiceInbox picks it up in real-time
+	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
+}
+
+/**
+ * Write a "processing" stub to the voice inbox immediately on upload so the
+ * UI can show a spinner while transcription + organisation run in the background.
+ * @param {string} voiceId — stable ID linking stub → completion/failure
+ * @param {string} title
+ * @param {number} [sizeBytes]
+ */
+export function appendProcessingToVoiceTimeline(voiceId, title, sizeBytes = 0, stage = 'transcribing') {
+	mkdirSync(TEMP_DIR, { recursive: true });
+	const timelineFile = getVoiceTimelineFile();
+	mkdirSync(dirname(timelineFile), { recursive: true });
+	const event = {
+		type: 'processing',
+		voice_id: voiceId,
+		session_id: 'voice',
+		tmux_session: 'jat-voice',
+		timestamp: new Date().toISOString(),
+		data: { title, sizeBytes, stage }
+	};
+	const line = JSON.stringify(event) + '\n';
+	appendFileSync(timelineFile, line);
+	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
+}
+
+/**
+ * Write a "failed" entry — collapses the "processing" stub for the same voiceId.
+ * @param {string} voiceId
+ * @param {string} title
+ * @param {string} errorMsg
+ */
+export function appendFailedToVoiceTimeline(voiceId, title, errorMsg) {
+	mkdirSync(TEMP_DIR, { recursive: true });
+	const timelineFile = getVoiceTimelineFile();
+	mkdirSync(dirname(timelineFile), { recursive: true });
+	const event = {
+		type: 'failed',
+		voice_id: voiceId,
+		session_id: 'voice',
+		tmux_session: 'jat-voice',
+		timestamp: new Date().toISOString(),
+		data: { title, error: errorMsg }
+	};
+	const line = JSON.stringify(event) + '\n';
+	appendFileSync(timelineFile, line);
 	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
 }
 
@@ -539,9 +637,8 @@ ${text}`;
 			body: JSON.stringify({
 				model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
 				prompt,
-				format: 'json',
 				stream: false,
-				options: { temperature: 0.3, num_predict: 64 }
+				options: { temperature: 0.3, num_predict: 64, num_ctx: 131072 }
 			}),
 			signal: AbortSignal.timeout(60_000)
 		});

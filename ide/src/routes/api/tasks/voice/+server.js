@@ -28,7 +28,9 @@ import {
 	loadProjects,
 	transcribe,
 	organizeTranscript,
-	appendToVoiceTimeline
+	appendToVoiceTimeline,
+	appendProcessingToVoiceTimeline,
+	appendFailedToVoiceTimeline
 } from '$lib/server/voice-core.js';
 import { buildTaskIdentity } from '$lib/server/task-identity.js';
 
@@ -173,7 +175,7 @@ function getAudioDate(filePath) {
  * @param {string|null} requester
  * @returns {Promise<{ tasks: {title: string, description: string}[], title: string }>}
  */
-function transcribeAndOrganize(audioPath, title, priority, requester) {
+function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = null) {
 	return new Promise((resolve) => {
 		const id = randomBytes(4).toString('hex');
 		const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
@@ -191,6 +193,7 @@ function transcribeAndOrganize(audioPath, title, priority, requester) {
 			if (convertErr) {
 				vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
+				if (voiceId) appendFailedToVoiceTimeline(voiceId, title, `Audio conversion failed: ${convertErr.message}`);
 				resolve({ tasks: [{ title, description: '' }], title });
 				return;
 			}
@@ -203,6 +206,7 @@ function transcribeAndOrganize(audioPath, title, priority, requester) {
 			} catch (transcribeErr) {
 				vlog(`ERROR: ${transcribeErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
+				if (voiceId) appendFailedToVoiceTimeline(voiceId, title, transcribeErr.message);
 				resolve({ tasks: [{ title, description: '' }], title });
 				return;
 			}
@@ -211,12 +215,13 @@ function transcribeAndOrganize(audioPath, title, priority, requester) {
 			try { unlinkSync(wavPath); } catch {}
 
 			vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
+			if (voiceId) appendProcessingToVoiceTimeline(voiceId, title, 0, 'generating');
 
 			// Step 3: Organize transcript into structured tasks via ollama
 			try {
 				const projects = loadProjects();
 				const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
-				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
+				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 				resolve({
 					tasks: tasks.length > 0
@@ -225,36 +230,24 @@ function transcribeAndOrganize(audioPath, title, priority, requester) {
 					title: tasks[0]?.title || organizedTitle || title
 				});
 			} catch (organizeErr) {
-				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
+				vlog(`ERROR: organize failed, saving transcript to voice inbox: ${organizeErr.message}`);
 
-				// Fallback: create a single task from the transcript directly
-				const projectPath = process.cwd().replace(/\/ide$/, '');
+				// Fallback: save transcript directly to voice timeline so it appears in voice inbox.
+				// Do NOT call SQLite createTask() here — the project may be postgres-backed.
 				try {
-					const fallbackIdentity = buildTaskIdentity({ source: 'voice' });
-					const createdTask = createTask({
-						projectPath,
+					appendToVoiceTimeline(
+						[{ title, description: text }],
+						text,
+						'',
 						title,
-						description: text,
-						type: 'task',
-						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'],
-						deps: [],
-						assignee: null,
-						requester: requester || fallbackIdentity.creator.source,
-						notes: '',
-						source: 'voice'
-					});
-					invalidateCache.tasks();
-					invalidateCache.agents();
-					_resetTaskCache();
-					emitEvent({
-						type: 'task_created',
-						source: 'voice_api',
-						data: { taskId: createdTask.id, title, type: 'task', priority, labels: ['voice'] }
-					});
-					vlog(`Fallback: task ${createdTask.id} created: "${title}"`);
+						[],
+						null,
+						voiceId
+					);
+					vlog(`Fallback: transcript "${title}" saved to voice inbox (${text.length} chars)`);
 				} catch (e) {
-					vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
+					vlog(`ERROR: Timeline fallback also failed: ${e.message}`);
+					if (voiceId) appendFailedToVoiceTimeline(voiceId, title, `Organize failed: ${organizeErr.message}`);
 				}
 				resolve({ tasks: [{ title, description: text || '' }], title });
 			}
@@ -281,9 +274,9 @@ export async function POST({ request }) {
 			const projects = loadProjects();
 			organizeTranscript(text, projects).then(({ tasks, summary, title, knowledgeBase }) => {
 				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
-				console.log(`[voice] Organized ${tasks.length} task(s) from text into voice inbox`);
+				vlog(`Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {
-				console.error('[voice] organize failed for text input:', err.message);
+				vlog(`ERROR: organize failed for text input: ${err.message}`);
 				// Fallback: single task
 				const now = new Date();
 				const timestamp = now.toLocaleString('en-US', {
@@ -379,15 +372,20 @@ export async function POST({ request }) {
 			});
 			if (!title) title = `Voice note ${timestamp}`;
 
-			try { const sz = statSync(audioTempPath).size; vlog(`Audio received: "${title}" (${(sz/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received: "${title}" — queuing transcription`); }
+			let sizeBytes = 0;
+			try { sizeBytes = statSync(audioTempPath).size; vlog(`Audio received: "${title}" (${(sizeBytes/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received: "${title}" — queuing transcription`); }
 
 			// Create a job ID for the widget to poll status
 			const jobId = randomUUID();
 			voiceJobs.set(jobId, { status: 'transcribing', title });
 
+			// Write processing stub immediately so VoiceInbox shows a spinner
+			const voiceId = randomBytes(8).toString('hex');
+			appendProcessingToVoiceTimeline(voiceId, title, sizeBytes);
+
 			// Fire and forget — transcription + organize happens in background
 			// Update voiceJobs with all tasks for widget review form
-			transcribeAndOrganize(audioTempPath, title, priority, postRequester).then((result) => {
+			transcribeAndOrganize(audioTempPath, title, priority, postRequester, voiceId).then((result) => {
 				voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
 			}).catch(() => {
 				voiceJobs.set(jobId, { status: 'open', tasks: [{ title, description: '' }], title });
@@ -396,6 +394,7 @@ export async function POST({ request }) {
 			return json({
 				ok: true,
 				id: jobId,
+				voice_id: voiceId,
 				success: true,
 				message: 'Recording received — transcribing in background. Task will appear shortly.'
 			}, { status: 202, headers: CORS_HEADERS });

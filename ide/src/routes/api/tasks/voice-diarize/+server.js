@@ -19,11 +19,6 @@
  * Optional JSON fields: { "title": "...", "project": "...", "priority": 2 }
  */
 import { json } from '@sveltejs/kit';
-import { createTask } from '$lib/server/jat-tasks.js';
-import { invalidateCache } from '$lib/server/cache.js';
-import { buildTaskIdentity } from '$lib/server/task-identity.js';
-import { _resetTaskCache } from '../../../api/agents/+server.js';
-import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { writeFileSync, unlinkSync, mkdirSync, statSync } from 'fs';
 import { exec, execSync } from 'child_process';
 import { randomBytes } from 'crypto';
@@ -34,7 +29,9 @@ import {
 	loadProjects,
 	transcribe,
 	organizeTranscript,
-	appendToVoiceTimeline
+	appendToVoiceTimeline,
+	appendProcessingToVoiceTimeline,
+	appendFailedToVoiceTimeline
 } from '$lib/server/voice-core.js';
 
 const CORS_HEADERS = {
@@ -83,7 +80,7 @@ function getAudioDate(filePath) {
  * @param {string} title
  * @param {number} priority
  */
-function transcribeAndOrganize(audioPath, title, priority) {
+function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 0) {
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
 
@@ -99,6 +96,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 		if (convertErr) {
 			vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
 			try { unlinkSync(wavPath); } catch {}
+			appendFailedToVoiceTimeline(voiceId, title, `Audio conversion failed: ${convertErr.message}`);
 			return;
 		}
 
@@ -110,51 +108,40 @@ function transcribeAndOrganize(audioPath, title, priority) {
 		} catch (transcribeErr) {
 			vlog(`ERROR: ${transcribeErr.message}`);
 			try { unlinkSync(wavPath); } catch {}
+			appendFailedToVoiceTimeline(voiceId, title, transcribeErr.message);
 			return;
 		}
 
 		try { unlinkSync(wavPath); } catch {}
 
 		vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
+		appendProcessingToVoiceTimeline(voiceId, title, 0, 'generating');
 
 		// Step 3: Organize transcript into structured tasks via ollama
 		try {
 			const projects = loadProjects();
 			const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
-			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
+			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId);
 			vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 		} catch (organizeErr) {
-			vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
+			vlog(`ERROR: organize failed, saving transcript to voice inbox: ${organizeErr.message}`);
 
-			// Fallback: create a single task from the transcript directly
-			const projectPath = process.cwd().replace(/\/ide$/, '');
+			// Fallback: save transcript directly to voice timeline so it appears in voice inbox.
+			// Do NOT call SQLite createTask() here — the project may be postgres-backed.
 			try {
-				const identity = buildTaskIdentity({ source: 'voice' });
-				const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
-				const createdTask = createTask({
-					projectPath,
+				appendToVoiceTimeline(
+					[{ title, description: text }],
+					text,
+					'',
 					title,
-					description: text,
-					type: 'task',
-					priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-					labels: ['voice'],
-					deps: [],
-					assignee: null,
-					notes: '',
-					creator: sqliteCreator,
-					approver: sqliteCreator
-				});
-				invalidateCache.tasks();
-				invalidateCache.agents();
-				_resetTaskCache();
-				emitEvent({
-					type: 'task_created',
-					source: 'voice_diarize_api',
-					data: { taskId: createdTask.id, title, type: 'task', priority, labels: ['voice'] }
-				});
-				vlog(`Fallback: task ${createdTask.id} created: "${title}"`);
+					[],
+					null,
+					voiceId
+				);
+				vlog(`Fallback: transcript "${title}" saved to voice inbox (${text.length} chars)`);
 			} catch (e) {
-				vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
+				vlog(`ERROR: Timeline fallback also failed: ${e.message}`);
+				appendFailedToVoiceTimeline(voiceId, title, `Organize failed: ${organizeErr.message}`);
 			}
 		}
 	});
@@ -175,35 +162,17 @@ export async function POST({ request }) {
 			}
 
 			const projects = loadProjects();
+			const fallbackTitle = body.title?.trim() || `Voice note ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`;
 			organizeTranscript(text, projects).then(({ tasks, summary, title, knowledgeBase }) => {
 				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
-				console.log(`[voice-diarize] Organized ${tasks.length} task(s) from text into voice inbox`);
+				vlog(`[voice-diarize] Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {
-				console.error('[voice-diarize] organize failed for text input:', err.message);
-				// Fallback: single task
-				const now = new Date();
-				const timestamp = now.toLocaleString('en-US', {
-					month: 'short', day: 'numeric', year: 'numeric',
-					hour: 'numeric', minute: '2-digit', hour12: true
-				});
-				const title = body.title?.trim() || `Voice note ${timestamp}`;
-				const priority = body.priority !== undefined ? parseInt(body.priority) : 2;
-				const projectPath = process.cwd().replace(/\/ide$/, '');
+				vlog(`[voice-diarize] organize failed for text input, saving to timeline: ${err.message}`);
 				try {
-					const identity = buildTaskIdentity({ source: 'voice' });
-					const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
-					createTask({
-						projectPath, title, description: text, type: 'task',
-						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'], deps: [], assignee: null, notes: '',
-						creator: sqliteCreator,
-						approver: sqliteCreator
-					});
-					invalidateCache.tasks();
-					invalidateCache.agents();
-					_resetTaskCache();
+					appendToVoiceTimeline([{ title: fallbackTitle, description: text }], text, '', fallbackTitle, []);
+					vlog(`[voice-diarize] Fallback: transcript "${fallbackTitle}" saved to voice inbox`);
 				} catch (e) {
-					console.error('[voice-diarize] Fallback task creation failed:', e);
+					vlog(`[voice-diarize] ERROR: Timeline fallback also failed: ${e.message}`);
 				}
 			});
 
@@ -261,13 +230,19 @@ export async function POST({ request }) {
 			});
 			if (!title) title = `Voice note ${timestamp}`;
 
-			try { const sz = statSync(audioTempPath).size; vlog(`Audio received (diarize): "${title}" (${(sz/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received (diarize): "${title}" — queuing transcription`); }
+			let sizeBytes = 0;
+			try { sizeBytes = statSync(audioTempPath).size; vlog(`Audio received (diarize): "${title}" (${(sizeBytes/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received (diarize): "${title}" — queuing transcription`); }
+
+			// Write processing stub immediately so VoiceInbox shows a spinner
+			const voiceId = randomBytes(8).toString('hex');
+			appendProcessingToVoiceTimeline(voiceId, title, sizeBytes);
 
 			// Fire and forget — transcription + organize happens in background
-			transcribeAndOrganize(audioTempPath, title, priority);
+			transcribeAndOrganize(audioTempPath, title, priority, voiceId, sizeBytes);
 
 			return json({
 				success: true,
+				voice_id: voiceId,
 				message: 'Recording received — transcribing with speaker identification. This may take several minutes for long recordings.'
 			}, { status: 202, headers: CORS_HEADERS });
 		}

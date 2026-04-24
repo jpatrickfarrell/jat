@@ -496,36 +496,79 @@
 	interface UniqueSession {
 		session_id: string;
 		agent_name?: string;
-		timestamp: string;  // Latest timestamp for this session
+		timestamp: string;       // Latest signal timestamp for this session
+		first_timestamp: string; // First (earliest) signal timestamp for this session
+		last_state?: string;     // Last session state (starting, working, review, completed, ...)
+		signal_count: number;    // Number of signals recorded for this session
 	}
 	const uniqueSessions = $derived.by((): UniqueSession[] => {
 		const sessionMap = new Map<string, UniqueSession>();
 
-		// First, add sessions from task signals
+		// Signals carry both `type` (e.g. "state", "review", "complete") and `state`
+		// (e.g. "working", "needs_input"). Prefer `state` when present.
+		const pickState = (s: TaskSignal): string | undefined => s.state || s.type;
+
 		for (const signal of taskSignals) {
 			if (!signal.session_id) continue;
 			const existing = sessionMap.get(signal.session_id);
-			if (!existing || signal.timestamp > existing.timestamp) {
+			if (!existing) {
 				sessionMap.set(signal.session_id, {
 					session_id: signal.session_id,
-					agent_name: signal.agent_name || existing?.agent_name,
-					timestamp: signal.timestamp
+					agent_name: signal.agent_name,
+					timestamp: signal.timestamp,
+					first_timestamp: signal.timestamp,
+					last_state: pickState(signal),
+					signal_count: 1
 				});
+			} else {
+				existing.signal_count += 1;
+				if (!existing.agent_name && signal.agent_name) {
+					existing.agent_name = signal.agent_name;
+				}
+				if (signal.timestamp > existing.timestamp) {
+					existing.timestamp = signal.timestamp;
+					existing.last_state = pickState(signal);
+				}
+				if (signal.timestamp < existing.first_timestamp) {
+					existing.first_timestamp = signal.timestamp;
+				}
 			}
 		}
 
 		// Fallback: if no signals, use recoverableSession (from recovery API)
 		// This handles cases where agent didn't emit signals but session is recoverable
 		if (sessionMap.size === 0 && recoverableSession) {
+			const ts = recoverableSession.lastActivity || new Date().toISOString();
 			sessionMap.set(recoverableSession.sessionId, {
 				session_id: recoverableSession.sessionId,
 				agent_name: recoverableSession.agentName,
-				timestamp: recoverableSession.lastActivity || new Date().toISOString()
+				timestamp: ts,
+				first_timestamp: ts,
+				last_state: undefined,
+				signal_count: 0
 			});
 		}
 		// Sort by timestamp descending (most recent first)
 		return Array.from(sessionMap.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 	});
+
+	// Map raw session state to SESSION_STATE_VISUALS key (handles underscore variants)
+	function sessionStateKey(state?: string): string | null {
+		if (!state) return null;
+		switch (state) {
+			case 'needs_input': return 'needs-input';
+			case 'review': return 'ready-for-review';
+			case 'complete': return 'completed';
+			default: return state;
+		}
+	}
+
+	// Short human label for a session state (e.g. "🔧 Working", "🔍 Review")
+	function sessionStateLabel(state?: string): string {
+		const key = sessionStateKey(state);
+		if (!key) return '';
+		return SESSION_STATE_VISUALS[key]?.shortLabel || '';
+	}
 
 	// Autofocus action for inputs
 	function autofocusAction(node: HTMLElement) {
@@ -2747,23 +2790,46 @@
 										{:else}
 											<div class="dropdown dropdown-end">
 												<button
+													tabindex="0"
 													class="btn btn-xs btn-primary gap-1"
 													disabled={resumingSessionId !== null}
+													title="Resume one of {uniqueSessions.length} previous sessions"
 												>
 													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
 														<path d="M8 5v14l11-7z"/>
 													</svg>
 													<span>Resume</span>
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+													</svg>
 												</button>
-												<ul class="dropdown-content z-50 menu p-1 shadow-lg bg-base-200 rounded-box w-48">
+												<ul tabindex="0" role="menu" class="dropdown-content menu rounded-box z-50 w-64 p-1 shadow-lg bg-base-200 border border-base-300">
 													{#each uniqueSessions as session}
 														<li>
 															<button
-																class="text-xs"
-																onclick={() => handleResumeSession(session.session_id, session.agent_name)}
+																class="text-xs flex flex-col items-start gap-0.5 py-1.5"
+																onclick={() => { handleResumeSession(session.session_id, session.agent_name); (document.activeElement as HTMLElement)?.blur(); }}
 																disabled={resumingSessionId !== null}
 															>
-																{session.agent_name}
+																<span class="flex items-center gap-1.5 w-full">
+																	{#if resumingSessionId === session.session_id}
+																		<span class="loading loading-spinner loading-xs"></span>
+																	{:else}
+																		<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+																			<path d="M8 5v14l11-7z"/>
+																		</svg>
+																	{/if}
+																	<span class="font-medium truncate">{session.agent_name || 'Session'}</span>
+																	{#if session.last_state}
+																		<span class="badge badge-xs ml-auto">{sessionStateLabel(session.last_state)}</span>
+																	{/if}
+																</span>
+																<span class="text-[11px] text-base-content/60 pl-[18px]">
+																	{formatRelativeTimestamp(session.timestamp)}
+																	{#if session.signal_count > 1}
+																		<span class="text-base-content/40">· {session.signal_count} events</span>
+																	{/if}
+																</span>
 															</button>
 														</li>
 													{/each}
@@ -2901,17 +2967,47 @@
 											</button>
 										{:else if uniqueSessions.length > 1}
 											<div class="dropdown dropdown-end">
-												<button tabindex="0" class="btn btn-xs btn-primary gap-1" disabled={resumingSessionId !== null}>
+												<button
+													tabindex="0"
+													class="btn btn-xs btn-primary gap-1"
+													disabled={resumingSessionId !== null}
+													title="Resume one of {uniqueSessions.length} previous sessions"
+												>
 													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
 														<path d="M8 5v14l11-7z"/>
 													</svg>
 													<span>Resume</span>
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+													</svg>
 												</button>
-												<ul class="dropdown-content z-50 menu p-1 shadow-lg bg-base-200 rounded-box w-48">
+												<ul tabindex="0" role="menu" class="dropdown-content menu rounded-box z-50 w-64 p-1 shadow-lg bg-base-200 border border-base-300">
 													{#each uniqueSessions as session}
 														<li>
-															<button class="text-xs" onclick={() => handleResumeSession(session.session_id, session.agent_name)} disabled={resumingSessionId !== null}>
-																{session.agent_name}
+															<button
+																class="text-xs flex flex-col items-start gap-0.5 py-1.5"
+																onclick={() => { handleResumeSession(session.session_id, session.agent_name); (document.activeElement as HTMLElement)?.blur(); }}
+																disabled={resumingSessionId !== null}
+															>
+																<span class="flex items-center gap-1.5 w-full">
+																	{#if resumingSessionId === session.session_id}
+																		<span class="loading loading-spinner loading-xs"></span>
+																	{:else}
+																		<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+																			<path d="M8 5v14l11-7z"/>
+																		</svg>
+																	{/if}
+																	<span class="font-medium truncate">{session.agent_name || 'Session'}</span>
+																	{#if session.last_state}
+																		<span class="badge badge-xs ml-auto">{sessionStateLabel(session.last_state)}</span>
+																	{/if}
+																</span>
+																<span class="text-[11px] text-base-content/60 pl-[18px]">
+																	{formatRelativeTimestamp(session.timestamp)}
+																	{#if session.signal_count > 1}
+																		<span class="text-base-content/40">· {session.signal_count} events</span>
+																	{/if}
+																</span>
 															</button>
 														</li>
 													{/each}
@@ -2981,23 +3077,33 @@
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 													</svg>
 												</button>
-												<ul tabindex="0" role="menu" class="dropdown-content menu rounded-box z-50 w-52 p-1 shadow-lg bg-base-200 border border-base-300">
+												<ul tabindex="0" role="menu" class="dropdown-content menu rounded-box z-50 w-64 p-1 shadow-lg bg-base-200 border border-base-300">
 													{#each uniqueSessions as session}
 														<li>
 															<button
-																class="text-xs"
-																onclick={() => { handleResumeSession(session.session_id, session.agent_name); document.activeElement?.blur(); }}
+																class="text-xs flex flex-col items-start gap-0.5 py-1.5"
+																onclick={() => { handleResumeSession(session.session_id, session.agent_name); (document.activeElement as HTMLElement)?.blur(); }}
 																disabled={resumingSessionId === session.session_id}
 															>
-																{#if resumingSessionId === session.session_id}
-																	<span class="loading loading-spinner loading-xs"></span>
-																{:else}
-																	<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-																		<path d="M8 5v14l11-7z"/>
-																	</svg>
-																{/if}
-																<span>{session.agent_name || 'Session'}</span>
-																<span class="text-base-content/50">{formatRelativeTimestamp(session.timestamp)}</span>
+																<span class="flex items-center gap-1.5 w-full">
+																	{#if resumingSessionId === session.session_id}
+																		<span class="loading loading-spinner loading-xs"></span>
+																	{:else}
+																		<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+																			<path d="M8 5v14l11-7z"/>
+																		</svg>
+																	{/if}
+																	<span class="font-medium truncate">{session.agent_name || 'Session'}</span>
+																	{#if session.last_state}
+																		<span class="badge badge-xs ml-auto">{sessionStateLabel(session.last_state)}</span>
+																	{/if}
+																</span>
+																<span class="text-[11px] text-base-content/60 pl-[18px]">
+																	{formatRelativeTimestamp(session.timestamp)}
+																	{#if session.signal_count > 1}
+																		<span class="text-base-content/40">· {session.signal_count} events</span>
+																	{/if}
+																</span>
 															</button>
 														</li>
 													{/each}

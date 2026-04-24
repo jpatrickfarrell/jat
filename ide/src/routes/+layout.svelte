@@ -30,7 +30,8 @@
 	import { connect as connectWebSocket, disconnect as disconnectWebSocket, subscribe as wsSubscribe, unsubscribe as wsUnsubscribe, setMessageRelay, setSubscriptionRouter, injectMessage, setFollowerConnected, subscribeDirect, unsubscribeDirect, type Channel } from '$lib/stores/websocket.svelte';
 	import { initLeaderElection, destroyLeaderElection, setWsCallbacks, relayToFollowers, onRelayedMessage, requestSubscribe, requestUnsubscribe, onRoleChange } from '$lib/utils/wsLeaderElection';
 	import { getExtraChannelsForRoute } from '$lib/config/wsChannelMap';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, setSubmittedTasksCount, syncSidebarFromPreferences, isMobileFullscreenOpen, sidebarState, sidebarHelpOpen, cycleSidebarState, navFlashRoute } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, setSubmittedTasksCount, syncSidebarFromPreferences, isMobileFullscreenOpen, sidebarState, sidebarHelpOpen, cycleSidebarState, navFlashRoute, openMobileSessionName } from '$lib/stores/drawerStore';
+	import MobileSessionDrawer from '$lib/components/work/MobileSessionDrawer.svelte';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession, jumpedToSessionName } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
@@ -140,6 +141,20 @@
 				project: getProjectFromTaskId(s.task?.id) || s.project || undefined,
 			})) satisfies ReviewSession[];
 	});
+
+	// Global MobileSessionDrawer — opened by ReviewNotificationBar chips from any non-/tasks page
+	let globalDrawerSessionName = $state<string | null>(null);
+	$effect(() => {
+		const unsub = openMobileSessionName.subscribe(name => {
+			if (!name || $page.url.pathname === '/tasks') return;
+			globalDrawerSessionName = name;
+			openMobileSessionName.set(null);
+		});
+		return unsub;
+	});
+	const globalDrawerSession = $derived(
+		globalDrawerSessionName ? getWorkSessions().find(s => s.sessionName === globalDrawerSessionName) ?? null : null
+	);
 
 	// Ready task count and list for Swarm button dropdown
 	let readyTaskCount = $state(0);
@@ -1663,6 +1678,75 @@
 	onFileSelect={handleGlobalSearchResult}
 	onProjectChange={handleProjectChange}
 />
+
+<!-- Global MobileSessionDrawer — opened by ReviewNotificationBar chips when not on /tasks -->
+{#if globalDrawerSessionName}
+	{@const gds = globalDrawerSession}
+	<MobileSessionDrawer
+		sessionName={globalDrawerSessionName}
+		agentName={gds?.agentName ?? globalDrawerSessionName.replace(/^jat-/, '')}
+		task={gds?.task ? { id: gds.task.id, title: gds.task.title, status: gds.task.status ?? 'open', priority: gds.task.priority, issue_type: gds.task.issue_type } : null}
+		project={gds?.project ?? (gds?.task?.id ? getProjectFromTaskId(gds.task.id) : null)}
+		tokens={gds?.tokens ?? 0}
+		cost={gds?.cost ?? 0}
+		sseState={gds?._sseState}
+		sseStateTimestamp={gds?._sseStateTimestamp}
+		created={gds?.created ?? ''}
+		attached={gds?.attached ?? false}
+		onClose={() => { globalDrawerSessionName = null; }}
+		onKillSession={async () => {
+			const sn = globalDrawerSessionName!;
+			globalDrawerSessionName = null;
+			await fetch(`/api/sessions/${encodeURIComponent(sn)}`, { method: 'DELETE' });
+		}}
+		onAttachSession={async () => {
+			await fetch(`/api/work/${encodeURIComponent(globalDrawerSessionName!)}/attach`, { method: 'POST' });
+		}}
+		onSendInput={async (text: string, type?: string) => {
+			await fetch(`/api/work/${encodeURIComponent(globalDrawerSessionName!)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(type === 'text' ? { input: text, type: 'text' } : { type: type ?? 'text', input: text })
+			});
+		}}
+		onAction={async (actionId: string) => {
+			const sn = globalDrawerSessionName!;
+			const task = globalDrawerSession?.task;
+			if (actionId === 'attach') {
+				await fetch(`/api/work/${encodeURIComponent(sn)}/attach`, { method: 'POST' });
+			} else if (actionId === 'kill' || actionId === 'cleanup') {
+				if (actionId === 'cleanup' && task) {
+					await fetch(`/api/tasks/${encodeURIComponent(task.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }).catch(() => {});
+				}
+				globalDrawerSessionName = null;
+				await fetch(`/api/sessions/${encodeURIComponent(sn)}`, { method: 'DELETE' });
+			} else if (actionId === 'interrupt') {
+				await fetch(`/api/work/${encodeURIComponent(sn)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+			} else if (actionId === 'escape') {
+				await fetch(`/api/work/${encodeURIComponent(sn)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
+			} else if (actionId === 'complete' || actionId === 'complete-kill') {
+				if (task) {
+					await fetch(`/api/sessions/${encodeURIComponent(sn)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'completing', data: { taskId: task.id, taskTitle: task.title } }) }).catch(() => {});
+				}
+				const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
+				for (const [type, body] of [['ctrl-u', {}], ['text', { input: cmd, type: 'text' }], ['enter', {}]] as const) {
+					await fetch(`/api/work/${encodeURIComponent(sn)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, ...body }) });
+					await new Promise(r => setTimeout(r, 75));
+				}
+			} else if (actionId === 'pause') {
+				globalDrawerSessionName = null;
+				if (task) {
+					await fetch(`/api/sessions/${encodeURIComponent(sn)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: task.id, taskTitle: task.title, reason: 'Paused via notification', killSession: true }) }).catch(() => {});
+				} else {
+					await fetch(`/api/sessions/${encodeURIComponent(sn)}`, { method: 'DELETE' });
+				}
+			} else if (actionId === 'view-task' && task) {
+				openTaskDrawer.set(task.id);
+			}
+		}}
+		onViewTask={(taskId) => { openTaskDrawer.set(taskId); }}
+	/>
+{/if}
 
 <!-- Sound Permission Toast -->
 {#if showSoundPrompt}

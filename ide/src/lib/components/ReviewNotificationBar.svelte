@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
-	import { jumpToSession } from '$lib/stores/hoveredSession';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import { openMobileSessionName } from '$lib/stores/drawerStore';
 
 	export interface ReviewSession {
 		sessionName: string;
@@ -56,15 +54,9 @@
 		dismissed = new Set(reviewSessions.map(s => s.sessionName));
 	}
 
-	async function goToSession(session: ReviewSession) {
-		const isOnTasks = $page.url.pathname === '/tasks';
+	function goToSession(session: ReviewSession) {
 		dismiss(session.sessionName);
-		if (!isOnTasks) {
-			await goto('/tasks');
-			setTimeout(() => jumpToSession(session.sessionName, session.agentName), 450);
-		} else {
-			jumpToSession(session.sessionName, session.agentName);
-		}
+		openMobileSessionName.set(session.sessionName);
 	}
 </script>
 

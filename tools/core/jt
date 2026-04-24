@@ -2986,6 +2986,128 @@ else:
 "
 }
 
+# `jt data columns <list|set|remove> ...` against the postgres backend.
+# Uses /api/data/tables/{tbl}/schema for `list` (which returns columnMeta
+# alongside the live column list) and the column-meta endpoint for set/remove.
+pg_data_columns() {
+  local subcmd="${1:-}"
+  [[ -n "$subcmd" ]] || die "Usage: jt data columns <list|set|remove> <table> [column] [type] [--config JSON]"
+  shift
+
+  case "$subcmd" in
+    list)
+      local table_name="${1:-}"
+      [[ -n "$table_name" ]] || die "Usage: jt data columns list <table> [--json]"
+      validate_table_name "$table_name"
+      local json_out=false
+      [[ "${2:-}" == "--json" ]] && json_out=true
+
+      require_ide_reachable
+      local project response
+      project="$(_pg_data_project)"
+      response="$(_pg_data_call GET "/api/data/tables/$(_pg_url_encode "$table_name")/schema?project=${project}" "Failed to fetch column metadata for $table_name")"
+
+      echo "$response" | JSON_OUT="$json_out" TABLE="$table_name" python3 -c "
+import sys, json, os
+data = json.load(sys.stdin)
+schema = data.get('schema', []) or []
+meta_map = data.get('columnMeta', {}) or {}
+json_out = os.environ['JSON_OUT'] == 'true'
+table = os.environ['TABLE']
+
+# Emit one entry per column that has metadata. Match SQLite's
+# 'list' output which only shows columns recorded in _columns.
+out = []
+for col in schema:
+    name = col.get('name', '')
+    m = meta_map.get(name) or {}
+    sem = col.get('semanticType') or m.get('semanticType') or m.get('semantic_type')
+    if not sem:
+        continue
+    cfg = m.get('config') or {}
+    if isinstance(cfg, str):
+        try: cfg = json.loads(cfg)
+        except: cfg = {}
+    out.append({
+        'column_name': name,
+        'semantic_type': sem,
+        'config': json.dumps(cfg) if cfg else '{}',
+    })
+
+if json_out:
+    print(json.dumps(out))
+else:
+    if not out:
+        print(f'No column metadata for {table}. Set types with: jt data columns set {table} <column> <type>')
+    else:
+        for r in out:
+            cfg_str = ''
+            if r['config'] and r['config'] != '{}':
+                cfg_str = f\"  config={r['config']}\"
+            print(f\"  {r['column_name']}: {r['semantic_type']}{cfg_str}\")
+"
+      ;;
+
+    set)
+      local table_name="${1:-}"
+      local col_name="${2:-}"
+      local sem_type="${3:-}"
+      [[ -n "$table_name" && -n "$col_name" && -n "$sem_type" ]] || die "Usage: jt data columns set <table> <column> <type> [--config JSON]"
+      validate_table_name "$table_name"
+      [[ "$col_name" =~ ^[a-zA-Z][a-zA-Z0-9_]{0,63}$ ]] || die "Invalid column name: $col_name"
+      sem_type="$(echo "$sem_type" | tr '[:upper:]' '[:lower:]')"
+
+      # Validate semantic type against the same list the SQLite path accepts.
+      case "$sem_type" in
+        text|number|boolean|date|datetime|url|email|enum|currency|percentage|relation|formula) ;;
+        *) die "Invalid semantic type: $sem_type
+Valid types: text, number, boolean, date, datetime, url, email, enum, currency, percentage, relation, formula" ;;
+      esac
+
+      local config="{}"
+      shift 3
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --config) config="${2:-}"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+
+      require_ide_reachable
+      local project body
+      project="$(_pg_data_project)"
+      body="$(python3 -c '
+import json, sys
+print(json.dumps({
+  "project": sys.argv[1],
+  "column": sys.argv[2],
+  "semanticType": sys.argv[3],
+  "config": json.loads(sys.argv[4]) if sys.argv[4] else {},
+}))
+' "$project" "$col_name" "$sem_type" "$config")"
+      _pg_data_call POST "/api/data/tables/$(_pg_url_encode "$table_name")/column-meta" "$body" "Failed to set column metadata" >/dev/null
+      echo "Set $col_name → $sem_type on $table_name"
+      ;;
+
+    remove)
+      local table_name="${1:-}"
+      local col_name="${2:-}"
+      [[ -n "$table_name" && -n "$col_name" ]] || die "Usage: jt data columns remove <table> <column>"
+      validate_table_name "$table_name"
+
+      require_ide_reachable
+      local project
+      project="$(_pg_data_project)"
+      _pg_data_call DELETE "/api/data/tables/$(_pg_url_encode "$table_name")/column-meta?project=${project}&column=$(_pg_url_encode "$col_name")" "Failed to remove column metadata" >/dev/null
+      echo "Removed metadata for $col_name on $table_name"
+      ;;
+
+    *)
+      die "Unknown columns subcommand: $subcmd. Use: list, set, remove"
+      ;;
+  esac
+}
+
 cmd_data() {
   local subcmd="${1:-}"
   [[ -n "$subcmd" ]] || { cmd_data_help; return; }
@@ -3282,7 +3404,8 @@ cmd_data_drop() {
 
 cmd_data_columns() {
   if [[ "$(resolve_project_backend)" == "postgres" ]]; then
-    die "'jt data columns' is not yet supported on postgres-backed projects. Manage column metadata via the JAT IDE at /data."
+    pg_data_columns "$@"
+    return $?
   fi
   require_data_db
   local subcmd="${1:-}"
@@ -3941,10 +4064,11 @@ except: print('(no response)')" 2>/dev/null)"
           fi
         fi
 
-        # Rows: insert via POST /api/data/tables/{tbl}/rows (takes plain JSON,
-        # no SQL parser constraints).  When the table already existed on the
-        # remote, first check its row count — skip if non-empty (idempotent),
-        # insert if empty (recovery from a prior partial failure).
+        # Rows: bulk-insert via POST /api/data/tables/{tbl}/rows/bulk-insert.
+        # One transaction per chunk (server caps at 5000 rows/request).
+        # When the table already existed on the remote, first check its row
+        # count — skip if non-empty (idempotent), insert if empty (recovery
+        # from a prior partial failure).
         local local_count
         local_count="$(sqlite3 "$DATA_DB" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo 0)"
         [[ "$local_count" -gt 0 ]] || continue
@@ -3968,16 +4092,23 @@ except: print(0)" 2>/dev/null || echo 0)"
           fi
         fi
 
-        # Emit local rows as a JSON array of column→value dicts
-        local rows_json
-        rows_json="$(DATA_DB="$DATA_DB" TBL="$tbl" python3 -c "
-import os, sys, sqlite3, json, base64
+        # Stream local rows through python in CHUNK_SIZE batches; each batch
+        # is one POST to /bulk-insert wrapped in a server-side transaction.
+        local CHUNK_SIZE=1000
+        local inserted=0 chunk_failures=0
+        local chunk_file
+        chunk_file="$(mktemp)"
+
+        DATA_DB="$DATA_DB" TBL="$tbl" PROJECT="$project" CHUNK_SIZE="$CHUNK_SIZE" \
+          python3 -c "
+import os, sqlite3, json, base64, sys
 db = sqlite3.connect(os.environ['DATA_DB']); db.row_factory = sqlite3.Row
 tbl = os.environ['TBL']
+project = os.environ['PROJECT']
+chunk_size = int(os.environ['CHUNK_SIZE'])
 cur = db.execute(f'SELECT * FROM \"{tbl}\"')
-all_cols = [c[0] for c in cur.description]
-cols = [c for c in all_cols if c != 'rowid']
-out = []
+cols = [c[0] for c in cur.description if c[0] != 'rowid']
+batch = []
 for row in cur:
     d = {}
     for c in cols:
@@ -3985,40 +4116,41 @@ for row in cur:
         if isinstance(v, (bytes, bytearray)):
             v = base64.b64encode(v).decode('ascii')
         d[c] = v
-    out.append(d)
-print(json.dumps(out))
-")"
+    batch.append(d)
+    if len(batch) >= chunk_size:
+        print(json.dumps({'project': project, 'rows': batch}))
+        batch = []
+if batch:
+    print(json.dumps({'project': project, 'rows': batch}))
+" > "$chunk_file"
 
-        local n_rows inserted=0 row_failures=0
-        n_rows="$(printf '%s' "$rows_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
-        local i=0
-        while [[ $i -lt $n_rows ]]; do
-          local row_payload
-          row_payload="$(ROWS="$rows_json" I="$i" PROJECT="$project" python3 -c "
-import os, json
-row = json.loads(os.environ['ROWS'])[int(os.environ['I'])]
-row['project'] = os.environ['PROJECT']
-print(json.dumps(row))
-")"
-          local resp
-          if resp="$(_migrate_ide_request POST "/api/data/tables/$tbl/rows" "$row_payload")"; then
-            inserted=$((inserted + 1))
+        local chunk_idx=0
+        while IFS= read -r chunk_payload; do
+          [[ -n "$chunk_payload" ]] || continue
+          chunk_idx=$((chunk_idx + 1))
+          local resp added=0
+          if resp="$(_migrate_ide_request POST "/api/data/tables/$tbl/rows/bulk-insert" "$chunk_payload")"; then
+            added="$(printf '%s' "$resp" | python3 -c "
+import sys, json
+try: print(json.load(sys.stdin).get('inserted') or 0)
+except: print(0)" 2>/dev/null || echo 0)"
+            inserted=$((inserted + added))
           else
-            row_failures=$((row_failures + 1))
-            if [[ $row_failures -le 3 ]]; then
-              local err
-              err="$(printf '%s' "$resp" | python3 -c "import sys,json
+            chunk_failures=$((chunk_failures + 1))
+            local err
+            err="$(printf '%s' "$resp" | python3 -c "import sys,json
 try: print(json.load(sys.stdin).get('error') or '(unknown)')
 except: print('(no response)')" 2>/dev/null)"
-              echo "    row $((i + 1)) FAILED: $err" >&2
-            fi
+            echo "    chunk $chunk_idx FAILED: $err" >&2
+            break  # transactional batch — no point continuing if one fails
           fi
-          i=$((i + 1))
-        done
-        if [[ $row_failures -gt 0 ]]; then
-          echo "    inserted $inserted / $n_rows row(s) — $row_failures failed" >&2
+        done < "$chunk_file"
+        rm -f "$chunk_file"
+
+        if [[ $chunk_failures -gt 0 ]]; then
+          echo "    inserted $inserted / $local_count row(s) — $chunk_failures chunk(s) failed" >&2
         else
-          echo "    inserted $inserted row(s)"
+          echo "    inserted $inserted row(s) in $chunk_idx chunk(s)"
         fi
         rows_inserted=$((rows_inserted + inserted))
       done <<< "$user_tables"

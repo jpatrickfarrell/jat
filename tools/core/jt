@@ -573,6 +573,411 @@ pg_delete() {
   echo "Deleted $task_id"
 }
 
+# ---------------------------------------------------------------------------
+# Knowledge bases — postgres proxy helpers (mirror cmd_bases_*)
+# Used when backend=postgres; proxies through localhost IDE REST API.
+# Endpoints used:
+#   GET    /api/bases?project=X[&alwaysInjectOnly=true]   list
+#   GET    /api/bases/{id}?project=X                       show
+#   POST   /api/bases                                      create  (body: {project, name, ...})
+#   DELETE /api/bases/{id}?project=X                       delete
+#   POST   /api/bases/{baseId}/attach                       attach  (body: {project, taskId})
+#   DELETE /api/bases/{baseId}/attach                       detach  (body: {project, taskId})
+#   GET    /api/bases/search?project=X&q=Q&limit=N         search
+#   POST   /api/bases/{id}/render                          render  (body: {project})
+# ---------------------------------------------------------------------------
+
+# Resolve project name with --project override fallback to projects.json key.
+_pg_project_or_die() {
+  local explicit="${1:-}"
+  if [[ -n "$explicit" ]]; then
+    echo "$explicit"
+    return
+  fi
+  local name
+  name="$(resolve_project_name)"
+  [[ -n "$name" ]] || die "Could not determine project name from ~/.config/jat/projects.json"
+  echo "$name"
+}
+
+# URL-encode a string for use in query params.
+_pg_urlencode() {
+  python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+}
+
+# Surface IDE error JSON cleanly. Returns 0 if response is not an error.
+_pg_check_err() {
+  local response="$1" context="$2"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
+    die "${context}: ${err_msg}"
+  fi
+}
+
+# Print bases list in the same human format as cmd_bases_list.
+_pg_print_bases_list() {
+  python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+if not data:
+    print('No knowledge bases. Create one with: jt bases create --name \"Name\" --type manual --content \"...\"')
+    sys.exit(0)
+for b in data:
+    inject = ' [always-inject]' if b.get('always_inject') else ''
+    tokens = f' ~{b[\"token_estimate\"]}tok' if b.get('token_estimate') else ''
+    desc = b.get('description') or ''
+    if desc and len(desc) > 40:
+        desc = desc[:37] + '...'
+    desc_str = f' - {desc}' if desc else ''
+    cfg = b.get('source_config') or {}
+    if isinstance(cfg, str):
+        try: cfg = json.loads(cfg)
+        except Exception: cfg = {}
+    src_type = b.get('source_type') or cfg.get('_migrated_source_type') or 'manual'
+    print(f'  {b[\"id\"]}  [{src_type}] {b[\"name\"]}{inject}{tokens}{desc_str}')
+"
+}
+
+# pg_bases_list: list bases via IDE API.
+pg_bases_list() {
+  local json_out=false always_inject=false project=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)           json_out=true; shift ;;
+      --always-inject)  always_inject=true; shift ;;
+      --project)        project="$2"; shift 2 ;;
+      *)                shift ;;
+    esac
+  done
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local params="project=$(_pg_urlencode "$project_name")"
+  $always_inject && params="${params}&alwaysInjectOnly=true"
+
+  local response
+  response="$(pg_curl GET "/api/bases?${params}")" || die "Failed to list bases"
+  _pg_check_err "$response" "Failed to list bases"
+
+  local bases
+  bases="$(echo "$response" | jq '.bases // []')"
+
+  if $json_out; then
+    echo "$bases"
+  else
+    echo "$bases" | _pg_print_bases_list
+  fi
+}
+
+# pg_bases_show: show single base via IDE API.
+pg_bases_show() {
+  local id="" json_out=false project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then id="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)    json_out=true; shift ;;
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+  [[ -n "$id" ]] || die "Usage: jt bases show ID [--json]"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local response
+  response="$(pg_curl GET "/api/bases/${id}?project=$(_pg_urlencode "$project_name")")" \
+    || die "Base not found: $id"
+  _pg_check_err "$response" "Failed to fetch base $id"
+
+  local base
+  base="$(echo "$response" | jq '.base')"
+  [[ "$base" == "null" || -z "$base" ]] && die "Base not found: $id"
+
+  if $json_out; then
+    # Wrap in an array to match sqlite output shape.
+    echo "[$base]"
+  else
+    echo "$base" | python3 -c "
+import sys, json
+b = json.load(sys.stdin)
+cfg = b.get('source_config') or {}
+if isinstance(cfg, str):
+    try: cfg = json.loads(cfg)
+    except Exception: cfg = {}
+src_type = b.get('source_type') or cfg.get('_migrated_source_type') or 'manual'
+print(f'ID:          {b[\"id\"]}')
+print(f'Name:        {b[\"name\"]}')
+print(f'Project:     {b.get(\"project\", \"\")}')
+print(f'Type:        {src_type}')
+if b.get('description'):
+    print(f'Description: {b[\"description\"]}')
+if b.get('always_inject'):
+    print('Inject:      always')
+if b.get('token_estimate'):
+    print(f'Tokens:      ~{b[\"token_estimate\"]}')
+cq = b.get('context_query') or cfg.get('context_query')
+if cq:
+    print(f'Query:       {cq}')
+blocks = b.get('blocks') or []
+if isinstance(blocks, str):
+    try: blocks = json.loads(blocks)
+    except Exception: blocks = []
+text_parts = [bl.get('content','') for bl in blocks if bl.get('type') == 'text' and bl.get('content')]
+if not text_parts and b.get('content'):
+    text_parts = [b['content']]
+if text_parts:
+    content = '\n\n'.join(text_parts)
+    if len(content) > 200:
+        content = content[:197] + '...'
+    print(f'Content:     {content}')
+if b.get('created_at'):
+    print(f'Created:     {b[\"created_at\"]}')
+if b.get('updated_at'):
+    print(f'Updated:     {b[\"updated_at\"]}')
+"
+  fi
+}
+
+# pg_bases_create: create base via IDE API.
+pg_bases_create() {
+  local name="" source_type="" content="" description="" context_query="" project=""
+  local always_inject=false token_estimate="" json_out=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)          name="$2"; shift 2 ;;
+      --type)          source_type="$2"; shift 2 ;;
+      --content)       content="$2"; shift 2 ;;
+      --description)   description="$2"; shift 2 ;;
+      --query)         context_query="$2"; shift 2 ;;
+      --project)       project="$2"; shift 2 ;;
+      --always-inject) always_inject=true; shift ;;
+      --tokens)        token_estimate="$2"; shift 2 ;;
+      --json)          json_out=true; shift ;;
+      *)               shift ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: jt bases create --name \"Name\" [--type TYPE] [--content \"...\"] [--description \"...\"] [--query \"SELECT ...\"] [--project NAME] [--always-inject] [--tokens N] [--json]"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  if [[ -n "$source_type" ]]; then
+    validate_source_type "$source_type"
+  fi
+
+  require_ide_reachable
+
+  # Build JSON payload using jq to safely encode string values.
+  local payload
+  payload="$(jq -n \
+    --arg project "$project_name" \
+    --arg name    "$name" \
+    --arg desc    "$description" \
+    '{project: $project, name: $name} + (if $desc != "" then {description: $desc} else {} end)')"
+
+  [[ -n "$source_type" ]]    && payload="$(echo "$payload" | jq --arg v "$source_type"    '. + {source_type: $v}')"
+  [[ -n "$content" ]]        && payload="$(echo "$payload" | jq --arg v "$content"        '. + {content: $v}')"
+  [[ -n "$context_query" ]]  && payload="$(echo "$payload" | jq --arg v "$context_query"  '. + {context_query: $v}')"
+  $always_inject             && payload="$(echo "$payload" | jq                            '. + {always_inject: true}')"
+  if [[ -n "$token_estimate" ]]; then
+    require_integer "$token_estimate" "token_estimate"
+    payload="$(echo "$payload" | jq --argjson v "$token_estimate" '. + {token_estimate: $v}')"
+  fi
+
+  local response
+  response="$(pg_curl POST "/api/bases" "$payload")" || die "Failed to create base"
+  _pg_check_err "$response" "Failed to create base"
+
+  local new_base new_id new_name
+  new_base="$(echo "$response" | jq '.base // .')"
+  new_id="$(echo "$new_base" | jq -r '.id // ""')"
+  new_name="$(echo "$new_base" | jq -r '.name // ""')"
+
+  if $json_out; then
+    echo "[$new_base]"
+  else
+    local type_label="${source_type:-manual}"
+    echo "Created base: ${new_id} (${new_name}) [${type_label}]"
+  fi
+}
+
+# pg_bases_delete: delete base via IDE API.
+pg_bases_delete() {
+  local id="" force=false project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then id="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force)   force=true; shift ;;
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+
+  [[ -n "$id" ]] || die "Usage: jt bases delete ID [--force]"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  # Verify base exists and capture name for the prompt.
+  local show_response
+  show_response="$(pg_curl GET "/api/bases/${id}?project=$(_pg_urlencode "$project_name")")" \
+    || die "Base not found: $id"
+  if echo "$show_response" | jq -e '.error' >/dev/null 2>&1; then
+    die "Base not found: $id"
+  fi
+  local bname
+  bname="$(echo "$show_response" | jq -r '.base.name // ""')"
+
+  if ! $force; then
+    read -r -p "Delete base \"$bname\" ($id)? Task attachments will also be removed. [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  local response
+  response="$(pg_curl DELETE "/api/bases/${id}?project=$(_pg_urlencode "$project_name")")" \
+    || die "Failed to delete base: $id"
+  _pg_check_err "$response" "Failed to delete base $id"
+  echo "Deleted base: $id"
+}
+
+# pg_bases_attach: attach base to task via IDE API.
+pg_bases_attach() {
+  local base_id="" task_id="" project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then base_id="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)    task_id="$2"; shift 2 ;;
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+
+  [[ -n "$base_id" && -n "$task_id" ]] || die "Usage: jt bases attach BASE_ID --task TASK_ID"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local payload
+  payload="$(jq -n --arg project "$project_name" --arg taskId "$task_id" \
+    '{project: $project, taskId: $taskId}')"
+
+  local response
+  response="$(pg_curl POST "/api/bases/${base_id}/attach" "$payload")" \
+    || die "Failed to attach base $base_id to task $task_id"
+  _pg_check_err "$response" "Failed to attach base $base_id to task $task_id"
+  echo "Attached base $base_id to task $task_id"
+}
+
+# pg_bases_detach: detach base from task via IDE API.
+pg_bases_detach() {
+  local base_id="" task_id="" project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then base_id="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)    task_id="$2"; shift 2 ;;
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+
+  [[ -n "$base_id" && -n "$task_id" ]] || die "Usage: jt bases detach BASE_ID --task TASK_ID"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local payload
+  payload="$(jq -n --arg project "$project_name" --arg taskId "$task_id" \
+    '{project: $project, taskId: $taskId}')"
+
+  local response
+  response="$(pg_curl DELETE "/api/bases/${base_id}/attach" "$payload")" \
+    || die "Failed to detach base $base_id from task $task_id"
+  _pg_check_err "$response" "Failed to detach base $base_id from task $task_id"
+  echo "Detached base $base_id from task $task_id"
+}
+
+# pg_bases_search: search bases via IDE API.
+pg_bases_search() {
+  local query="" limit=20 json_out=false project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then query="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --limit)   limit="$2"; shift 2 ;;
+      --json)    json_out=true; shift ;;
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+
+  [[ -n "$query" ]] || die "Usage: jt bases search \"query\" [--limit N] [--json]"
+  require_integer "$limit" "--limit"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local params="project=$(_pg_urlencode "$project_name")&q=$(_pg_urlencode "$query")&limit=${limit}"
+  local response
+  response="$(pg_curl GET "/api/bases/search?${params}")" || die "Failed to search bases"
+  _pg_check_err "$response" "Failed to search bases"
+
+  local results
+  results="$(echo "$response" | jq '.results // []')"
+
+  if $json_out; then
+    echo "$results"
+  else
+    if [[ "$(echo "$results" | jq 'length')" == "0" ]]; then
+      echo "No matches for: $query"
+    else
+      echo "$results" | _pg_print_bases_list
+    fi
+  fi
+}
+
+# pg_bases_render: render a base's content for stdout via IDE API.
+pg_bases_render() {
+  local id="" project=""
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then id="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --project) project="$2"; shift 2 ;;
+      *)         shift ;;
+    esac
+  done
+  [[ -n "$id" ]] || die "Usage: jt bases render ID"
+
+  local project_name
+  project_name="$(_pg_project_or_die "$project")"
+
+  require_ide_reachable
+
+  local payload
+  payload="$(jq -n --arg project "$project_name" '{project: $project}')"
+
+  local response
+  response="$(pg_curl POST "/api/bases/${id}/render" "$payload")" \
+    || die "Failed to render base: $id"
+  _pg_check_err "$response" "Failed to render base $id"
+
+  echo "$response" | jq -r '.rendered // ""'
+}
+
 # Get project prefix from directory name
 project_prefix() {
   basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
@@ -2059,6 +2464,7 @@ cmd_data() {
     views)     cmd_data_views "$@" ;;
     view)      cmd_data_view "$@" ;;
     view-rows) cmd_data_view_rows "$@" ;;
+    migrate-to-postgres) cmd_data_migrate_to_postgres "$@" ;;
     help|--help|-h) cmd_data_help ;;
     *)       die "Unknown data subcommand: $subcmd. Run 'jt data help' for usage." ;;
   esac
@@ -2782,6 +3188,425 @@ Examples:
   jt data view abc123 --json          Show view details as JSON
   jt data view-rows abc123            Query rows matching view filters
   jt data view-rows abc123 --limit 50 Limit results
+
+Migration:
+  migrate-to-postgres [--dry-run]     One-time migration of local SQLite data and
+                                      bases to the remote postgres backend (via IDE).
+                                      Requires the JAT IDE to be running.
+HELP
+}
+
+# ---------------------------------------------------------------------------
+# One-time migration: SQLite data + bases  →  JAT IDE REST  →  Supabase
+# ---------------------------------------------------------------------------
+
+# Issue a JSON request to the IDE and emit the response body on stdout.
+# Exit 0 on HTTP 2xx, non-zero otherwise.  Unlike pg_curl this returns the
+# response body even on error so migration failures can be reported.
+_migrate_ide_request() {
+  local method="$1" path="$2" data="${3:-}"
+  local port out status body
+  port="$(resolve_ide_port)"
+  if [[ -n "$data" ]]; then
+    out="$(curl -s --max-time 60 \
+      -w $'\n__HTTP_STATUS__:%{http_code}' \
+      -X "$method" "http://127.0.0.1:${port}${path}" \
+      -H "Content-Type: application/json" --data "$data" 2>/dev/null || true)"
+  else
+    out="$(curl -s --max-time 30 \
+      -w $'\n__HTTP_STATUS__:%{http_code}' \
+      -X "$method" "http://127.0.0.1:${port}${path}" 2>/dev/null || true)"
+  fi
+  status="$(printf '%s' "$out" | awk -F'__HTTP_STATUS__:' '/__HTTP_STATUS__:/ {print $2}' | tail -1)"
+  body="$(printf '%s' "$out" | sed '/__HTTP_STATUS__:/d')"
+  printf '%s' "$body"
+  [[ "$status" =~ ^2[0-9][0-9]$ ]]
+}
+
+cmd_data_migrate_to_postgres() {
+  local dry_run=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run)      dry_run=true; shift ;;
+      --help|-h)      _cmd_data_migrate_help; return ;;
+      *)              shift ;;
+    esac
+  done
+
+  # Pre-flight: IDE reachable
+  require_ide_reachable
+
+  # Pre-flight: project must be configured with backend=postgres, otherwise
+  # the IDE will just write to its own local SQLite and the migration is a no-op.
+  local backend
+  backend="$(resolve_project_backend)"
+  if [[ "$backend" != "postgres" ]]; then
+    die "This project is configured with backend=$backend. Migration requires backend=postgres (run 'jat graduate' first or edit ~/.config/jat/projects.json)."
+  fi
+
+  # Pre-flight: at least one source file must exist
+  if [[ ! -f "$DATA_DB" && ! -f "$BASES_DB" ]]; then
+    die "Nothing to migrate: neither $DATA_DB nor $BASES_DB exist"
+  fi
+
+  local project port
+  project="$(resolve_project_name)"
+  [[ -n "$project" ]] || project="$(basename "$PROJECT_ROOT")"
+  port="$(resolve_ide_port)"
+
+  local tables_created=0 tables_skipped=0 tables_failed=0
+  local rows_inserted=0
+  local bases_created=0 bases_skipped=0 bases_failed=0
+
+  echo "Migrating '$project' → remote postgres (via IDE at 127.0.0.1:$port)"
+  $dry_run && echo "  (dry-run: no changes will be made)"
+  echo ""
+
+  # --------------- Data tables ---------------
+  if [[ -f "$DATA_DB" ]]; then
+    # Confirm _tables exists (older data.db files may not)
+    local has_meta
+    has_meta="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_tables';" 2>/dev/null || true)"
+
+    if [[ -z "$has_meta" ]]; then
+      echo "No _tables registry in $DATA_DB — skipping data-tables phase"
+    else
+      # Fetch remote table names for idempotency
+      local remote_tables_resp remote_names
+      remote_tables_resp="$(_migrate_ide_request GET "/api/data/tables?project=$project" 2>/dev/null || echo '{"tables":[]}')"
+      remote_names="$(printf '%s' "$remote_tables_resp" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for t in d.get('tables') or []:
+        n = t.get('name') if isinstance(t, dict) else t
+        if n: print(n)
+except Exception:
+    pass
+" 2>/dev/null || true)"
+
+      local user_tables
+      user_tables="$(sqlite3 "$DATA_DB" "SELECT name FROM _tables ORDER BY name;" 2>/dev/null || true)"
+
+      if [[ -z "$user_tables" ]]; then
+        echo "No user tables registered in _tables"
+      fi
+
+      while IFS= read -r tbl; do
+        [[ -n "$tbl" ]] || continue
+
+        if printf '%s\n' "$remote_names" | grep -qxF "$tbl"; then
+          echo "  table '$tbl' already exists on remote — skipping"
+          tables_skipped=$((tables_skipped + 1))
+          continue
+        fi
+
+        # Build columns payload (name, type, semanticType from _columns if present)
+        local cols_json
+        cols_json="$(DATA_DB="$DATA_DB" TBL="$tbl" python3 -c "
+import os, sys, sqlite3, json
+db = sqlite3.connect(os.environ['DATA_DB']); db.row_factory = sqlite3.Row
+tbl = os.environ['TBL']
+cols = [{'name': r['name'], 'type': (r['type'] or 'TEXT').upper()}
+        for r in db.execute(f'PRAGMA table_info(\"{tbl}\")').fetchall()]
+if db.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='_columns'\").fetchone():
+    sem = {r['column_name']: (r['semantic_type'], r['config'])
+           for r in db.execute('SELECT column_name, semantic_type, config FROM _columns WHERE table_name = ?', (tbl,)).fetchall()}
+    for c in cols:
+        if c['name'] in sem:
+            s, cfg = sem[c['name']]
+            if s: c['semanticType'] = s
+            if cfg and cfg != '{}':
+                try: c['config'] = json.loads(cfg)
+                except Exception: pass
+print(json.dumps(cols))
+" 2>/dev/null)"
+
+        local n_cols
+        n_cols="$(printf '%s' "$cols_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo 0)"
+        if [[ "$n_cols" -eq 0 ]]; then
+          echo "  table '$tbl': no columns detected — skipping" >&2
+          tables_failed=$((tables_failed + 1))
+          continue
+        fi
+
+        local payload
+        payload="$(COLS="$cols_json" PROJECT="$project" NAME="$tbl" python3 -c "
+import os, json
+print(json.dumps({'project': os.environ['PROJECT'], 'name': os.environ['NAME'], 'columns': json.loads(os.environ['COLS'])}))
+")"
+
+        if $dry_run; then
+          echo "  [dry-run] would create table '$tbl' ($n_cols cols)"
+          tables_created=$((tables_created + 1))
+        else
+          local resp
+          if resp="$(_migrate_ide_request POST "/api/data/tables" "$payload")"; then
+            echo "  table '$tbl': created"
+            tables_created=$((tables_created + 1))
+          else
+            local err
+            err="$(printf '%s' "$resp" | python3 -c "import sys,json
+try: print(json.load(sys.stdin).get('error') or '(unknown)')
+except: print('(no response)')" 2>/dev/null)"
+            echo "  table '$tbl': FAILED — $err" >&2
+            tables_failed=$((tables_failed + 1))
+            continue
+          fi
+        fi
+
+        # Row migration
+        local row_count
+        row_count="$(sqlite3 "$DATA_DB" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo 0)"
+        [[ "$row_count" -gt 0 ]] || continue
+
+        if $dry_run; then
+          echo "    [dry-run] would insert $row_count row(s)"
+          rows_inserted=$((rows_inserted + row_count))
+          continue
+        fi
+
+        local batches_json
+        batches_json="$(DATA_DB="$DATA_DB" TBL="$tbl" python3 -c "
+import os, sys, sqlite3, json
+db = sqlite3.connect(os.environ['DATA_DB']); db.row_factory = sqlite3.Row
+tbl = os.environ['TBL']
+cur = db.execute(f'SELECT * FROM \"{tbl}\"')
+all_cols = [c[0] for c in cur.description]
+cols = [c for c in all_cols if c != 'rowid']
+def lit(v):
+    if v is None: return 'NULL'
+    if isinstance(v, bool): return '1' if v else '0'
+    if isinstance(v, (int, float)): return str(v)
+    if isinstance(v, (bytes, bytearray)):
+        return \"X'\" + v.hex() + \"'\"
+    s = str(v).replace(\"'\", \"''\")
+    return \"'\" + s + \"'\"
+col_list = ', '.join('\"' + c + '\"' for c in cols)
+batch, batches = [], []
+for row in cur:
+    d = dict(row)
+    batch.append('(' + ', '.join(lit(d.get(c)) for c in cols) + ')')
+    if len(batch) >= 100:
+        batches.append(f'INSERT INTO \"{tbl}\" ({col_list}) VALUES ' + ', '.join(batch))
+        batch = []
+if batch:
+    batches.append(f'INSERT INTO \"{tbl}\" ({col_list}) VALUES ' + ', '.join(batch))
+print(json.dumps(batches))
+")"
+
+        local n_batches inserted=0
+        n_batches="$(printf '%s' "$batches_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+        local i=0
+        while [[ $i -lt $n_batches ]]; do
+          local sql_str q_payload
+          sql_str="$(BATCHES="$batches_json" I="$i" python3 -c "
+import os, json
+print(json.loads(os.environ['BATCHES'])[int(os.environ['I'])])
+")"
+          q_payload="$(SQL="$sql_str" PROJECT="$project" python3 -c "
+import os, json
+print(json.dumps({'project': os.environ['PROJECT'], 'sql': os.environ['SQL'], 'mode': 'exec'}))
+")"
+          local resp
+          if resp="$(_migrate_ide_request POST "/api/data/query" "$q_payload")"; then
+            local added
+            added="$(printf '%s' "$resp" | python3 -c "import sys,json
+try: d=json.load(sys.stdin); print(d.get('changes') if d.get('changes') is not None else 0)
+except: print(0)" 2>/dev/null || echo 0)"
+            inserted=$((inserted + added))
+          else
+            local err
+            err="$(printf '%s' "$resp" | python3 -c "import sys,json
+try: print(json.load(sys.stdin).get('error') or '(unknown)')
+except: print('(no response)')" 2>/dev/null)"
+            echo "    batch $((i + 1))/$n_batches FAILED: $err" >&2
+            break
+          fi
+          i=$((i + 1))
+        done
+        echo "    inserted $inserted row(s) in $n_batches batch(es)"
+        rows_inserted=$((rows_inserted + inserted))
+      done <<< "$user_tables"
+    fi
+  else
+    echo "No $DATA_DB — skipping data-tables phase"
+  fi
+
+  echo ""
+
+  # --------------- Bases ---------------
+  # Bases may live in data.db (current convention), in $BASES_DB (config var),
+  # and/or in the historical .jat/bases.db file.  Union everything by id;
+  # data.db wins on conflict because it is the current source of truth.
+  local bases_sources=() _legacy_bases_db="$PROJECT_ROOT/.jat/bases.db"
+  [[ -f "$DATA_DB" ]] && bases_sources+=("$DATA_DB")
+  if [[ -f "$BASES_DB" && "$BASES_DB" != "$DATA_DB" ]]; then
+    bases_sources+=("$BASES_DB")
+  fi
+  if [[ -f "$_legacy_bases_db" && "$_legacy_bases_db" != "$DATA_DB" && "$_legacy_bases_db" != "$BASES_DB" ]]; then
+    bases_sources+=("$_legacy_bases_db")
+  fi
+
+  if [[ ${#bases_sources[@]} -eq 0 ]]; then
+    echo "No base sources to migrate"
+  else
+    # Collect bases from all sources, union by id (first source wins)
+    local all_bases_json
+    all_bases_json="$(SOURCES="${bases_sources[*]}" python3 -c "
+import os, sys, sqlite3, json
+paths = os.environ['SOURCES'].split()
+seen = {}
+for p in paths:
+    try:
+        db = sqlite3.connect(p); db.row_factory = sqlite3.Row
+        if not db.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='bases'\").fetchone():
+            db.close(); continue
+        for row in db.execute('SELECT * FROM bases').fetchall():
+            d = dict(row)
+            if d.get('id') and d['id'] not in seen:
+                seen[d['id']] = d
+        db.close()
+    except Exception:
+        pass
+print(json.dumps(list(seen.values())))
+")"
+
+    local total_bases
+    total_bases="$(printf '%s' "$all_bases_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+
+    if [[ "$total_bases" -eq 0 ]]; then
+      echo "No bases found in ${bases_sources[*]}"
+    else
+      echo "Found $total_bases local base(s) to consider"
+
+      # Fetch remote base names for idempotency
+      local remote_bases_resp remote_base_names
+      remote_bases_resp="$(_migrate_ide_request GET "/api/bases?project=$project&includeSystem=false&includeGlobal=false" 2>/dev/null || echo '{"bases":[]}')"
+      remote_base_names="$(printf '%s' "$remote_bases_resp" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for b in d.get('bases') or []:
+        n = b.get('name')
+        if n: print(n)
+except Exception:
+    pass
+" 2>/dev/null || true)"
+
+      local idx=0
+      while [[ $idx -lt $total_bases ]]; do
+        local name payload
+        name="$(ALL="$all_bases_json" IDX="$idx" python3 -c "
+import os, json
+print(json.loads(os.environ['ALL'])[int(os.environ['IDX'])].get('name') or '')
+")"
+
+        if [[ -z "$name" ]]; then
+          echo "  base #$((idx + 1)) has no name — skipping" >&2
+          bases_failed=$((bases_failed + 1))
+          idx=$((idx + 1))
+          continue
+        fi
+
+        if printf '%s\n' "$remote_base_names" | grep -qxF "$name"; then
+          echo "  base '$name' already exists on remote — skipping"
+          bases_skipped=$((bases_skipped + 1))
+          idx=$((idx + 1))
+          continue
+        fi
+
+        payload="$(ALL="$all_bases_json" IDX="$idx" PROJECT="$project" python3 -c "
+import os, json
+base = json.loads(os.environ['ALL'])[int(os.environ['IDX'])]
+body = {
+    'project': os.environ['PROJECT'],
+    'name': base.get('name'),
+    'description': base.get('description'),
+    'always_inject': bool(base.get('always_inject', 0)),
+}
+if base.get('token_estimate') is not None:
+    body['token_estimate'] = base['token_estimate']
+blocks = base.get('blocks') or '[]'
+if isinstance(blocks, str):
+    try: blocks = json.loads(blocks)
+    except Exception: blocks = []
+if blocks:
+    body['blocks'] = blocks
+cfg = base.get('source_config') or '{}'
+if isinstance(cfg, str):
+    try: cfg = json.loads(cfg)
+    except Exception: cfg = {}
+if cfg:
+    body['source_config'] = cfg
+    if cfg.get('_migrated_source_type'):
+        body['source_type'] = cfg['_migrated_source_type']
+    if cfg.get('context_query'):
+        body['context_query'] = cfg['context_query']
+print(json.dumps(body))
+")"
+
+        if $dry_run; then
+          echo "  [dry-run] would create base '$name'"
+          bases_created=$((bases_created + 1))
+        else
+          local resp
+          if resp="$(_migrate_ide_request POST "/api/bases" "$payload")"; then
+            echo "  base '$name': created"
+            bases_created=$((bases_created + 1))
+          else
+            local err
+            err="$(printf '%s' "$resp" | python3 -c "import sys,json
+try: print(json.load(sys.stdin).get('error') or '(unknown)')
+except: print('(no response)')" 2>/dev/null)"
+            echo "  base '$name': FAILED — $err" >&2
+            bases_failed=$((bases_failed + 1))
+          fi
+        fi
+        idx=$((idx + 1))
+      done
+    fi
+  fi
+
+  echo ""
+  echo "Migration summary:"
+  echo "  Tables: $tables_created created, $tables_skipped already-existed, $tables_failed failed"
+  echo "  Rows:   $rows_inserted inserted"
+  echo "  Bases:  $bases_created created, $bases_skipped already-existed, $bases_failed failed"
+  $dry_run && echo "  (dry-run — no changes were actually made)"
+
+  if [[ $tables_failed -gt 0 || $bases_failed -gt 0 ]]; then
+    return 2
+  fi
+}
+
+_cmd_data_migrate_help() {
+  cat <<'HELP'
+jt data migrate-to-postgres - One-time migration from SQLite to Supabase
+
+Reads the local .jat/data.db (user tables + bases) and .jat/bases.db (legacy
+bases location) and posts every table + row + base to the JAT IDE REST API.
+The IDE in turn writes to Supabase for postgres-backed projects.
+
+Usage: jt data migrate-to-postgres [--dry-run]
+
+Options:
+  --dry-run     Print what would be migrated without making any changes
+
+Requirements:
+  - The JAT IDE must be running (run: jat)
+  - The project must be configured with backend=postgres in ~/.config/jat/projects.json
+    (otherwise the IDE writes to its own local SQLite and the migration is a no-op)
+
+Idempotency:
+  - Tables that already exist on the remote are skipped (no row re-insert)
+  - Bases that already exist on the remote (matched by name) are skipped
+  - Safe to re-run after a partial failure
+
+Exit codes:
+  0  success — everything migrated or already present
+  1  pre-flight failure (IDE offline, wrong backend, missing DB)
+  2  partial failure — some tables or bases failed to migrate
 HELP
 }
 
@@ -2904,6 +3729,10 @@ cmd_bases() {
 }
 
 cmd_bases_list() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_list "$@"
+    return
+  fi
   require_bases_db
   local json_out=false always_inject=false
 
@@ -2949,6 +3778,10 @@ for b in data:
 }
 
 cmd_bases_show() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_show "$@"
+    return
+  fi
   require_bases_db
   local id="" json_out=false
 
@@ -3021,6 +3854,10 @@ for t in data:
 }
 
 cmd_bases_create() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_create "$@"
+    return
+  fi
   require_bases_db
   local name="" source_type="" content="" description="" context_query="" project=""
   local always_inject=0 token_estimate="" json_out=false
@@ -3098,6 +3935,10 @@ cmd_bases_create() {
 }
 
 cmd_bases_delete() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_delete "$@"
+    return
+  fi
   require_bases_db
   local id="${1:-}" force=false
   shift 2>/dev/null || true
@@ -3129,6 +3970,10 @@ cmd_bases_delete() {
 }
 
 cmd_bases_attach() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_attach "$@"
+    return
+  fi
   require_bases_db
   local base_id="" task_id=""
 
@@ -3159,6 +4004,10 @@ cmd_bases_attach() {
 }
 
 cmd_bases_detach() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_detach "$@"
+    return
+  fi
   require_bases_db
   local base_id="" task_id=""
 
@@ -3181,6 +4030,10 @@ cmd_bases_detach() {
 }
 
 cmd_bases_render() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_render "$@"
+    return
+  fi
   require_bases_db
   local id="${1:-}"
   [[ -n "$id" ]] || die "Usage: jt bases render ID"
@@ -3278,6 +4131,10 @@ for row in data:
 }
 
 cmd_bases_search() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_bases_search "$@"
+    return
+  fi
   require_bases_db
   local query="" limit=20 json_out=false
 

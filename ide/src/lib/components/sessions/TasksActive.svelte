@@ -2891,9 +2891,17 @@
 	}
 
 	/* Delay row exit animation so avatar flip-out plays first */
+	/* Also collapse layout height so the vacated flex slot doesn't leave blank space */
 	.exit-delayed {
-		animation-delay: 0.25s;
-		animation-fill-mode: both;
+		overflow: hidden;
+		animation:
+			slide-out-bck-center 0.5s 0.25s cubic-bezier(0.550, 0.085, 0.680, 0.530) both,
+			ta-exit-height-collapse 0.25s 0.6s ease-in both;
+	}
+
+	@keyframes ta-exit-height-collapse {
+		from { max-height: 600px; }
+		to   { max-height: 0; }
 	}
 
 	/* ========== MOBILE LAYOUT ========== */

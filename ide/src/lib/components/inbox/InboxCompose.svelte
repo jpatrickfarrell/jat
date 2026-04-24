@@ -82,6 +82,11 @@
 
 	const routingTarget = $derived(task ? resolveRoutingTarget(task as any) : null);
 	const routingName = $derived(getActorDisplayName(routingTarget?.actor));
+	// Send + Route is only meaningful when a routing target exists. Without
+	// one, the handler throws ("No approver, requester, or creator to route
+	// to"). Disable the button and the preview reflects the failure honestly
+	// instead of promising a bogus "you → Unknown" assignment.
+	const canRoute = $derived(routingTarget !== null);
 
 	// Preview helpers — formatters for the expand-on-focus panel. Mirror the
 	// actual server-side logic so the panel never lies about what will happen.
@@ -107,11 +112,12 @@
 
 	// Action-preview UI: expands on textarea focus OR button hover, describing
 	// the state deltas each button will cause. Goal: kill any mystery about
-	// what the routing/spawn buttons do before the click lands.
+	// what the routing/spawn buttons do before the click lands. Both buttons
+	// are always described when the panel is open; the hovered one gets a
+	// highlight background so the eye snaps to the right row.
 	let composerFocused = $state(false);
 	let hoveredAction = $state<"send" | "route" | null>(null);
 	const previewOpen = $derived(composerFocused || hoveredAction !== null);
-	const previewAction = $derived(hoveredAction ?? "route");
 
 	export function focus() {
 		textarea?.focus();
@@ -299,45 +305,103 @@
 
 <div class="compose" class:compose-internal={isInternal}>
 	<div class="reply-to" aria-live="polite">
-		{#if isInternal}
-			<span class="reply-to-label internal-label">Internal note</span>
-			<span
-				class="reply-to-name reply-to-unknown"
-				title="Not sent to {routingName}. Visible only in the IDE."
-			>
-				not sent to {routingName}
-			</span>
-		{:else}
-			<span class="reply-to-label">Reply to</span>
-			<span class="reply-to-name" class:reply-to-unknown={!routingTarget}>
-				{routingName}
-			</span>
-			{#if routingTarget}
-				<RoleChip role={routingTarget.actor.role} />
-				<span class="reply-to-role badge badge-xs badge-outline">
-					{routingTarget.role}
+		<div class="reply-to-main">
+			{#if isInternal}
+				<span class="reply-to-label internal-label">Internal note</span>
+				<span
+					class="reply-to-name reply-to-unknown"
+					title="Not sent to {routingName}. Visible only in the IDE."
+				>
+					not sent to {routingName}
 				</span>
 			{:else}
-				<span
-					class="reply-to-warn"
-					title="No approver, requester, or creator is set on this task — Ctrl+↵ will fail until one is set."
-					aria-label="No routing target set"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 20 20"
-						fill="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							fill-rule="evenodd"
-							d="M8.485 2.495c.673-1.166 2.357-1.166 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z"
-							clip-rule="evenodd"
-						/>
-					</svg>
+				<span class="reply-to-label">Reply to</span>
+				<span class="reply-to-name" class:reply-to-unknown={!routingTarget}>
+					{routingName}
 				</span>
+				{#if routingTarget}
+					<RoleChip role={routingTarget.actor.role} />
+					<span class="reply-to-role badge badge-xs badge-outline">
+						{routingTarget.role}
+					</span>
+				{:else}
+					<span
+						class="reply-to-warn"
+						title="No approver, requester, or creator is set on this task — Ctrl+↵ will fail until one is set."
+						aria-label="No routing target set"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							aria-hidden="true"
+						>
+							<path
+								fill-rule="evenodd"
+								d="M8.485 2.495c.673-1.166 2.357-1.166 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z"
+								clip-rule="evenodd"
+							/>
+						</svg>
+					</span>
+				{/if}
 			{/if}
-		{/if}
+		</div>
+		<!-- Visibility toggle lives in the header because it controls exactly
+		     what the header describes (who sees this). Keeps the action cluster
+		     below focused on *actions*, not modes. -->
+		<button
+			type="button"
+			class="btn btn-xs visibility-toggle {isInternal
+				? 'btn-warning'
+				: 'btn-ghost'}"
+			aria-pressed={isInternal}
+			disabled={submitting}
+			onclick={() => (isInternal = !isInternal)}
+			title={isInternal
+				? "Internal — only visible in IDE. Click or Cmd+Shift+I to make external."
+				: "External — visible to the reporter. Click or Cmd+Shift+I to make internal."}
+		>
+			{#if isInternal}
+				<svg
+					class="toggle-icon"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M12 15v2m-6 4h12a2 2 0 002-2v-7a2 2 0 00-2-2H6a2 2 0 00-2 2v7a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+					/>
+				</svg>
+				Internal
+			{:else}
+				<svg
+					class="toggle-icon"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+					/>
+					<circle
+						cx="12"
+						cy="12"
+						r="3"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+				External
+			{/if}
+		</button>
 	</div>
 	{#if error}
 		<p class="compose-error">{error}</p>
@@ -371,57 +435,6 @@
 			<button
 				type="button"
 				class="btn btn-xs {isInternal ? 'btn-warning' : 'btn-ghost'}"
-				aria-pressed={isInternal}
-				disabled={submitting}
-				onclick={() => (isInternal = !isInternal)}
-				title={isInternal
-					? "Internal — only visible in IDE. Click or Cmd+Shift+I to make external."
-					: "External — visible to the reporter. Click or Cmd+Shift+I to make internal."}
-			>
-				{#if isInternal}
-					<svg
-						class="toggle-icon"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 15v2m-6 4h12a2 2 0 002-2v-7a2 2 0 00-2-2H6a2 2 0 00-2 2v7a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-						/>
-					</svg>
-					Internal
-				{:else}
-					<svg
-						class="toggle-icon"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-						/>
-						<circle
-							cx="12"
-							cy="12"
-							r="3"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					External
-				{/if}
-			</button>
-			<button
-				type="button"
-				class="btn btn-xs {isInternal ? 'btn-warning' : 'btn-ghost'}"
 				disabled={submitting || !draft.trim()}
 				onclick={send}
 				onmouseenter={() => (hoveredAction = "send")}
@@ -437,7 +450,7 @@
 			<button
 				type="button"
 				class="btn btn-xs btn-primary"
-				disabled={submitting}
+				disabled={submitting || (!isInternal && !canRoute)}
 				onclick={sendAndRoute}
 				onmouseenter={() => (hoveredAction = "route")}
 				onmouseleave={() => (hoveredAction = null)}
@@ -445,7 +458,9 @@
 				onblur={() => (hoveredAction = null)}
 				title={isInternal
 					? "Post internal note and spawn an agent (Ctrl+Enter). Dev stays as assignee."
-					: "Send and route to requester (Ctrl+Enter)"}
+					: canRoute
+						? "Send and route to requester (Ctrl+Enter)"
+						: "No approver, requester, or creator set on this task — set one in the task detail before routing."}
 			>
 				{#if submitting}
 					<span class="loading loading-spinner loading-xs"></span>
@@ -456,48 +471,66 @@
 	</div>
 
 	<!-- Action preview — expands on textarea focus or button hover/focus.
-	     Describes state deltas so you know exactly what each button will do
-	     before committing to the click. Reads from the same logic the
-	     handlers use so it can't drift from reality. -->
+	     Describes both action buttons side-by-side so there's no ambiguity
+	     about which button does what. The hovered button's row is
+	     highlighted. Reads from the same logic the handlers use so it
+	     can't drift from reality. -->
 	{#if previewOpen}
 		<div class="action-preview" role="note" aria-live="polite">
-			{#if previewAction === "send"}
-				<span class="preview-label">On click:</span>
-				{#if isInternal}
-					Posts an <b class="label-internal">internal</b> note · task status
-					<code>{taskStatus}</code> unchanged · no assignee change · reporter
-					sees nothing.
-				{:else}
-					Posts an <b class="label-external">external</b> reply · task
-					status <code>{taskStatus}</code> unchanged · reporter sees it in
-					the widget.
-				{/if}
-			{:else if isInternal}
-				<span class="preview-label">On click:</span>
-				Posts an <b class="label-internal">internal</b> note · spawns a new
-				agent · status <code>{taskStatus}</code>
-				<span class="arrow">→</span>
-				<code class="code-next">in_progress</code> ·
-				<b>you stay as assignee</b> ({currentAssignee}).
-			{:else if statusWillChange}
-				<span class="preview-label">On click:</span>
-				Posts an <b class="label-external">external</b> reply · status
-				<code>{taskStatus}</code>
-				<span class="arrow">→</span>
-				<code class="code-next">{externalNextStatus}</code> · assignee
-				<code>{currentAssignee}</code>
-				<span class="arrow">→</span>
-				<code class="code-next">{routingName}</code> · advances to next
-				task.
-			{:else}
-				<span class="preview-label">On click:</span>
-				Posts an <b class="label-external">external</b> reply · status
-				<code>{taskStatus}</code> unchanged · assignee
-				<code>{currentAssignee}</code>
-				<span class="arrow">→</span>
-				<code class="code-next">{routingName}</code> · advances to next
-				task.
-			{/if}
+			<!-- Row 1: primary send (stays on task) -->
+			<div class="preview-row" class:preview-row-active={hoveredAction === "send"}>
+				<span class="preview-btn-name"
+					>{isInternal ? "Post Internal" : "Send"}</span
+				>
+				<span class="preview-arrow">→</span>
+				<span class="preview-desc">
+					{#if isInternal}
+						Posts an <b class="label-internal">internal</b> note · task
+						status <code>{taskStatus}</code> unchanged · reporter sees nothing.
+					{:else}
+						Posts an <b class="label-external">external</b> reply · task
+						status <code>{taskStatus}</code> unchanged · reporter sees it in
+						the widget.
+					{/if}
+				</span>
+			</div>
+			<!-- Row 2: secondary action (route or spawn) -->
+			<div class="preview-row" class:preview-row-active={hoveredAction === "route"}>
+				<span class="preview-btn-name"
+					>{isInternal ? "Internal + Spawn" : "Send + Route"}</span
+				>
+				<span class="preview-arrow">→</span>
+				<span class="preview-desc">
+					{#if isInternal}
+						Posts an <b class="label-internal">internal</b> note · spawns a
+						new agent · status <code>{taskStatus}</code>
+						<span class="arrow">→</span>
+						<code class="code-next">in_progress</code> ·
+						<b>you stay as assignee</b> ({currentAssignee}).
+					{:else if !canRoute}
+						<!-- No approver/requester/creator set → Route would throw.
+						     Surface that up-front so the user fixes the task
+						     identity instead of clicking and hitting an error. -->
+						<b class="label-disabled">Disabled</b> · this task has no
+						approver, requester, or creator — set one in the task detail
+						before routing.
+					{:else if statusWillChange}
+						Posts an <b class="label-external">external</b> reply · status
+						<code>{taskStatus}</code>
+						<span class="arrow">→</span>
+						<code class="code-next">{externalNextStatus}</code> · assignee
+						<code>{currentAssignee}</code>
+						<span class="arrow">→</span>
+						<code class="code-next">{routingName}</code> · advances to next.
+					{:else}
+						Posts an <b class="label-external">external</b> reply · status
+						<code>{taskStatus}</code> unchanged · assignee
+						<code>{currentAssignee}</code>
+						<span class="arrow">→</span>
+						<code class="code-next">{routingName}</code> · advances to next.
+					{/if}
+				</span>
+			</div>
 		</div>
 	{/if}
 </div>
@@ -537,10 +570,23 @@
 	.reply-to {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
+		justify-content: space-between;
+		gap: 0.5rem;
 		font-size: 0.75rem;
 		line-height: 1;
 		padding: 0.125rem 0.125rem 0.25rem;
+	}
+
+	.reply-to-main {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.visibility-toggle {
+		flex-shrink: 0;
 	}
 
 	.reply-to-label {
@@ -652,7 +698,7 @@
 
 	.action-preview {
 		margin-top: 0.125rem;
-		padding: 0.375rem 0.625rem;
+		padding: 0.375rem 0.5rem;
 		font-size: 0.6875rem;
 		line-height: 1.4;
 		color: oklch(0.80 0.03 250);
@@ -660,12 +706,49 @@
 		border: 1px solid oklch(0.22 0.02 250);
 		border-radius: 0.25rem;
 		animation: preview-fade-in 120ms ease-out;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1875rem;
 	}
 
-	.action-preview .preview-label {
+	.preview-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.375rem;
+		padding: 0.1875rem 0.25rem;
+		border-radius: 0.1875rem;
+		transition: background-color 100ms ease;
+	}
+
+	/* Hovered row pops so the user's eye snaps to "this button does X". */
+	.preview-row-active {
+		background: oklch(0.22 0.04 240 / 0.4);
+	}
+
+	.compose-internal .preview-row-active {
+		background: oklch(0.75 0.15 85 / 0.15);
+	}
+
+	.preview-btn-name {
+		flex-shrink: 0;
 		font-weight: 600;
-		opacity: 0.7;
-		margin-right: 0.25rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.625rem;
+		color: oklch(0.88 0.05 250);
+		padding: 0.0625rem 0.3125rem;
+		background: oklch(0.20 0.02 250);
+		border-radius: 0.1875rem;
+	}
+
+	.preview-arrow {
+		flex-shrink: 0;
+		opacity: 0.4;
+		font-weight: 600;
+	}
+
+	.preview-desc {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.action-preview code {
@@ -692,6 +775,10 @@
 
 	.action-preview .label-external {
 		color: oklch(0.75 0.12 200);
+	}
+
+	.action-preview .label-disabled {
+		color: oklch(0.70 0.14 40);
 	}
 
 	/* When internal mode tints the whole compose, the preview panel picks up

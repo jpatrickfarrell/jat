@@ -354,7 +354,7 @@ for t in data:
   fi
 }
 
-# pg_ready: return open tasks via IDE API (mirrors cmd_ready; no dep-filtering)
+# pg_ready: return open tasks with no unmet deps via IDE API (dep-filtered)
 pg_ready() {
   local limit="" json_out=false
 
@@ -374,18 +374,32 @@ pg_ready() {
   [[ -n "$limit" ]] && params="${params}&limit=${limit}"
 
   require_ide_reachable
-  local response normalized
+  local response normalized filtered
   response="$(pg_curl GET "/api/tasks?${params}")" || die "Failed to fetch ready tasks"
   normalized="$(echo "$response" | _pg_normalize_tasks)"
 
+  # Filter out tasks that have unmet dependencies (any depends_on entry not closed).
+  # Mirrors the NOT EXISTS blocker check in getReady() SQL on the postgres backend.
+  filtered="$(echo "$normalized" | python3 -c "
+import sys, json
+tasks = json.load(sys.stdin)
+ready = []
+for t in tasks:
+    deps = t.get('depends_on') or []
+    unmet = [d for d in deps if d.get('status') != 'closed']
+    if not unmet:
+        ready.append(t)
+print(json.dumps(ready))
+")"
+
   if $json_out; then
-    echo "$normalized"
+    echo "$filtered"
   else
-    if [[ "$(echo "$normalized" | jq 'length')" == "0" ]]; then
+    if [[ "$(echo "$filtered" | jq 'length')" == "0" ]]; then
       echo "No ready tasks."
     else
       echo "Ready tasks:"
-      echo "$normalized" | python3 -c "
+      echo "$filtered" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 for t in data:

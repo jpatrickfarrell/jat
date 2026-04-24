@@ -31,7 +31,8 @@
 		shortcuts = [],
 		sections,
 		title = 'Keyboard Shortcuts',
-		open = $bindable(false)
+		open = $bindable(false),
+		showListMotions = true
 	}: {
 		shortcuts?: KeyboardShortcut[];
 		/**
@@ -42,7 +43,26 @@
 		sections?: ShortcutSection[];
 		title?: string;
 		open?: boolean;
+		/**
+		 * Render the "List motions (Vim)" section. These motions are
+		 * implemented by `createListNav` and apply on every route that uses
+		 * it. Pass `false` to hide them (e.g. on routes with no j/k list).
+		 */
+		showListMotions?: boolean;
 	} = $props();
+
+	/**
+	 * Universal list motions, layered on top of j/k/Enter/Esc by `listNav`.
+	 * Surfaced here so every consumer of the overlay shows them by default.
+	 */
+	const LIST_MOTIONS: KeyboardShortcut[] = [
+		{ key: 'gg', description: 'Jump to first item' },
+		{ key: 'G', description: 'Jump to last item' },
+		{ key: '{n}j / {n}k', description: 'Move n items down / up' },
+		{ key: '{n}G / {n}gg', description: 'Jump to 1-indexed line n' },
+		{ key: 'Ctrl+D / Ctrl+U', description: 'Half-page down / up' },
+		{ key: 'zz', description: 'Centre focused item in viewport' }
+	];
 
 	let isOpen = $state(open);
 
@@ -120,6 +140,15 @@
 					{/each}
 				{:else}
 					{#each shortcuts as { key, description }, i (key + '::' + i)}
+						<div class="kso-row">
+							<kbd class="kso-key">{key}</kbd>
+							<span class="kso-description">{description}</span>
+						</div>
+					{/each}
+				{/if}
+				{#if showListMotions}
+					<div class="kso-section-title">List motions (Vim)</div>
+					{#each LIST_MOTIONS as { key, description }, i (key + '::' + i)}
 						<div class="kso-row">
 							<kbd class="kso-key">{key}</kbd>
 							<span class="kso-description">{description}</span>

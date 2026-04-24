@@ -15,6 +15,29 @@ Available on every page, regardless of context.
 
 ---
 
+## Universal List Motions (Vim)
+
+These work on every route that uses `createListNav` / `use:listNav` — i.e. every route with j/k navigation. They're layered on top of the plain `j` / `k` / Enter / Esc behaviour.
+
+| Shortcut | Action |
+|----------|--------|
+| `gg` | Jump to the first item |
+| `G` | Jump to the last item |
+| `{n}j` / `{n}k` | Move `n` items down / up (count-prefix buffer, 1.5s timeout) |
+| `{n}G` / `{n}gg` | Jump to 1-indexed line `n` (clamped to list length) |
+| `Ctrl+D` / `Ctrl+U` | Move roughly half a viewport's worth of items down / up |
+| `zz` | Scroll the focused item to the centre of its viewport |
+
+A half-typed motion (`5`, `g`, `z`) is cancelled by:
+
+- pressing Esc,
+- pressing any key that isn't the motion's completion, or
+- waiting 1.5 seconds.
+
+`0` on its own is pass-through (routes may bind it for their own shortcuts); it only becomes part of a count once another digit has already started one, e.g. `10j`.
+
+---
+
 ## Route-by-Route Shortcuts
 
 ### /triage
@@ -387,3 +410,5 @@ Require a hovered session on the /sessions (Work) page.
 **`tr.jk-focused`** — table rows require `inset box-shadow` because CSS `outline` is unreliable on `<tr>` elements. Rule is in `app.css`.
 
 **`data-nav-id` attribute** — stable key placed on each navigable item; `createListNav` defaults to querying `[data-nav-id]` on the container ref.
+
+**Vim motions are baked into `listNav`** — `gg`, `G`, `{count}` prefix, `Ctrl+D` / `Ctrl+U`, and `zz` are implemented inside `createListNav` / `use:listNav` and surface automatically on every route that uses it. No per-route wiring is required. The `KeyboardShortcutsOverlay` renders them as a "List motions (Vim)" section by default; routes that render the overlay without a list can pass `showListMotions={false}` to hide it.

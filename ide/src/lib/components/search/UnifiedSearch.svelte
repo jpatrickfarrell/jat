@@ -75,11 +75,12 @@
 		limit: number;
 	}
 
-	type SourceTab = 'routes' | 'tasks' | 'filenames' | 'content' | 'memory';
+	type SourceTab = 'routes' | 'tasks' | 'agents' | 'filenames' | 'content' | 'memory';
 
 	const TABS: { id: SourceTab; label: string; icon: string }[] = [
 		{ id: 'routes', label: 'Cmd', icon: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z' },
 		{ id: 'tasks', label: 'Tasks', icon: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' },
+		{ id: 'agents', label: 'Agents', icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z' },
 		{ id: 'filenames', label: 'Files', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' },
 		{ id: 'content', label: 'Content', icon: 'M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5' },
 		{ id: 'memory', label: 'Memory', icon: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125' },
@@ -93,6 +94,66 @@
 		keywords: string[];
 		path?: string;
 		execute?: () => void;
+	}
+
+	interface AgentResult {
+		name: string;
+		program?: string;
+		model?: string;
+		project_path?: string;
+		task_description?: string;
+		last_active_ts?: string;
+	}
+
+	// Precomputed lowercase haystack (built once per item) — avoids per-keystroke
+	// .toLowerCase() over thousands of items when ranking.
+	interface IndexedRoute extends RouteAction {
+		_labelLower: string;
+		_descLower: string;
+		_keywordsLower: string[];
+	}
+
+	function indexRoute(a: RouteAction): IndexedRoute {
+		return {
+			...a,
+			_labelLower: a.label.toLowerCase(),
+			_descLower: a.description.toLowerCase(),
+			_keywordsLower: a.keywords.map(k => k.toLowerCase()),
+		};
+	}
+
+	// True if every char of `needle` appears in `haystack` in order.
+	function fuzzyMatch(haystack: string, needle: string): boolean {
+		if (!needle) return true;
+		let hi = 0, ni = 0;
+		while (hi < haystack.length && ni < needle.length) {
+			if (haystack.charCodeAt(hi) === needle.charCodeAt(ni)) ni++;
+			hi++;
+		}
+		return ni === needle.length;
+	}
+
+	// Recent actions: cap at 20, persist to localStorage, surface as "Recent"
+	// section on the routes tab when query is empty.
+	const RECENT_ACTIONS_KEY = 'jat-cmdk-recent-actions';
+	const RECENT_ACTIONS_LIMIT = 20;
+
+	function loadRecentActions(): string[] {
+		try {
+			const raw = localStorage.getItem(RECENT_ACTIONS_KEY);
+			if (!raw) return [];
+			const parsed = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed.slice(0, RECENT_ACTIONS_LIMIT) : [];
+		} catch { return []; }
+	}
+
+	function pushRecentAction(id: string) {
+		if (!id) return;
+		try {
+			const current = loadRecentActions().filter(x => x !== id);
+			current.unshift(id);
+			localStorage.setItem(RECENT_ACTIONS_KEY, JSON.stringify(current.slice(0, RECENT_ACTIONS_LIMIT)));
+		} catch {}
 	}
 
 	const ROUTE_ACTIONS: RouteAction[] = [
@@ -194,6 +255,19 @@
 	let error = $state('');
 	let routeResults = $state<RouteAction[]>([...ROUTE_ACTIONS]);
 
+	// Agents tab results (from /api/agents)
+	let agentResults = $state<AgentResult[]>([]);
+	let allAgents = $state<AgentResult[]>([]); // full set, ranked client-side
+	let allAgentsLoaded = $state(false);
+	let agentsLoading = $state(false);
+
+	// Recent actions: surfaced on routes tab when query is empty
+	let recentActionIds = $state<string[]>([]);
+
+	// Built-in commands plus dynamic project-switch entries get indexed once
+	// per filter pass; ROUTE_ACTIONS itself is indexed here at module load.
+	const ROUTE_ACTIONS_INDEXED: IndexedRoute[] = ROUTE_ACTIONS.map(indexRoute);
+
 	// Keyboard navigation for filenames/content results
 	let selectedResultIndex = $state(-1);
 
@@ -222,8 +296,7 @@
 		if (!navId) return;
 		if (activeTab === 'routes') {
 			const action = routeResults.find(r => r.id === navId);
-			if (action?.execute) { action.execute(); closeModal(); }
-			else if (action?.path) { goto(action.path); closeModal(); }
+			if (action) runRouteAction(action);
 			// Also handle inline cmd task results
 			const cmdTask = cmdTaskResults.find(t => t.id === navId);
 			if (cmdTask) openTask(cmdTask.id);
@@ -239,12 +312,15 @@
 		} else if (activeTab === 'content') {
 			const result = contentResults.find(r => `${r.file}:${r.line}` === navId);
 			if (result) openContentResult(result);
+		} else if (activeTab === 'agents') {
+			const a = agentResults.find(x => x.name === navId);
+			if (a) openAgent(a);
 		}
 	}
 
 	// Refresh nav index when results change
 	$effect(() => {
-		taskResults; memoryResults; filenameResults; contentResults; routeResults; cmdTaskResults;
+		taskResults; memoryResults; filenameResults; contentResults; routeResults; cmdTaskResults; agentResults;
 		nav.refresh();
 	});
 
@@ -262,8 +338,10 @@
 			filenameResults = [];
 			contentResults = [];
 			cmdTaskResults = [];
+			agentResults = [];
 			meta = null;
 			activeTab = 'routes';
+			recentActionIds = loadRecentActions();
 			untrack(() => filterRoutes(''));
 			selectedResultIndex = -1;
 			requestAnimationFrame(() => searchInputEl?.focus());
@@ -275,11 +353,13 @@
 	const memoryCount = $derived(memoryResults.length);
 	const filenameCount = $derived(filenameResults.length);
 	const contentCount = $derived(contentResults.length);
+	const agentCount = $derived(agentResults.length);
 
 	function tabCount(tab: SourceTab): number {
 		switch (tab) {
 			case 'routes': return routeResults.length;
 			case 'tasks': return taskCount;
+			case 'agents': return agentCount;
 			case 'memory': return memoryCount;
 			case 'filenames': return filenameCount;
 			case 'content': return contentCount;
@@ -290,6 +370,7 @@
 		meta !== null || filenameResults.length > 0 || contentResults.length > 0 ||
 		(activeTab === 'routes') ||
 		activeTab === 'tasks' ||
+		activeTab === 'agents' ||
 		activeTab === 'memory' ||
 		activeTab === 'filenames'
 	);
@@ -300,6 +381,7 @@
 		(activeTab === 'content' && contentLoading) ||
 		(activeTab === 'tasks' && (!query.trim() || taskResults.length > 0)) ||
 		(activeTab === 'memory' && (!query.trim() || memoryResults.length > 0)) ||
+		(activeTab === 'agents' && (agentsLoading || !query.trim() || agentResults.length > 0)) ||
 		smartFillLoading
 	);
 
@@ -451,6 +533,10 @@
 		if (tab === 'tasks') await fetchRecentTasks();
 		else if (tab === 'filenames') fetchRecentFilesFromStorage();
 		else if (tab === 'memory') await fetchRecentMemory();
+		else if (tab === 'agents') {
+			await fetchAllAgents();
+			filterAgents('');
+		}
 	}
 
 	async function fetchRecentTasks() {
@@ -510,7 +596,10 @@
 		finally { smartFillLoading = false; }
 	}
 
-	function filterRoutes(q: string) {
+	// Build an indexed combined list of project switchers + ROUTE_ACTIONS.
+	// Project switchers are derived from props so they're rebuilt per call;
+	// the static ROUTE_ACTIONS_INDEXED is reused.
+	function buildIndexedActions(): IndexedRoute[] {
 		const projectActions: RouteAction[] = (projects ?? [])
 			.filter(p => p && p !== 'All Projects')
 			.map(p => ({
@@ -520,20 +609,108 @@
 				keywords: [p.toLowerCase(), 'project', 'switch', 'go'],
 				execute: () => { onProjectChange?.(p); closeModal(); }
 			}));
-		const allActions = [...projectActions, ...ROUTE_ACTIONS];
-		if (!q.trim()) { routeResults = allActions; return; }
+		return [...projectActions.map(indexRoute), ...ROUTE_ACTIONS_INDEXED];
+	}
+
+	// Ranking: exact-prefix > word-boundary prefix > keyword prefix > substring
+	// > description substring > fuzzy match. Recently used actions get a small
+	// boost on top of their natural rank so they float when otherwise equal.
+	function scoreIndexedRoute(a: IndexedRoute, ql: string, recencyBoost: number): number {
+		const label = a._labelLower;
+		if (label === ql) return 1000 + recencyBoost;
+		if (label.startsWith(ql)) return 500 + recencyBoost;
+		// Word-boundary prefix: any space-separated word starts with ql
+		const words = label.split(/\s+/);
+		if (words.some(w => w.startsWith(ql))) return 300 + recencyBoost;
+		if (a._keywordsLower.some(k => k === ql)) return 200 + recencyBoost;
+		if (a._keywordsLower.some(k => k.startsWith(ql))) return 100 + recencyBoost;
+		if (label.includes(ql)) return 50 + recencyBoost;
+		if (a._descLower.includes(ql)) return 25 + recencyBoost;
+		if (a._keywordsLower.some(k => k.includes(ql))) return 10 + recencyBoost;
+		if (fuzzyMatch(label, ql)) return 5 + recencyBoost;
+		return 0;
+	}
+
+	function filterRoutes(q: string) {
+		const indexed = buildIndexedActions();
+		const recencyMap = new Map<string, number>();
+		recentActionIds.forEach((id, i) => recencyMap.set(id, RECENT_ACTIONS_LIMIT - i));
+
+		if (!q.trim()) {
+			// Empty query: float recently-used actions to the top, otherwise
+			// preserve insertion order (project switchers first).
+			const stripped = indexed.map(({ _labelLower, _descLower, _keywordsLower, ...rest }) => rest);
+			if (recencyMap.size === 0) { routeResults = stripped; return; }
+			const recents: RouteAction[] = [];
+			const rest: RouteAction[] = [];
+			for (const a of stripped) {
+				if (recencyMap.has(a.id)) recents.push(a); else rest.push(a);
+			}
+			recents.sort((a, b) => (recencyMap.get(b.id) ?? 0) - (recencyMap.get(a.id) ?? 0));
+			routeResults = [...recents, ...rest];
+			return;
+		}
 		const ql = q.toLowerCase();
-		routeResults = allActions.filter(a =>
-			a.label.toLowerCase().includes(ql) ||
-			a.description.toLowerCase().includes(ql) ||
-			a.keywords.some(k => k.includes(ql))
-		).sort((a, b) => {
-			const score = (a: RouteAction) =>
-				a.label.toLowerCase().startsWith(ql) ? 3 :
-				a.label.toLowerCase().includes(ql) ? 2 :
-				a.keywords.some(k => k.startsWith(ql)) ? 1 : 0;
-			return score(b) - score(a);
-		});
+		const scored = indexed
+			.map(a => ({ a, score: scoreIndexedRoute(a, ql, recencyMap.get(a.id) ?? 0) }))
+			.filter(x => x.score > 0)
+			.sort((x, y) => y.score - x.score)
+			.map(x => {
+				const { _labelLower, _descLower, _keywordsLower, ...rest } = x.a;
+				return rest;
+			});
+		routeResults = scored;
+	}
+
+	// --- Agents source ---
+	async function fetchAllAgents() {
+		if (allAgentsLoaded) return;
+		agentsLoading = true;
+		try {
+			const res = await fetch('/api/agents?limit=500');
+			if (res.ok) {
+				const data = await res.json();
+				allAgents = (data.agents || []) as AgentResult[];
+				allAgentsLoaded = true;
+			}
+		} catch {} finally {
+			agentsLoading = false;
+		}
+	}
+
+	function filterAgents(q: string) {
+		if (!allAgentsLoaded) return;
+		if (!q.trim()) {
+			// Smart fill: most recently active agents (already sorted desc by API
+			// id, but fall back to last_active_ts if present).
+			const sorted = [...allAgents].sort((a, b) => {
+				const at = a.last_active_ts ? new Date(a.last_active_ts).getTime() : 0;
+				const bt = b.last_active_ts ? new Date(b.last_active_ts).getTime() : 0;
+				return bt - at;
+			});
+			agentResults = sorted.slice(0, 30);
+			return;
+		}
+		const ql = q.toLowerCase();
+		// Cheap precomputed haystack per agent built per-search; agent rows are
+		// O(hundreds), not tens of thousands, so a transient compute is fine.
+		const scored = allAgents
+			.map(a => {
+				const nameLower = a.name.toLowerCase();
+				const programLower = (a.program || '').toLowerCase();
+				let score = 0;
+				if (nameLower === ql) score = 1000;
+				else if (nameLower.startsWith(ql)) score = 500;
+				else if (nameLower.includes(ql)) score = 100;
+				else if (programLower.includes(ql)) score = 50;
+				else if (fuzzyMatch(nameLower, ql)) score = 10;
+				return { a, score };
+			})
+			.filter(x => x.score > 0)
+			.sort((x, y) => y.score - x.score)
+			.map(x => x.a)
+			.slice(0, 50);
+		agentResults = scored;
 	}
 
 	function doSearchForActiveTab() {
@@ -547,6 +724,8 @@
 			doFilenameSearch();
 		} else if (activeTab === 'content') {
 			doContentSearch();
+		} else if (activeTab === 'agents') {
+			(async () => { await fetchAllAgents(); filterAgents(query); })();
 		} else {
 			doUnifiedSearch();
 		}
@@ -574,10 +753,12 @@
 			selectedResultIndex = autoIdx;
 		}
 		if (debounceTimer) clearTimeout(debounceTimer);
+		// 80ms is short enough to feel instant on every keystroke but still
+		// coalesces fast typing into a single API request per source.
 		debounceTimer = setTimeout(() => {
 			if (mode === 'route') updateUrl();
 			doSearchForActiveTab();
-		}, 300);
+		}, 80);
 	}
 
 	function activeTabResultCount(): number {
@@ -587,6 +768,7 @@
 			case 'memory': return memoryResults.length;
 			case 'filenames': return filenameResults.length;
 			case 'content': return contentResults.length;
+			case 'agents': return agentResults.length;
 			default: return 0;
 		}
 	}
@@ -596,8 +778,7 @@
 		if (activeTab === 'routes') {
 			if (selectedResultIndex < routeResults.length) {
 				const action = routeResults[selectedResultIndex];
-				if (action.execute) { action.execute(); closeModal(); }
-				else if (action.path) { goto(action.path); closeModal(); }
+				runRouteAction(action);
 				return true;
 			}
 			// Inline cmd task results follow routes in the list
@@ -623,7 +804,28 @@
 			openContentResult(contentResults[selectedResultIndex]);
 			return true;
 		}
+		if (activeTab === 'agents' && selectedResultIndex < agentResults.length) {
+			openAgent(agentResults[selectedResultIndex]);
+			return true;
+		}
 		return false;
+	}
+
+	// Single dispatch for executing a route action. Records the action id so
+	// recent commands surface ahead of others on the next palette open.
+	function runRouteAction(action: RouteAction) {
+		pushRecentAction(action.id);
+		recentActionIds = loadRecentActions();
+		if (action.execute) { action.execute(); closeModal(); }
+		else if (action.path) { goto(action.path); closeModal(); }
+	}
+
+	function openAgent(a: AgentResult) {
+		pushRecentAction(`agent-${a.name}`);
+		recentActionIds = loadRecentActions();
+		// Jump to the work page filtered to this agent's session.
+		goto(`/work?agent=${encodeURIComponent(a.name)}`);
+		closeModal();
 	}
 
 	// --- Tab cycling helpers ---
@@ -689,9 +891,7 @@
 			}
 			// Routes tab with no selection: execute first route
 			if (activeTab === 'routes' && routeResults.length > 0 && selectedResultIndex < 0) {
-				const action = routeResults[0];
-				if (action?.execute) { action.execute(); closeModal(); }
-				else if (action.path) { goto(action.path); closeModal(); }
+				runRouteAction(routeResults[0]);
 				return;
 			}
 			if (openSelectedResult()) return;
@@ -1077,7 +1277,7 @@
 				>Retry</button>
 			</div>
 		{:else if hasSearched && !currentTabHasResults}
-			{@const tabLabel = { routes: 'commands', tasks: 'tasks', memory: 'memory entries', filenames: 'filename matches', content: 'content matches' }[activeTab] ?? activeTab}
+			{@const tabLabel = { routes: 'commands', tasks: 'tasks', agents: 'agents', memory: 'memory entries', filenames: 'filename matches', content: 'content matches' }[activeTab] ?? activeTab}
 			<div class="text-center py-{isModal ? '8' : '12'}">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.40 0.02 250);">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -1101,6 +1301,8 @@
 				{@render routesList(isModal)}
 			{:else if activeTab === 'tasks'}
 				{@render tasksList(isModal)}
+			{:else if activeTab === 'agents'}
+				{@render agentsList(isModal)}
 			{:else if activeTab === 'memory'}
 				{@render memoryList(isModal)}
 			{:else if activeTab === 'filenames'}
@@ -1169,10 +1371,7 @@
 							border: 1px solid {isSelected ? 'oklch(0.40 0.08 200 / 0.5)' : 'transparent'};
 							color: {isSelected ? 'oklch(0.92 0.06 200)' : 'oklch(0.75 0.02 250)'};
 						"
-						onclick={() => {
-							if (action.execute) { action.execute(); closeModal(); }
-							else if (action.path) { goto(action.path); closeModal(); }
-						}}
+						onclick={() => runRouteAction(action)}
 						onmouseenter={() => nav.focus(i)}
 					>
 						{#if projectColor}
@@ -1296,6 +1495,54 @@
 						<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">
 							{@html highlightMatch(truncate(task.snippet || task.description || '', 200), query)}
 						</p>
+					{/if}
+				</button>
+			{/each}
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet agentsList(isModal: boolean)}
+	<div class="{isModal ? 'px-2' : 'max-w-3xl mx-auto'} space-y-1">
+		{#if agentsLoading && agentResults.length === 0}
+			<div class="space-y-1 py-1">
+				{#each [1,2,3,4] as _}
+					<div class="rounded-md p-3" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.02 250);">
+						<div class="skeleton h-2.5 w-1/2 rounded" style="background: oklch(0.25 0.02 250);"></div>
+					</div>
+				{/each}
+			</div>
+		{:else if agentResults.length === 0}
+			<p class="text-[11px] px-2 py-4 text-center" style="color: oklch(0.50 0.02 250);">
+				{query.trim() ? `No agents match "${query}"` : 'No agents registered yet'}
+			</p>
+		{:else}
+			{#if !query.trim()}
+				<p class="text-[10px] uppercase tracking-wider px-2 mb-1.5" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Recently Active</p>
+			{/if}
+			{#each agentResults as agent, index}
+				<button
+					data-nav-id={agent.name}
+					onclick={() => openAgent(agent)}
+					onmouseenter={() => nav.focus(index)}
+					class="us-result-card w-full"
+					class:result-selected={index === selectedResultIndex}
+				>
+					<div class="flex items-center gap-2 min-w-0">
+						<span class="font-mono text-[11px] flex-none" style="color: oklch(0.65 0.12 200);">@</span>
+						<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);">{@html highlightMatch(agent.name, query)}</p>
+						{#if agent.program}
+							<span class="text-[10px] px-1.5 py-0.5 rounded flex-none font-mono" style="background: oklch(0.25 0.04 145 / 0.3); color: oklch(0.65 0.12 145);">{agent.program}</span>
+						{/if}
+						{#if agent.model}
+							<span class="text-[10px] flex-none" style="color: oklch(0.55 0.02 250);">{agent.model}</span>
+						{/if}
+						{#if agent.last_active_ts}
+							<span class="text-[10px] ml-auto flex-none" style="color: oklch(0.45 0.02 250);">{new Date(agent.last_active_ts).toLocaleDateString()}</span>
+						{/if}
+					</div>
+					{#if agent.task_description}
+						<p class="text-xs mt-1 line-clamp-1" style="color: oklch(0.55 0.02 250);">{agent.task_description}</p>
 					{/if}
 				</button>
 			{/each}

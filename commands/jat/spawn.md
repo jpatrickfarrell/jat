@@ -35,11 +35,15 @@ jat-signal starting '{"agentName":"WindyRiver","sessionId":"...","taskId":"jat-a
 
 Get session ID with: `get-current-session-id` (or check `/tmp/claude-session-*.txt`)
 
-### 2. Read Task & Plan
+### 2. Read Task, Comments & Plan
 
 ```bash
 jt show jat-abc123 --json
 ```
+
+**Scan `.comments[]` as well as `.description`.** Devs direct agents through comments on the task, not by editing the description (see `ide/docs/inbox-design.md` — "Comments as Input Pattern"). In particular, look for recent comments with `metadata.external == false` — these are internal dev-to-agent notes that should shape your approach.
+
+Example: if a dev left "Agent: use approach X, also check file Y" as an internal comment during `/inbox` triage, that's the direction you need — not just the reporter's original description.
 
 ### 3. Emit Working Signal & Begin
 

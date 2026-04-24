@@ -65,11 +65,13 @@ get-current-session-id
 
 If `NO_PRE_REG` → manual/CLI session, must register (see Manual Registration below).
 
-#### 1B: Task Details
+#### 1B: Task Details (description + comments)
 
 ```bash
 jt show "$TASK_ID" --json
 ```
+
+The returned JSON includes `.comments[]` alongside `.description` — **scan both**. Devs direct agents through task comments during `/inbox` triage rather than editing the description (this preserves the reporter's verbatim text and the audit trail — see `ide/docs/inbox-design.md` "Comments as Input Pattern"). Pay particular attention to comments with `metadata.external == false` (internal notes): these are dev-to-agent direction that should shape your approach, and they override any guesses you'd make from the description alone.
 
 **If no task-id was provided**, show recommendations and EXIT instead:
 ```bash

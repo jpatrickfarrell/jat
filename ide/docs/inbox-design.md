@@ -296,3 +296,107 @@ After this design is approved, break into:
 7. `[polish]` Panel slide animation, status bar, keyboard overlay
 
 Each task is ~2-4 hours of focused work.
+
+---
+
+## Comments as Input Pattern
+
+This section formalizes the canonical way for devs to direct agents during triage: **post a comment on the task, don't edit the description.**
+
+### The Canonical Workflow
+
+```
+Reporter files bug ──► /inbox triage ──► Dev adds INTERNAL comment ──► /jat:spawn
+   (description)        (dev reads)       (dev direction)              (agent reads both)
+```
+
+1. A reporter (client, user, or agent) files a task. The `description` captures their verbatim report.
+2. A dev lands on `/inbox` and reads the task.
+3. The dev adds direction as a **comment** — marked internal if it shouldn't leak to the reporter (see [Internal vs External Comments](#internal-vs-external-comments)).
+4. The dev spawns an agent. The agent, on `/jat:start` or `/jat:spawn`, reads the task including its comment thread and incorporates dev direction into its approach.
+
+### Why Comments, Not Description Edits
+
+Editing the description to add dev notes looks convenient, but:
+
+| Problem | What Comments Fix |
+|---------|-------------------|
+| Mutates the original report text | Comments are additive — the description stays verbatim |
+| Loses authorship | Every comment has an author + timestamp |
+| Pollutes the audit trail | The thread is a clean record of what was added when |
+| Mixes "what was reported" with "what dev added" | Separate concerns, separate fields |
+| One-way: customers can't reply in a description | Comments are two-way (customer widget sees external comments) |
+
+**Comments are the right tool.** They preserve verbatim feedback, carry authorship and timestamps, and — because they render in the widget as well as the IDE — become part of the conversation with the original reporter when marked external.
+
+### Anti-Pattern: Editing the Description to Add Notes
+
+```markdown
+<!-- ❌ WRONG — description mutated with dev notes -->
+## Description
+User reports the login button doesn't work on iPhone after v2.1.2.
+
+---
+Dev note: Known iOS issue. Agent: use approach from meadow-2iox5,
+also check refresh token handling in src/auth/refresh.ts.
+```
+
+```markdown
+<!-- ✅ CORRECT — description stays verbatim, direction lives in a comment -->
+## Description
+User reports the login button doesn't work on iPhone after v2.1.2.
+
+## Comments (internal)
+jw · 2026-04-24 10:30
+Known iOS issue. Agent: use approach from meadow-2iox5,
+also check refresh token handling in src/auth/refresh.ts.
+```
+
+**Rule of thumb:** if the text you're about to add wasn't in the original report, it belongs in a comment.
+
+The only valid reasons to edit a description are:
+- Correcting a typo in the title
+- Fixing a broken reproduction step the reporter got wrong (ideally with a `[dev: corrected foo → bar]` marker inside the edit)
+- Removing sensitive data the reporter accidentally included
+
+### Internal vs External Comments
+
+Every comment carries an `external` visibility flag (see task **jat-47wul.3** for the composer UI + rendering design):
+
+| Flag | Audience | When to Use |
+|------|----------|-------------|
+| `external: true` (default) | Reporter (via widget) AND dev (IDE) | Replying to the reporter, public status updates |
+| `external: false` (internal) | Dev only (IDE) | Dev-to-agent direction, internal discussion, notes that shouldn't leak |
+
+**Policy:** agents always post `external: true`. The internal channel is for dev-to-agent direction only. This means the customer gets more context (the agent's reasoning becomes part of the work product they can see) while dev-private scaffolding stays in the IDE.
+
+**In the composer:** the default is external. Use the toggle (or `Cmd+Shift+I`) to flip to internal for a specific comment. The toggle state resets to external after submit.
+
+### Example: Directing an Agent
+
+Reporter files via widget:
+
+> "The login button shows but nothing happens when I tap it on iPhone after the v2.1.2 update."
+
+Dev triages in `/inbox` and adds an **internal** comment before spawning:
+
+> **jw (internal)** · 2026-04-24 10:30
+> Agent: this looks like the same iOS click-event bug as meadow-2iox5. Try the approach there first (touch-event fallback in `src/lib/components/Button.svelte`). Also check `src/auth/refresh.ts:45` — we changed the timeout last week and it may be biting us on slow mobile networks. If you can repro on a physical iPhone, great; if not, ask @mike.
+
+Dev spawns the agent. On startup, the agent reads `jt show <id> --json`, scans `.comments[]`, sees the internal direction, and shapes its approach accordingly. The reporter sees only the external comments the agent and dev post later.
+
+### Agent Contract
+
+Agents MUST read comments on spawn, not just the description. See:
+
+- `commands/jat/start.md` — `/jat:start` includes a comments scan in Round 1
+- `commands/jat/spawn.md` — `/jat:spawn` (IDE-spawned flow) includes the same
+
+The `jt show <id> --json` output already includes `comments[]` with `author`, `created_at`, `body`, and `metadata.external` — no extra call needed.
+
+### See Also
+
+- **jat-47wul** — parent epic: Unify feedback channels on task comments as single source of truth
+- **jat-47wul.1** — Comments API: external flag + default/policy enforcement
+- **jat-47wul.3** — IDE composer toggle + visual treatment for internal comments
+- **jat-47wul.2** — Policy enforcement: agent-authored comments always external

@@ -1,9 +1,12 @@
 /**
  * Task Comments API
  *
- * GET  /api/tasks/[id]/comments  → list comments ordered by created_at asc
- * POST /api/tasks/[id]/comments  → create comment
- *   body: { text, author, author_type, comment_type, session_id?, metadata? }
+ * GET  /api/tasks/[id]/comments                    → list all comments
+ * GET  /api/tasks/[id]/comments?external=true      → list only external comments
+ * POST /api/tasks/[id]/comments                    → create comment
+ *   body: { text, author, author_type, comment_type, session_id?, metadata?, external? }
+ *   `external` defaults to true (publicly visible). Pass `false` to mark
+ *   internal-only. This flag is ONE-WAY — see the sibling [commentId] route.
  *
  * Works for SQLite-backed and Postgres-backed projects.
  *
@@ -33,15 +36,16 @@ async function getPgBackendForTask(taskId) {
 }
 
 /** @type {import('./$types').RequestHandler} */
-export async function GET({ params }) {
+export async function GET({ params, url }) {
 	const taskId = params.id;
+	const externalOnly = url.searchParams.get('external') === 'true';
 	try {
 		const pg = await getPgBackendForTask(taskId);
 		if (pg) {
 			const task = await pg.getById(taskId);
 			if (!task) return json({ error: 'Task not found' }, { status: 404 });
 			// Postgres project_tasks_comments lacks extended fields — normalise shape.
-			const comments = (task.comments || []).map((c) => ({
+			let comments = (task.comments || []).map((c) => ({
 				id: c.id,
 				text: c.text || '',
 				author: c.author || '',
@@ -49,15 +53,21 @@ export async function GET({ params }) {
 				comment_type: c.comment_type ?? null,
 				session_id: c.session_id ?? null,
 				metadata: c.metadata ?? null,
+				external: c.external !== false,
 				created_at: c.created_at,
 			}));
+			if (externalOnly) comments = comments.filter((c) => c.external === true);
 			return json({ comments });
 		}
 
 		const task = sqlite.getById(taskId);
 		if (!task) return json({ error: 'Task not found' }, { status: 404 });
-		const comments = sqlite.listComments(taskId).map((c) => ({
+		const raw = externalOnly
+			? sqlite.listComments(taskId, undefined, { external: true })
+			: sqlite.listComments(taskId);
+		const comments = raw.map((c) => ({
 			...c,
+			external: c.external !== false,
 			metadata: c.metadata ? safeParseJson(c.metadata) : null,
 		}));
 		return json({ comments });
@@ -77,7 +87,7 @@ export async function POST({ params, request }) {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	const { text, author, author_email, author_type, comment_type, session_id, metadata } = body || {};
+	const { text, author, author_email, author_type, comment_type, session_id, metadata, external } = body || {};
 	if (!text || typeof text !== 'string' || !text.trim()) {
 		return json({ error: 'text is required' }, { status: 400 });
 	}
@@ -96,6 +106,12 @@ export async function POST({ params, request }) {
 			{ status: 400 }
 		);
 	}
+	if (external !== undefined && typeof external !== 'boolean') {
+		return json({ error: 'external must be a boolean' }, { status: 400 });
+	}
+	// Default: external (publicly visible). Callers that want an internal-only
+	// comment must pass `external: false` explicitly.
+	const externalFlag = external === undefined ? true : external;
 
 	try {
 		const pg = await getPgBackendForTask(taskId);
@@ -110,6 +126,7 @@ export async function POST({ params, request }) {
 				comment_type,
 				session_id: session_id ?? null,
 				metadata: metadata ?? null,
+				external: externalFlag,
 			});
 			return json({ comment: created }, { status: 201 });
 		}
@@ -127,6 +144,7 @@ export async function POST({ params, request }) {
 			comment_type,
 			session_id: session_id ?? null,
 			metadata: mergedMetadata,
+			external: externalFlag,
 		});
 
 		// Resume trigger: if this is an answer to an open agent question,
@@ -141,7 +159,10 @@ export async function POST({ params, request }) {
 			{
 				comment: {
 					...comment,
-					metadata: comment.metadata ? safeParseJson(comment.metadata) : null,
+					external: comment.external !== false,
+					metadata: typeof comment.metadata === 'string'
+						? safeParseJson(comment.metadata)
+						: (comment.metadata ?? null),
 				},
 			},
 			{ status: 201 }

@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS comments (
     comment_type TEXT,
     session_id TEXT,
     metadata TEXT,
+    external INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     FOREIGN KEY (issue_id) REFERENCES tasks(id) ON DELETE CASCADE
 );

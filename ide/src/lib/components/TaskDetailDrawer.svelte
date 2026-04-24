@@ -2847,6 +2847,23 @@
 												{/if}
 												<span>Resume</span>
 											</button>
+										{:else if !isAgentOnline && uniqueSessions.length > 0}
+											<!-- Agent offline, no recoverable JSONL session, but signals have a session ID -->
+											<button
+												class="btn btn-xs btn-primary gap-1"
+												onclick={() => handleResumeSession(uniqueSessions[0].session_id, uniqueSessions[0].agent_name)}
+												disabled={resumingSessionId !== null}
+												title="Resume the previous Claude conversation"
+											>
+												{#if resumingSessionId === uniqueSessions[0].session_id}
+													<span class="loading loading-spinner loading-xs"></span>
+												{:else}
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+												{/if}
+												<span>Resume</span>
+											</button>
 										{/if}
 										<button
 											class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-h-0 hover:btn-error"
@@ -2861,6 +2878,60 @@
 													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 												</svg>
 											{/if}
+										</button>
+									</div>
+								{:else if actionMode === 'in_progress' && !task?.assignee}
+									<!-- In-progress but no assignee: Show Resume (from signals) + Launch -->
+									<div class="flex items-center gap-1">
+										{#if uniqueSessions.length === 1}
+											<button
+												class="btn btn-xs btn-primary gap-1"
+												onclick={() => handleResumeSession(uniqueSessions[0].session_id, uniqueSessions[0].agent_name)}
+												disabled={resumingSessionId !== null}
+												title="Resume {uniqueSessions[0].agent_name}'s previous session"
+											>
+												{#if resumingSessionId === uniqueSessions[0].session_id}
+													<span class="loading loading-spinner loading-xs"></span>
+												{:else}
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+												{/if}
+												<span>Resume</span>
+											</button>
+										{:else if uniqueSessions.length > 1}
+											<div class="dropdown dropdown-end">
+												<button tabindex="0" class="btn btn-xs btn-primary gap-1" disabled={resumingSessionId !== null}>
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+													<span>Resume</span>
+												</button>
+												<ul class="dropdown-content z-50 menu p-1 shadow-lg bg-base-200 rounded-box w-48">
+													{#each uniqueSessions as session}
+														<li>
+															<button class="text-xs" onclick={() => handleResumeSession(session.session_id, session.agent_name)} disabled={resumingSessionId !== null}>
+																{session.agent_name}
+															</button>
+														</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+										<button
+											class="btn btn-xs {uniqueSessions.length > 0 ? 'btn-ghost' : 'btn-primary'} gap-1"
+											onclick={handleSpawn}
+											disabled={isSpawning || depStatus.hasBlockers}
+											title={depStatus.hasBlockers ? depStatus.blockingReason : 'Launch new agent session'}
+										>
+											{#if isSpawning}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+													<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
+												</svg>
+											{/if}
+											<span>{uniqueSessions.length > 0 ? 'New' : 'Launch'}</span>
 										</button>
 									</div>
 								{:else if actionMode === 'blocked' && !task?.assignee}

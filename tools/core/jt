@@ -2072,8 +2072,8 @@ cmd_dep() {
     case "$subcmd" in
       add)    pg_dep_add "$@" ;;
       remove) pg_dep_remove "$@" ;;
-      tree)   echo "Warning: jt dep tree is not yet supported for postgres-backed projects." >&2; return 1 ;;
-      cycles) echo "Warning: jt dep cycles is not yet supported for postgres-backed projects." >&2; return 1 ;;
+      tree)   pg_dep_tree "$@" ;;
+      cycles) pg_dep_cycles "$@" ;;
       *)      die "Usage: jt dep {add|remove|tree|cycles} ..." ;;
     esac
     return
@@ -2132,6 +2132,131 @@ pg_dep_remove() {
     die "Failed to remove dependency: ${err_msg}"
   fi
   echo "Removed: $task_id no longer depends on $depends_on"
+}
+
+pg_dep_tree() {
+  local task_id="" reverse=false json_out=false
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    task_id="$1"; shift
+  fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reverse) reverse=true; shift ;;
+      --json)    json_out=true; shift ;;
+      *)         [[ -z "$task_id" ]] && task_id="$1"; shift ;;
+    esac
+  done
+  [[ -n "$task_id" ]] || die "Usage: jt dep tree TASK_ID [--reverse] [--json]"
+
+  require_ide_reachable
+
+  # BFS over depends_on (default) or blocked_by (--reverse) using the REST API.
+  # Each task response already carries these arrays with id/title/status populated.
+  python3 -c "
+import sys, json, urllib.request, urllib.error
+
+IDE_URL = 'http://127.0.0.1:$(resolve_ide_port)'
+ROOT    = '$task_id'
+REVERSE = $(${reverse} && echo True || echo False)
+JSON_OUT = $(${json_out} && echo True || echo False)
+
+def fetch_task(jat_id):
+    try:
+        url = f'{IDE_URL}/api/tasks/{jat_id}'
+        with urllib.request.urlopen(url, timeout=10) as r:
+            d = json.loads(r.read())
+            return d.get('task') or d
+    except Exception as e:
+        return None
+
+visited = {}   # jat_id -> {id, title, status, depth}
+queue   = [(ROOT, 0)]
+
+while queue:
+    tid, depth = queue.pop(0)
+    if tid in visited or depth > 20:
+        continue
+    t = fetch_task(tid)
+    if not t:
+        continue
+    visited[tid] = {'id': tid, 'title': t.get('title',''), 'status': t.get('status',''), 'depth': depth}
+    neighbors = t.get('blocked_by', []) if REVERSE else t.get('depends_on', [])
+    for n in (neighbors or []):
+        nid = n.get('id')
+        if nid and nid not in visited:
+            queue.append((nid, depth + 1))
+
+results = sorted(visited.values(), key=lambda x: (x['depth'], x['id']))
+# Exclude root from output
+results = [r for r in results if r['id'] != ROOT]
+
+if JSON_OUT:
+    print(json.dumps(results))
+else:
+    if not results:
+        label = f'Tasks that depend on {ROOT}' if REVERSE else f'{ROOT} has no dependencies'
+        print(label)
+    else:
+        label = f'Tasks that depend on {ROOT}:' if REVERSE else f'Dependencies of {ROOT}:'
+        print(label)
+        for r in results:
+            indent = '  ' * r['depth']
+            status = r.get('status','')
+            marker = '✓' if status == 'closed' else '○'
+            print(f\"{indent}{marker} {r['id']}: {r['title']} [{status}]\")
+"
+}
+
+pg_dep_cycles() {
+  # Cycle detection: fetch all tasks, build adjacency map, DFS for back-edges.
+  require_ide_reachable
+  local project_name
+  project_name="$(resolve_project_name)"
+
+  local response
+  response="$(pg_curl GET "/api/tasks?project=${project_name}&status=open")" \
+    || die "Failed to fetch tasks for cycle detection"
+
+  echo "$response" | _pg_normalize_tasks | python3 -c "
+import sys, json
+
+tasks = json.load(sys.stdin)
+# Build adjacency: task_id -> [depends_on ids]
+graph = {}
+for t in tasks:
+    tid = t.get('id')
+    deps = [d.get('id') for d in (t.get('depends_on') or []) if d.get('id')]
+    graph[tid] = deps
+
+cycles = []
+WHITE, GRAY, BLACK = 0, 1, 2
+color = {n: WHITE for n in graph}
+
+def dfs(node, path):
+    color[node] = GRAY
+    for nb in graph.get(node, []):
+        if nb not in color:
+            continue
+        if color[nb] == GRAY:
+            cycle_start = path.index(nb)
+            cycles.append(path[cycle_start:] + [nb])
+        elif color[nb] == WHITE:
+            dfs(nb, path + [nb])
+    color[node] = BLACK
+
+for node in list(graph):
+    if color.get(node) == WHITE:
+        dfs(node, [node])
+
+if cycles:
+    print(f'Found {len(cycles)} cycle(s):')
+    for i, c in enumerate(cycles, 1):
+        print(f'  Cycle {i}: {\" -> \".join(c)}')
+    sys.exit(1)
+else:
+    print('No cycles detected.')
+"
 }
 
 cmd_dep_add() {

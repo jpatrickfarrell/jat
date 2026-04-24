@@ -2447,6 +2447,545 @@ require_data_db() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Postgres / IDE REST proxy helpers for `jt data`
+# Used when backend=postgres. Each pg_data_* mirrors the matching cmd_data_*
+# so output shape matches the SQLite path exactly.
+# ---------------------------------------------------------------------------
+
+# Resolve the project key name from projects.json, or die.
+# Used as the ?project= query param when calling IDE endpoints.
+_pg_data_project() {
+  local name
+  name="$(resolve_project_name)"
+  [[ -n "$name" ]] || die "Cannot resolve project name for $PROJECT_ROOT. Register it in ~/.config/jat/projects.json."
+  echo "$name"
+}
+
+# Extract {error} from a JSON response body, empty otherwise.
+_pg_data_error() {
+  echo "$1" | python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    if isinstance(d, dict) and d.get('error'):
+        print(d['error'])
+except Exception:
+    pass
+" 2>/dev/null
+}
+
+# Minimal URL-encoder for table names / view ids used in paths.
+_pg_url_encode() {
+  python3 -c "import sys, urllib.parse as u; print(u.quote(sys.argv[1], safe=''))" "$1"
+}
+
+# Call the IDE REST API, capturing the response body on any HTTP status so the
+# caller can surface {error} from non-2xx JSON responses. pg_curl (used by
+# task commands) uses -f which drops the body on 4xx/5xx; data commands want
+# the full message instead of a generic "failed to …" die.
+#
+# Usage:  _pg_data_curl METHOD PATH [BODY_JSON]
+# Echoes: response body (always)
+# Exit:   0 on 2xx, 1 on non-2xx or network/curl error
+_pg_data_curl() {
+  local method="$1" path="$2" data="${3:-}"
+  local port
+  port="$(resolve_ide_port)"
+  if [[ -z "$port" || "$port" == "null" ]]; then
+    die "Cannot proxy to IDE: no port configured for this project in ~/.config/jat/projects.json"
+  fi
+  local tmp http_code
+  tmp="$(mktemp)"
+  if [[ -n "$data" ]]; then
+    http_code="$(curl -s --max-time 30 -X "$method" "http://127.0.0.1:${port}${path}" \
+      -H "Content-Type: application/json" --data "$data" \
+      -o "$tmp" -w '%{http_code}' 2>/dev/null)"
+  else
+    http_code="$(curl -s --max-time 30 -X "$method" "http://127.0.0.1:${port}${path}" \
+      -o "$tmp" -w '%{http_code}' 2>/dev/null)"
+  fi
+  local body
+  body="$(cat "$tmp")"
+  rm -f "$tmp"
+  echo "$body"
+  [[ "$http_code" =~ ^2 ]] && return 0
+  return 1
+}
+
+# Run an IDE-proxied call and die on error, preferring the server's {error}
+# message when present. Generic_msg is used when the server didn't send JSON.
+# Echoes: response body on success (2xx, no {error})
+# Usage:  response="$(_pg_data_call GET /path [body] "generic fail msg")"
+_pg_data_call() {
+  local method="$1" path="$2"
+  local body_json="" generic_msg=""
+  if [[ $# -eq 4 ]]; then
+    body_json="$3"; generic_msg="$4"
+  else
+    generic_msg="$3"
+  fi
+  # `set -e` at the top of this script would kill the shell when the
+  # command substitution returns non-zero; an `if !` makes the failure
+  # explicit so we can surface the server's {error} message.
+  local response err
+  if response="$(_pg_data_curl "$method" "$path" "$body_json")"; then
+    err="$(_pg_data_error "$response")"
+    [[ -z "$err" ]] || die "$err"
+    echo "$response"
+    return 0
+  fi
+  err="$(_pg_data_error "$response")"
+  die "${err:-$generic_msg}"
+}
+
+pg_data_tables() {
+  local json_out=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  require_ide_reachable
+  local project response
+  project="$(_pg_data_project)"
+  response="$(_pg_data_call GET "/api/data/tables?project=${project}" "Failed to list data tables")"
+
+  if $json_out; then
+    echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tables = data.get('tables', []) or []
+views = data.get('views', []) or []
+counts = {}
+for v in views:
+    t = v.get('table_name', '')
+    counts[t] = counts.get(t, 0) + 1
+for t in tables:
+    t['view_count'] = counts.get(t.get('name'), 0)
+json.dump(tables, sys.stdout, indent=2)
+print()
+"
+  else
+    echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tables = data.get('tables', []) or []
+views = data.get('views', []) or []
+if not tables:
+    print('No data tables. Create one with: jt data create <table> col1:type1 col2:type2')
+    sys.exit(0)
+counts = {}
+for v in views:
+    t = v.get('table_name', '')
+    counts[t] = counts.get(t, 0) + 1
+for t in tables:
+    vc = counts.get(t.get('name'), 0)
+    views_str = f' ({vc} view{\"s\" if vc != 1 else \"\"})' if vc else ''
+    desc = t.get('description') or '(no description)'
+    print(f\"  {t['name']}{views_str} - {desc}\")
+"
+  fi
+}
+
+pg_data_schema() {
+  local table_name="${1:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data schema <table>"
+  validate_table_name "$table_name"
+
+  require_ide_reachable
+  local project response
+  project="$(_pg_data_project)"
+  response="$(_pg_data_call GET "/api/data/tables/$(_pg_url_encode "$table_name")/schema?project=${project}" "Failed to fetch schema for $table_name")"
+
+  echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+schema = data.get('schema', []) or []
+meta = data.get('columnMeta', {}) or {}
+for col in schema:
+    name = col.get('name', '')
+    typ = col.get('type', '') or ''
+    notnull = col.get('notnull', 0)
+    pk = col.get('pk', 0)
+    nullable = 'not null' if notnull else 'nullable'
+    pk_str = ' (PK)' if pk else ''
+    sem = col.get('semanticType') or (meta.get(name, {}) or {}).get('semanticType') or ''
+    sem_str = f' ({sem})' if sem else ''
+    print(f'  {name} {typ}{sem_str} {nullable}{pk_str}')
+"
+}
+
+pg_data_query() {
+  local sql="${1:-}"
+  [[ -n "$sql" ]] || die "Usage: jt data query \"SELECT ...\""
+
+  if echo "$sql" | grep -qiE '^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|ATTACH|DETACH)\b'; then
+    die "Write operations not allowed in query mode. Use 'jt data exec' instead."
+  fi
+
+  if ! echo "$sql" | grep -qiE '\bLIMIT\b'; then
+    sql="$(echo "$sql" | sed 's/;*\s*$/ LIMIT 100/')"
+  fi
+
+  require_ide_reachable
+  local project response body
+  project="$(_pg_data_project)"
+  body="$(python3 -c 'import json,sys; print(json.dumps({"project":sys.argv[1],"sql":sys.argv[2]}))' "$project" "$sql")"
+  response="$(_pg_data_call POST "/api/data/query" "$body" "Query failed")"
+
+  echo "$response" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+rows = d.get('rows', []) or []
+json.dump(rows, sys.stdout, indent=2)
+print()
+"
+}
+
+pg_data_exec() {
+  local sql="${1:-}" force=false
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$sql" ]] || die "Usage: jt data exec \"INSERT INTO ...\" [--force]"
+  if ! echo "$sql" | grep -qiE '^\s*(INSERT|UPDATE|DELETE)\b'; then
+    die "Only INSERT, UPDATE, DELETE statements are allowed"
+  fi
+
+  if ! $force; then
+    echo "SQL: $sql"
+    read -r -p "Execute? [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  require_ide_reachable
+  local project body
+  project="$(_pg_data_project)"
+  body="$(python3 -c 'import json,sys; print(json.dumps({"project":sys.argv[1],"sql":sys.argv[2]}))' "$project" "$sql")"
+  _pg_data_call POST "/api/data/exec" "$body" "Exec failed" >/dev/null
+  echo "OK"
+}
+
+pg_data_create() {
+  local table_name="${1:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data create <table> col1:type1 col2:type2 ..."
+  validate_table_name "$table_name"
+  shift
+
+  [[ $# -gt 0 ]] || die "At least one column required. Format: col_name:TYPE
+Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
+SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC"
+
+  # Build columns array JSON: [{name, type, semanticType?}]
+  local cols_json="["
+  local sep=""
+  for arg in "$@"; do
+    local col_name="${arg%%:*}"
+    local col_type="${arg##*:}"
+    [[ "$col_name" != "$arg" ]] || die "Invalid column format: $arg (expected name:type)"
+    [[ -n "$col_name" ]] || die "Column name is required"
+    [[ "$col_name" =~ ^[a-zA-Z][a-zA-Z0-9_]{0,63}$ ]] || die "Invalid column name: $col_name"
+
+    local col_type_lower
+    col_type_lower="$(echo "$col_type" | tr '[:upper:]' '[:lower:]')"
+    local sqlite_type
+    sqlite_type="$(semantic_to_sqlite "$col_type_lower")"
+
+    local col_obj
+    if [[ -n "$sqlite_type" ]]; then
+      col_obj="$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"type":sys.argv[2],"semanticType":sys.argv[3]}))' "$col_name" "$sqlite_type" "$col_type_lower")"
+    else
+      local col_type_upper
+      col_type_upper="$(echo "$col_type" | tr '[:lower:]' '[:upper:]')"
+      case "$col_type_upper" in
+        TEXT|INTEGER|REAL|BLOB|NUMERIC) ;;
+        *) die "Invalid column type: $col_type
+Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
+SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC" ;;
+      esac
+      col_obj="$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"type":sys.argv[2]}))' "$col_name" "$col_type_upper")"
+    fi
+    cols_json="${cols_json}${sep}${col_obj}"
+    sep=","
+  done
+  cols_json="${cols_json}]"
+
+  require_ide_reachable
+  local project body
+  project="$(_pg_data_project)"
+  body="$(python3 -c '
+import json, sys
+print(json.dumps({
+  "project": sys.argv[1],
+  "name": sys.argv[2],
+  "columns": json.loads(sys.argv[3])
+}))
+' "$project" "$table_name" "$cols_json")"
+  _pg_data_call POST "/api/data/tables" "$body" "Failed to create table" >/dev/null
+  echo "Created table: $table_name"
+}
+
+pg_data_drop() {
+  local table_name="${1:-}" force=false
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$table_name" ]] || die "Usage: jt data drop <table> [--force]"
+  validate_table_name "$table_name"
+
+  if ! $force; then
+    read -r -p "Drop table \"$table_name\"? This cannot be undone. [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  require_ide_reachable
+  local project
+  project="$(_pg_data_project)"
+  _pg_data_call DELETE "/api/data/tables?project=${project}&table=$(_pg_url_encode "$table_name")" "Failed to drop table" >/dev/null
+  echo "Dropped table: $table_name"
+}
+
+pg_data_import() {
+  local table_name="${1:-}"
+  local file_path="${2:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data import <table> <file> [--format tsv|csv] [--dry-run]"
+  [[ -n "$file_path" ]] || die "Usage: jt data import <table> <file> [--format tsv|csv] [--dry-run]"
+  validate_table_name "$table_name"
+  shift 2
+
+  [[ "$file_path" = /* ]] || file_path="$PWD/$file_path"
+  [[ -f "$file_path" ]] || die "File not found: $file_path"
+
+  local format="" dry_run=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --format) format="$2"; shift 2 ;;
+      --dry-run) dry_run=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  if [[ -z "$format" ]]; then
+    case "$file_path" in
+      *.tsv) format="tsv" ;;
+      *.csv) format="csv" ;;
+      *.md)  format="tsv" ;;
+      *)     format="tsv" ;;
+    esac
+  fi
+
+  if $dry_run; then
+    die "--dry-run is not yet supported on postgres-backed projects. Run without --dry-run."
+  fi
+
+  require_ide_reachable
+  local project body response
+  project="$(_pg_data_project)"
+  body="$(python3 -c '
+import json, sys
+project, fmt, path = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, "r", encoding="utf-8") as f:
+    text = f.read()
+print(json.dumps({"project": project, "text": text, "format": fmt}))
+' "$project" "$format" "$file_path")"
+
+  response="$(_pg_data_call POST "/api/data/tables/$(_pg_url_encode "$table_name")/import" "$body" "Import failed")"
+
+  echo "$response" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+inserted = d.get('inserted', 0)
+cols = d.get('columns', {}) or {}
+matched = cols.get('matched', []) or []
+unmatched = cols.get('unmatched', []) or []
+print(f'Imported {inserted} row(s).')
+if unmatched:
+    print(f\"  Skipped columns (not in table): {', '.join(unmatched)}\")
+if matched:
+    print(f\"  Matched columns: {', '.join(matched)}\")
+"
+}
+
+pg_data_views() {
+  local table_name="" json_out=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      --table) table_name="${2:-}"; shift 2 ;;
+      -*) shift ;;
+      *)
+        if [[ -z "$table_name" ]]; then
+          table_name="$1"
+        fi
+        shift ;;
+    esac
+  done
+
+  require_ide_reachable
+  local project response path
+  project="$(_pg_data_project)"
+
+  if [[ -n "$table_name" ]]; then
+    validate_table_name "$table_name"
+    path="/api/data/tables/$(_pg_url_encode "$table_name")/views?project=${project}"
+  else
+    path="/api/data/tables?project=${project}"
+  fi
+  response="$(_pg_data_call GET "$path" "Failed to list views")"
+
+  echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+views = data.get('views', []) or []
+json_out = '$json_out' == 'true'
+table_filter = '$table_name'
+if table_filter:
+    views = [v for v in views if v.get('table_name') == table_filter]
+
+if json_out:
+    json.dump(views, sys.stdout, indent=2)
+    print()
+else:
+    if not views:
+        if table_filter:
+            print(f\"No views for table '{table_filter}'. Create views in the IDE at /data.\")
+        else:
+            print('No views. Create views in the IDE at /data.')
+    else:
+        views.sort(key=lambda v: (v.get('table_name',''), v.get('name','')))
+        cur_table = ''
+        for v in views:
+            t = v.get('table_name', '')
+            if t != cur_table:
+                cur_table = t
+                print(f'  {cur_table}:')
+            desc = v.get('description') or ''
+            filters = v.get('filters') or []
+            if isinstance(filters, str):
+                try: filters = json.loads(filters)
+                except: filters = []
+            n = len(filters) if isinstance(filters, list) else 0
+            filter_str = f' ({n} filter{\"s\" if n != 1 else \"\"})' if n else ''
+            ctx = ' [context-view]' if v.get('context_query') else ''
+            label = v.get('display_name') or v.get('name','')
+            print(f\"    {v.get('id','')}  {label}{filter_str}{ctx} - {desc or '(no description)'}\")
+"
+}
+
+pg_data_view() {
+  local view_id="${1:-}" json_out=false
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      *) shift ;;
+    esac
+  done
+  [[ -n "$view_id" ]] || die "Usage: jt data view <view-id> [--json]"
+
+  require_ide_reachable
+  local project response
+  project="$(_pg_data_project)"
+  response="$(_pg_data_call GET "/api/data/views/$(_pg_url_encode "$view_id")?project=${project}" "View not found: $view_id")"
+
+  echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+v = data.get('view') or {}
+json_out = '$json_out' == 'true'
+for k in ('filters', 'visible_columns'):
+    val = v.get(k)
+    if isinstance(val, str):
+        try: v[k] = json.loads(val)
+        except: pass
+
+if json_out:
+    json.dump(v, sys.stdout, indent=2)
+    print()
+else:
+    filters = v.get('filters') or []
+    vis_cols = v.get('visible_columns')
+    print(f'View: {v.get(\"display_name\") or v.get(\"name\", \"\")}')
+    print(f'  ID:    {v.get(\"id\", \"\")}')
+    print(f'  Table: {v.get(\"table_name\", \"\")}')
+    if v.get('description'):
+        print(f'  Desc:  {v[\"description\"]}')
+    if filters:
+        conj = v.get('filter_conjunction', 'AND')
+        print(f'  Filters ({conj}):')
+        for f in filters:
+            print(f\"    {f.get('column','')} {f.get('operator','')} {f.get('value','')}\")
+    if vis_cols:
+        print(f'  Visible columns: {\", \".join(vis_cols)}')
+    if v.get('sort_column'):
+        print(f'  Sort: {v[\"sort_column\"]} {v.get(\"sort_direction\", \"ASC\")}')
+    if v.get('context_query'):
+        print(f'  Context query: {v[\"context_query\"]}')
+    if v.get('context_description'):
+        print(f'  Context desc:  {v[\"context_description\"]}')
+"
+}
+
+pg_data_view_rows() {
+  local view_id="${1:-}" json_out=false limit=100
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      --limit) limit="${2:-100}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [[ -n "$view_id" ]] || die "Usage: jt data view-rows <view-id> [--json] [--limit N]"
+
+  require_ide_reachable
+  local project response
+  project="$(_pg_data_project)"
+  response="$(_pg_data_call GET "/api/data/views/$(_pg_url_encode "$view_id")/rows?project=${project}&resolve=true&limit=${limit}" "Failed to fetch view rows")"
+
+  echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+rows = data.get('rows', []) or []
+json_out = '$json_out' == 'true'
+
+if not rows:
+    if json_out:
+        print('[]')
+    else:
+        print('(no rows match view filters)')
+    sys.exit(0)
+
+cols = [k for k in rows[0].keys() if k != 'rowid']
+if json_out:
+    clean = [{k: v for k, v in row.items() if k != 'rowid'} for row in rows]
+    json.dump(clean, sys.stdout, indent=2, default=str)
+    print()
+else:
+    def sanitize(v):
+        s = str(v if v is not None else '').replace('\\n', ' ').replace('|', '\\\\|')
+        return s[:117] + '...' if len(s) > 120 else s
+    print('| ' + ' | '.join(cols) + ' |')
+    print('| ' + ' | '.join('---' for _ in cols) + ' |')
+    for row in rows:
+        print('| ' + ' | '.join(sanitize(row.get(c)) for c in cols) + ' |')
+    print(f'\\n({len(rows)} rows)')
+"
+}
+
 cmd_data() {
   local subcmd="${1:-}"
   [[ -n "$subcmd" ]] || { cmd_data_help; return; }
@@ -2471,6 +3010,10 @@ cmd_data() {
 }
 
 cmd_data_tables() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_tables "$@"
+    return $?
+  fi
   require_data_db
   local json_out=false
   while [[ $# -gt 0 ]]; do
@@ -2520,6 +3063,10 @@ for t in data:
 }
 
 cmd_data_schema() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_schema "$@"
+    return $?
+  fi
   require_data_db
   local table_name="${1:-}"
   [[ -n "$table_name" ]] || die "Usage: jt data schema <table>"
@@ -2562,6 +3109,10 @@ for r in data:
 }
 
 cmd_data_query() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_query "$@"
+    return $?
+  fi
   require_data_db
   local sql="${1:-}"
   [[ -n "$sql" ]] || die "Usage: jt data query \"SELECT ...\""
@@ -2580,6 +3131,10 @@ cmd_data_query() {
 }
 
 cmd_data_exec() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_exec "$@"
+    return $?
+  fi
   require_data_db
   local sql="${1:-}" force=false
   shift 2>/dev/null || true
@@ -2610,6 +3165,10 @@ cmd_data_exec() {
 }
 
 cmd_data_create() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_create "$@"
+    return $?
+  fi
   require_data_db
   local table_name="${1:-}"
   [[ -n "$table_name" ]] || die "Usage: jt data create <table> col1:type1 col2:type2 ..."
@@ -2689,6 +3248,10 @@ SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC" ;;
 }
 
 cmd_data_drop() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_drop "$@"
+    return $?
+  fi
   require_data_db
   local table_name="${1:-}" force=false
   shift 2>/dev/null || true
@@ -2718,6 +3281,9 @@ cmd_data_drop() {
 }
 
 cmd_data_columns() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    die "'jt data columns' is not yet supported on postgres-backed projects. Manage column metadata via the JAT IDE at /data."
+  fi
   require_data_db
   local subcmd="${1:-}"
   [[ -n "$subcmd" ]] || die "Usage: jt data columns <list|set|remove> <table> [column] [type] [--config JSON]"
@@ -2817,6 +3383,10 @@ Valid types: text, number, boolean, date, datetime, url, email, enum, currency, 
 }
 
 cmd_data_import() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_import "$@"
+    return $?
+  fi
   local table_name="${1:-}"
   local file_path="${2:-}"
   [[ -n "$table_name" ]] || die "Usage: jt data import <table> <file> [--format tsv|csv] [--dry-run]"
@@ -2837,6 +3407,10 @@ cmd_data_import() {
 # ---------------------------------------------------------------------------
 
 cmd_data_views() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_views "$@"
+    return $?
+  fi
   require_data_db
   local table_name="" json_out=false
   while [[ $# -gt 0 ]]; do
@@ -2912,6 +3486,10 @@ for v in data:
 }
 
 cmd_data_view() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_view "$@"
+    return $?
+  fi
   require_data_db
   local view_id="${1:-}" json_out=false
   shift 2>/dev/null || true
@@ -2973,6 +3551,10 @@ if v.get('context_description'):
 }
 
 cmd_data_view_rows() {
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_data_view_rows "$@"
+    return $?
+  fi
   require_data_db
   local view_id="${1:-}" json_out=false limit=100
   shift 2>/dev/null || true
@@ -3295,10 +3877,9 @@ except Exception:
       while IFS= read -r tbl; do
         [[ -n "$tbl" ]] || continue
 
+        local remote_exists=false
         if printf '%s\n' "$remote_names" | grep -qxF "$tbl"; then
-          echo "  table '$tbl' already exists on remote — skipping"
-          tables_skipped=$((tables_skipped + 1))
-          continue
+          remote_exists=true
         fi
 
         # Build columns payload (name, type, semanticType from _columns if present)
@@ -3330,102 +3911,115 @@ print(json.dumps(cols))
           continue
         fi
 
-        local payload
-        payload="$(COLS="$cols_json" PROJECT="$project" NAME="$tbl" python3 -c "
+        # Create remote table if it doesn't already exist
+        if $remote_exists; then
+          echo "  table '$tbl': already exists on remote — skipping create"
+          tables_skipped=$((tables_skipped + 1))
+        else
+          if $dry_run; then
+            echo "  [dry-run] would create table '$tbl' ($n_cols cols)"
+            tables_created=$((tables_created + 1))
+          else
+            local create_payload
+            create_payload="$(COLS="$cols_json" PROJECT="$project" NAME="$tbl" python3 -c "
 import os, json
 print(json.dumps({'project': os.environ['PROJECT'], 'name': os.environ['NAME'], 'columns': json.loads(os.environ['COLS'])}))
 ")"
-
-        if $dry_run; then
-          echo "  [dry-run] would create table '$tbl' ($n_cols cols)"
-          tables_created=$((tables_created + 1))
-        else
-          local resp
-          if resp="$(_migrate_ide_request POST "/api/data/tables" "$payload")"; then
-            echo "  table '$tbl': created"
-            tables_created=$((tables_created + 1))
-          else
-            local err
-            err="$(printf '%s' "$resp" | python3 -c "import sys,json
+            local resp
+            if resp="$(_migrate_ide_request POST "/api/data/tables" "$create_payload")"; then
+              echo "  table '$tbl': created"
+              tables_created=$((tables_created + 1))
+            else
+              local err
+              err="$(printf '%s' "$resp" | python3 -c "import sys,json
 try: print(json.load(sys.stdin).get('error') or '(unknown)')
 except: print('(no response)')" 2>/dev/null)"
-            echo "  table '$tbl': FAILED — $err" >&2
-            tables_failed=$((tables_failed + 1))
+              echo "  table '$tbl': FAILED — $err" >&2
+              tables_failed=$((tables_failed + 1))
+              continue
+            fi
+          fi
+        fi
+
+        # Rows: insert via POST /api/data/tables/{tbl}/rows (takes plain JSON,
+        # no SQL parser constraints).  When the table already existed on the
+        # remote, first check its row count — skip if non-empty (idempotent),
+        # insert if empty (recovery from a prior partial failure).
+        local local_count
+        local_count="$(sqlite3 "$DATA_DB" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo 0)"
+        [[ "$local_count" -gt 0 ]] || continue
+
+        if $dry_run; then
+          echo "    [dry-run] would insert $local_count row(s)"
+          rows_inserted=$((rows_inserted + local_count))
+          continue
+        fi
+
+        if $remote_exists; then
+          local remote_count_resp remote_count=0
+          remote_count_resp="$(_migrate_ide_request GET "/api/data/tables/$tbl/rows?project=$project&limit=1&offset=0" 2>/dev/null || echo '{}')"
+          remote_count="$(printf '%s' "$remote_count_resp" | python3 -c "
+import sys, json
+try: print(json.load(sys.stdin).get('total') or 0)
+except: print(0)" 2>/dev/null || echo 0)"
+          if [[ "$remote_count" -gt 0 ]]; then
+            echo "    remote already has $remote_count row(s) — skipping row insert"
             continue
           fi
         fi
 
-        # Row migration
-        local row_count
-        row_count="$(sqlite3 "$DATA_DB" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo 0)"
-        [[ "$row_count" -gt 0 ]] || continue
-
-        if $dry_run; then
-          echo "    [dry-run] would insert $row_count row(s)"
-          rows_inserted=$((rows_inserted + row_count))
-          continue
-        fi
-
-        local batches_json
-        batches_json="$(DATA_DB="$DATA_DB" TBL="$tbl" python3 -c "
-import os, sys, sqlite3, json
+        # Emit local rows as a JSON array of column→value dicts
+        local rows_json
+        rows_json="$(DATA_DB="$DATA_DB" TBL="$tbl" python3 -c "
+import os, sys, sqlite3, json, base64
 db = sqlite3.connect(os.environ['DATA_DB']); db.row_factory = sqlite3.Row
 tbl = os.environ['TBL']
 cur = db.execute(f'SELECT * FROM \"{tbl}\"')
 all_cols = [c[0] for c in cur.description]
 cols = [c for c in all_cols if c != 'rowid']
-def lit(v):
-    if v is None: return 'NULL'
-    if isinstance(v, bool): return '1' if v else '0'
-    if isinstance(v, (int, float)): return str(v)
-    if isinstance(v, (bytes, bytearray)):
-        return \"X'\" + v.hex() + \"'\"
-    s = str(v).replace(\"'\", \"''\")
-    return \"'\" + s + \"'\"
-col_list = ', '.join('\"' + c + '\"' for c in cols)
-batch, batches = [], []
+out = []
 for row in cur:
-    d = dict(row)
-    batch.append('(' + ', '.join(lit(d.get(c)) for c in cols) + ')')
-    if len(batch) >= 100:
-        batches.append(f'INSERT INTO \"{tbl}\" ({col_list}) VALUES ' + ', '.join(batch))
-        batch = []
-if batch:
-    batches.append(f'INSERT INTO \"{tbl}\" ({col_list}) VALUES ' + ', '.join(batch))
-print(json.dumps(batches))
+    d = {}
+    for c in cols:
+        v = row[c]
+        if isinstance(v, (bytes, bytearray)):
+            v = base64.b64encode(v).decode('ascii')
+        d[c] = v
+    out.append(d)
+print(json.dumps(out))
 ")"
 
-        local n_batches inserted=0
-        n_batches="$(printf '%s' "$batches_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+        local n_rows inserted=0 row_failures=0
+        n_rows="$(printf '%s' "$rows_json" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
         local i=0
-        while [[ $i -lt $n_batches ]]; do
-          local sql_str q_payload
-          sql_str="$(BATCHES="$batches_json" I="$i" python3 -c "
+        while [[ $i -lt $n_rows ]]; do
+          local row_payload
+          row_payload="$(ROWS="$rows_json" I="$i" PROJECT="$project" python3 -c "
 import os, json
-print(json.loads(os.environ['BATCHES'])[int(os.environ['I'])])
-")"
-          q_payload="$(SQL="$sql_str" PROJECT="$project" python3 -c "
-import os, json
-print(json.dumps({'project': os.environ['PROJECT'], 'sql': os.environ['SQL'], 'mode': 'exec'}))
+row = json.loads(os.environ['ROWS'])[int(os.environ['I'])]
+row['project'] = os.environ['PROJECT']
+print(json.dumps(row))
 ")"
           local resp
-          if resp="$(_migrate_ide_request POST "/api/data/query" "$q_payload")"; then
-            local added
-            added="$(printf '%s' "$resp" | python3 -c "import sys,json
-try: d=json.load(sys.stdin); print(d.get('changes') if d.get('changes') is not None else 0)
-except: print(0)" 2>/dev/null || echo 0)"
-            inserted=$((inserted + added))
+          if resp="$(_migrate_ide_request POST "/api/data/tables/$tbl/rows" "$row_payload")"; then
+            inserted=$((inserted + 1))
           else
-            local err
-            err="$(printf '%s' "$resp" | python3 -c "import sys,json
+            row_failures=$((row_failures + 1))
+            if [[ $row_failures -le 3 ]]; then
+              local err
+              err="$(printf '%s' "$resp" | python3 -c "import sys,json
 try: print(json.load(sys.stdin).get('error') or '(unknown)')
 except: print('(no response)')" 2>/dev/null)"
-            echo "    batch $((i + 1))/$n_batches FAILED: $err" >&2
-            break
+              echo "    row $((i + 1)) FAILED: $err" >&2
+            fi
           fi
           i=$((i + 1))
         done
-        echo "    inserted $inserted row(s) in $n_batches batch(es)"
+        if [[ $row_failures -gt 0 ]]; then
+          echo "    inserted $inserted / $n_rows row(s) — $row_failures failed" >&2
+        else
+          echo "    inserted $inserted row(s)"
+        fi
         rows_inserted=$((rows_inserted + inserted))
       done <<< "$user_tables"
     fi

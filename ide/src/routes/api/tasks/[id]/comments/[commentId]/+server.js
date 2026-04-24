@@ -12,6 +12,10 @@
  *   Rationale: a comment posted internally may reference information the
  *   external audience was never supposed to see. Allowing the flip would
  *   create a nasty "unsend" footgun.
+ *
+ *   AGENT RULE: agent-authored comments are locked external and cannot be
+ *   flipped to internal. Policy counterpart to the POST-time override in
+ *   the parent route.
  */
 import { json } from '@sveltejs/kit';
 import { SqliteTaskBackend } from '../../../../../../../../lib/tasks-sqlite.js';
@@ -56,6 +60,12 @@ export async function PATCH({ params, request }) {
 		if (pg) {
 			const existing = await pg.getComment(commentId);
 			if (!existing) return json({ error: 'Comment not found' }, { status: 404 });
+			if (existing.author_type === 'agent' && external === false) {
+				return json(
+					{ error: 'Agent-authored comments are always external and cannot be flipped to internal.' },
+					{ status: 409 }
+				);
+			}
 			if (existing.external === false && external === true) {
 				return json(
 					{ error: 'Internal comments cannot be made external. Internal stays internal forever.' },
@@ -72,6 +82,12 @@ export async function PATCH({ params, request }) {
 
 		const existing = sqlite.getComment(commentId);
 		if (!existing) return json({ error: 'Comment not found' }, { status: 404 });
+		if (existing.author_type === 'agent' && external === false) {
+			return json(
+				{ error: 'Agent-authored comments are always external and cannot be flipped to internal.' },
+				{ status: 409 }
+			);
+		}
 		if (existing.external === false && external === true) {
 			return json(
 				{ error: 'Internal comments cannot be made external. Internal stays internal forever.' },

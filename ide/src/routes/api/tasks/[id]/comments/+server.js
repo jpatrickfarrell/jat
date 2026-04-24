@@ -7,6 +7,8 @@
  *   body: { text, author, author_type, comment_type, session_id?, metadata?, external? }
  *   `external` defaults to true (publicly visible). Pass `false` to mark
  *   internal-only. This flag is ONE-WAY — see the sibling [commentId] route.
+ *   AGENT POLICY: if `author_type === 'agent'`, `external` is silently forced
+ *   to true. Agent reasoning is part of the customer-facing work product.
  *
  * Works for SQLite-backed and Postgres-backed projects.
  *
@@ -109,9 +111,12 @@ export async function POST({ params, request }) {
 	if (external !== undefined && typeof external !== 'boolean') {
 		return json({ error: 'external must be a boolean' }, { status: 400 });
 	}
-	// Default: external (publicly visible). Callers that want an internal-only
-	// comment must pass `external: false` explicitly.
-	const externalFlag = external === undefined ? true : external;
+	// Policy: agent-authored comments are always external. An agent's reasoning
+	// IS the work product that benefits the customer — they don't get an internal
+	// channel. Silently override rather than reject, so agent code paths don't
+	// fail on a rule they can't reason about.
+	// For non-agents: default to external; callers pass `external: false` to mark internal.
+	const externalFlag = author_type === 'agent' ? true : (external === undefined ? true : external);
 
 	try {
 		const pg = await getPgBackendForTask(taskId);

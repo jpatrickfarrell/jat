@@ -1416,8 +1416,10 @@
 				{taskCounts}
 			/>
 
-			<!-- Review notification bar — slim strip below TopBar, visible on all pages -->
-			<ReviewNotificationBar {reviewSessions} />
+			<!-- Review notification bar — slim strip below TopBar. Hidden on /tasks which has its own inline attention notifications covering the same review sessions. -->
+			{#if $page.url.pathname !== '/tasks'}
+				<ReviewNotificationBar {reviewSessions} />
+			{/if}
 
 			<!-- Page content (pb-24 on mobile for dock clearance — dock-xl is 80px) -->
 			<main class="flex-1 min-h-0 overflow-y-auto pb-24 md:pb-0 flex flex-col" style="scrollbar-gutter: stable;">

@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"postinstall": "cd .. && npm install --ignore-scripts",
+		"predev": "cp node_modules/jat-feedback/dist/jat-feedback.js static/feedback/jat-feedback.js && cp node_modules/jat-feedback/dist/jat-feedback.css static/feedback/jat-feedback.css",
 		"dev": "svelte-kit sync && NODE_OPTIONS='--max-old-space-size=8192 --max-http-header-size=65536' vite dev --host 127.0.0.1",
 		"dev:https": "svelte-kit sync && NODE_OPTIONS='--max-old-space-size=8192' vite dev --host 127.0.0.1 --https",
 		"build": "vite build",
@@ -57,7 +58,7 @@
 		"@vitest/ui": "^4.0.12",
 		"autoprefixer": "^10.4.22",
 		"daisyui": "^5.5.5",
-		"jat-feedback": "^3.4.3",
+		"jat-feedback": "^3.5.0",
 		"jsdom": "^27.4.0",
 		"postcss": "^8.5.6",
 		"svelte": "^5.41.0",

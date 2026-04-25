@@ -11,7 +11,6 @@
 	 * looked up to find the matching `{ component, propsForId, label }` entry.
 	 */
 
-	import { slide } from 'svelte/transition';
 	import { peekState, closePeek, scrollFocusedIntoView } from '$lib/stores/peekStore.svelte';
 	import { getPeekEntry } from '$lib/peek/registry';
 
@@ -62,6 +61,7 @@
 		}
 	});
 
+
 	// Register Esc handler at capture phase on window so we run before
 	// any listNav-installed bubble-phase handlers or route-level onkeydown.
 	$effect(() => {
@@ -82,7 +82,6 @@
 	<!-- Drawer panel -->
 	<aside
 		class="peek-drawer fixed right-0 top-0 z-50 flex h-screen w-[40vw] min-w-[360px] max-w-[720px] flex-col shadow-2xl"
-		transition:slide={{ axis: 'x', duration: 180 }}
 		aria-label="Peek preview"
 	>
 		<!-- Header -->
@@ -153,6 +152,16 @@
 	.peek-drawer {
 		background: oklch(0.14 0.01 250);
 		border-left: 1px solid oklch(0.30 0.02 250);
+		animation: peek-drawer-in 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	@keyframes peek-drawer-in {
+		from {
+			transform: translateX(100%);
+		}
+		to {
+			transform: translateX(0);
+		}
 	}
 
 	.peek-drawer-header {

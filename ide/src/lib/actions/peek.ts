@@ -28,11 +28,28 @@
 import type { Action } from 'svelte/action';
 import { togglePeek, setPeek, isPeekOpen, closePeek } from '$lib/stores/peekStore.svelte';
 
+/**
+ * Promote behavior on Enter while peek is open:
+ *   - "close-and-fall-through" (default): close peek and let Enter flow to
+ *     listNav's onSelect, which typically opens a full detail drawer. Net
+ *     effect: Enter is "commit to deep dive."
+ *   - "close-only": close peek and stop propagation. Use when the route
+ *     doesn't want Enter to also fire onSelect.
+ */
+export type PeekPromoteMode = 'fall-through' | 'close-only';
+
 export interface PeekActionOptions {
 	enabled?: boolean;
 	itemSelector?: string;
 	focusedClass?: string;
 	onToggle?: (open: boolean, navId: string | null) => void;
+	/**
+	 * What Enter does while peek is open. Default `fall-through` — peek closes
+	 * and Enter continues to listNav's onSelect (typically: open full detail).
+	 */
+	promoteMode?: PeekPromoteMode;
+	/** Fired when Enter promotes peek → full detail. Receives the navId. */
+	onPromote?: (navId: string) => void;
 }
 
 function isTypingTarget(t: EventTarget | null): boolean {
@@ -63,9 +80,9 @@ export const peek: Action<HTMLElement, PeekActionOptions | undefined> = (node, i
 		if (opts.enabled === false) return;
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (isTypingTarget(e.target)) return;
-		if (e.key !== ' ') return;
+		if (e.key !== ' ' && e.key !== 'Enter') return;
 
-		// Only claim Space when there's a focused item *inside this container*.
+		// Only claim keys when there's a focused item *inside this container*.
 		// Other listNav instances on the same page (e.g. a sidebar) are not
 		// peek-opted-in and should continue to see the event normally.
 		const focusedEl = node.querySelector<HTMLElement>(`.${focusedClass()}`);
@@ -74,14 +91,34 @@ export const peek: Action<HTMLElement, PeekActionOptions | undefined> = (node, i
 		const navId = focusedEl.dataset.navId;
 		if (!navId) return;
 
-		// Intercept Space BEFORE listNav's own window-level listener fires so
-		// Space triggers peek instead of listNav's onSelect (which would open
-		// the full TaskDetailDrawer). Enter still flows through to onSelect
-		// because we only guard `key === ' '`.
-		e.preventDefault();
-		e.stopImmediatePropagation();
-		togglePeek(navId);
-		opts.onToggle?.(isPeekOpen(), isPeekOpen() ? navId : null);
+		if (e.key === ' ') {
+			// Intercept Space BEFORE listNav's own window-level listener fires
+			// so Space triggers peek instead of listNav's onSelect (which would
+			// open the full TaskDetailDrawer).
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			togglePeek(navId);
+			opts.onToggle?.(isPeekOpen(), isPeekOpen() ? navId : null);
+			return;
+		}
+
+		if (e.key === 'Enter') {
+			// Enter is only special while peek is open. If peek is closed,
+			// don't claim Enter — let listNav's onSelect fire normally.
+			if (!isPeekOpen()) return;
+
+			const mode = opts.promoteMode ?? 'fall-through';
+			closePeek();
+			opts.onToggle?.(false, null);
+			opts.onPromote?.(navId);
+			if (mode === 'close-only') {
+				// Suppress listNav's onSelect — caller wants peek-close only.
+				e.preventDefault();
+				e.stopImmediatePropagation();
+			}
+			// fall-through: don't preventDefault — listNav's bubble-phase
+			// Enter handler still fires onSelect, which opens full detail.
+		}
 	}
 
 	// When peek is open, follow the focused item as j/k moves it.

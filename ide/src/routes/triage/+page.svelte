@@ -156,8 +156,6 @@
 			if (idx >= 0) selectedIdx = idx;
 		},
 		wraparound: true,
-		selectable: true,
-		onSelectionChange: (ids) => { selectedIds = ids; }
 	});
 
 	onMount(() => {
@@ -454,7 +452,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Closed ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
-			nav.clearSelection();
+			selectedIds = new Set();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -475,7 +473,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Deleted ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
-			nav.clearSelection();
+			selectedIds = new Set();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -499,7 +497,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Updated ${success}/${ids.length} tasks → ${status}`, type: success === ids.length ? 'success' : 'info' });
-			nav.clearSelection();
+			selectedIds = new Set();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -524,7 +522,7 @@
 			}
 			addToast({ message: `Assigned ${success}/${ids.length} tasks to epic`, type: success === ids.length ? 'success' : 'info' });
 			bulkAssignOpen = false;
-			nav.clearSelection();
+			selectedIds = new Set();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -532,15 +530,71 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
-		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape/V/Shift+J/K when not editing
-		if (!editing && nav.handleKeydown(e)) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
 		// Don't capture when typing in inputs
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
-		// Bulk-action keys fire only when a selection exists; otherwise fall
-		// through to the single-task shortcuts so pre-selection behaviour is
-		// unchanged.
+		if (!editing) {
+			// x — toggle select focused task
+			if (e.key === 'x') {
+				const task = filteredTasks[selectedIdx];
+				if (task) {
+					e.preventDefault();
+					const next = new Set(selectedIds);
+					if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+					selectedIds = next;
+					return;
+				}
+			}
+
+			// Shift+J — select current + move down
+			if (e.key === 'J') {
+				e.preventDefault();
+				const before = selectedIdx;
+				const afterIdx = Math.min(before + 1, filteredTasks.length - 1);
+				nav.focus(afterIdx);
+				const next = new Set(selectedIds);
+				if (filteredTasks[before]) next.add(filteredTasks[before].id);
+				if (filteredTasks[afterIdx]) next.add(filteredTasks[afterIdx].id);
+				selectedIds = next;
+				return;
+			}
+
+			// Shift+K — select current + move up
+			if (e.key === 'K') {
+				e.preventDefault();
+				const before = selectedIdx;
+				const afterIdx = Math.max(before - 1, 0);
+				nav.focus(afterIdx);
+				const next = new Set(selectedIds);
+				if (filteredTasks[before]) next.add(filteredTasks[before].id);
+				if (filteredTasks[afterIdx]) next.add(filteredTasks[afterIdx].id);
+				selectedIds = next;
+				return;
+			}
+
+			// * — toggle select all visible
+			if (e.key === '*') {
+				e.preventDefault();
+				const allSelected = filteredTasks.length > 0 && filteredTasks.every(t => selectedIds.has(t.id));
+				selectedIds = allSelected ? new Set() : new Set(filteredTasks.map(t => t.id));
+				return;
+			}
+
+			// Escape clears selection before clearing nav focus
+			if (e.key === 'Escape' && selectedIds.size > 0) {
+				e.preventDefault();
+				selectedIds = new Set();
+				if (bulkAssignOpen) bulkAssignOpen = false;
+				return;
+			}
+		}
+
+		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape when not editing
+		if (!editing && nav.handleKeydown(e)) return;
+
+		// Bulk-action keys fire only when a selection exists
 		if (!editing && selectedIds.size > 0) {
 			switch (e.key) {
 				case 'c':
@@ -702,14 +756,29 @@
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 					{@const projColor = getProjectColor(getProjectFromTaskId(task.id) ?? '')}
 					{@const isSelected = idx === selectedIdx}
+					{@const isBulkSelected = selectedIds.has(task.id)}
 					<button
 						class="queue-item"
 						class:queue-item-selected={isSelected}
+						class:queue-item-bulk={isBulkSelected}
 						data-nav-id={task.id}
 						data-triage-idx={idx}
 						onclick={() => { selectedIdx = idx; editing = false; nav.focus(idx); }}
 					>
-						<div class="qi-accent" style="background: {projColor};"></div>
+						<div
+							class="qi-accent"
+							style="background: {isBulkSelected ? 'oklch(0.70 0.18 240)' : projColor};"
+							role="checkbox"
+							aria-checked={isBulkSelected}
+							aria-label="Select {task.id}"
+							tabindex="-1"
+							onclick={(e) => {
+								e.stopPropagation();
+								const next = new Set(selectedIds);
+								if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+								selectedIds = next;
+							}}
+						>{isBulkSelected ? '✓' : ''}</div>
 						<div class="qi-body">
 							<div class="qi-top">
 								<span class="qi-type" title={typeVisual.label}>{typeVisual.icon}</span>
@@ -952,18 +1021,18 @@
 		{ key: 'j / ↓', description: 'Next item (wraps)' },
 		{ key: 'k / ↑', description: 'Previous item (wraps)' },
 		{ key: 'Enter', description: 'Open detail drawer' },
-		{ key: 'Space', description: 'Toggle selection (adds to bulk)' },
-		{ key: 'V', description: 'Enter/exit visual range-select mode' },
-		{ key: 'Shift+J / Shift+K', description: 'Range-select down/up' },
+		{ key: 'x', description: 'Toggle select focused task' },
+		{ key: 'Shift+J / Shift+K', description: 'Select + move down / up' },
+		{ key: '*', description: 'Select / deselect all visible' },
 		{ key: 's', description: 'Spawn agent (solve) / bulk: set status open' },
 		{ key: 'p', description: 'Promote to open' },
 		{ key: 'e', description: 'Edit task' },
 		{ key: 'r', description: 'Close task' },
 		{ key: 'c', description: 'Bulk: close selected' },
-		{ key: 'a', description: 'Bulk: assign selected to epic' },
+		{ key: 'a', description: 'Bulk: assign to epic' },
 		{ key: 'd', description: 'Delete task / bulk: delete selected' },
 		{ key: '/', description: 'Focus search' },
-		{ key: 'Esc', description: 'Cancel edit / exit visual / clear selection' },
+		{ key: 'Esc', description: 'Clear selection / cancel edit' },
 	]}
 />
 
@@ -976,7 +1045,7 @@
 		{ key: 'a', label: 'Assign to Epic', onAction: () => { if (epics.length > 0) bulkAssignOpen = true; }, disabled: bulkWorking || epics.length === 0 },
 		{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking }
 	]}
-	onClear={() => nav.clearSelection()}
+	onClear={() => selectedIds = new Set()}
 />
 
 {#if bulkAssignOpen}
@@ -1178,10 +1247,31 @@
 		background: oklch(0.70 0.18 240 / 0.08) !important;
 		border-left: 2px solid oklch(0.70 0.18 240);
 	}
+	.queue-item-bulk {
+		background: oklch(0.70 0.18 240 / 0.10) !important;
+	}
 	.qi-accent {
 		width: 3px;
 		flex-shrink: 0;
 		opacity: 0.6;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0;
+		transition: width 0.15s ease, background 0.15s ease;
+		border: none;
+		padding: 0;
+		user-select: none;
+	}
+	.queue-item-bulk .qi-accent,
+	.queue-item:hover .qi-accent {
+		width: 14px;
+		opacity: 1;
+	}
+	.queue-item-bulk .qi-accent {
+		font-size: 0.6rem;
+		color: white;
 	}
 	.queue-item-selected .qi-accent { opacity: 0; }
 	.qi-body {

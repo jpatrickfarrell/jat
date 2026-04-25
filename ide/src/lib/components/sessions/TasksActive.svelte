@@ -2991,13 +2991,14 @@
 		max-width: 100%;
 		font-size: 0.6875rem;
 		font-weight: 600;
-		color: oklch(0.78 0.02 250);
-		letter-spacing: 0.01em;
+		color: oklch(0.72 0.02 250);
+		letter-spacing: 0.005em;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		padding: 0 0.25rem;
 		text-align: center;
+		user-select: none;
 	}
 
 	.ta-strip-elapsed {
@@ -3037,6 +3038,10 @@
 	}
 	.ta-state-strip-clickable:hover {
 		filter: brightness(1.3) saturate(1.35);
+	}
+	/* HUD-style press: dim briefly to confirm click registered before terminal opens */
+	.ta-state-strip-clickable:active {
+		filter: brightness(0.88) saturate(1.1);
 	}
 	.ta-state-strip-clickable:focus-visible {
 		outline: 2px solid oklch(0.70 0.18 240);

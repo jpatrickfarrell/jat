@@ -45,7 +45,7 @@ export async function POST({ params }) {
 		let currentTask = null;
 		let projectPath = null;
 		try {
-			const allTasks = getTasks({});
+			const allTasks = await getTasks({});
 			currentTask = allTasks.find(
 				t => t.status === 'in_progress' && t.assignee === agentName
 			);

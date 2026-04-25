@@ -48,7 +48,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		};
 
 		// Single fetch of all tasks
-		const allTasks = getTasks();
+		const allTasks = await getTasks();
 
 		// Find all epics (open + recently closed)
 		const epics = allTasks.filter((t: any) =>

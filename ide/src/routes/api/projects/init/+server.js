@@ -358,7 +358,7 @@ export async function POST({ request }) {
 
 		// STEP 4: Initialize task database
 		try {
-			initProject(absolutePath);
+			await initProject(absolutePath);
 			steps.push('Initialized task management');
 
 			// Add project to projects.json

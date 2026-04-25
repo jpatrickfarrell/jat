@@ -62,14 +62,14 @@ export function _resetTaskCache() {
  * Get tasks with caching (5s TTL)
  * @param {string|null} projectName - Optional project filter
  * @param {boolean} [forceFresh=false] - Skip cache and fetch fresh data
- * @returns {Task[]} Cached or fresh tasks
+ * @returns {Promise<Task[]>} Cached or fresh tasks
  */
-function getCachedTasks(projectName = null, forceFresh = false) {
+async function getCachedTasks(projectName = null, forceFresh = false) {
 	const now = Date.now();
 	// Cache miss if: forced fresh, expired, empty, or different project filter
 	if (forceFresh || now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0 || cachedTasksProject !== projectName) {
 		try {
-			cachedTasks = getTasks({ projectName: projectName ?? undefined });
+			cachedTasks = await getTasks({ projectName: projectName ?? undefined });
 			cachedTasksProject = projectName;
 			taskCacheTimestamp = now;
 		} catch (err) {
@@ -306,7 +306,7 @@ async function computeAgentsData({ projectFilter, agentFilter, includeUsage, inc
 	/** @type {Agent[]} */
 	const agents = getAgents(undefined);  // Show all agents (don't filter by project)
 	/** @type {Task[]} */
-	const tasks = getCachedTasks(projectFilter, forceFresh);  // Filter tasks only (cached to avoid expensive JSONL parsing)
+	const tasks = await getCachedTasks(projectFilter, forceFresh);  // Filter tasks only (cached to avoid expensive JSONL parsing)
 
 	// Fetch tmux session status to determine which agents have active sessions
 	// Also get session creation time for "connecting" state detection

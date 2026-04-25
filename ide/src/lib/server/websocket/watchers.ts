@@ -126,6 +126,11 @@ let isLifecyclePolling = false;
 // Session lifecycle tracking
 let knownSessions = new Set<string>();
 
+// Track whether we have replayed existing signal states to current subscribers.
+// Resets to false whenever subscriber count drops to 0 so the next subscriber
+// always gets a full replay of in-progress states.
+let signalStatesReplayed = false;
+
 // Signal file watcher state
 const signalFileStates = new Map<string, { state: string | null; completeHash: string | null; payloadHash: string | null }>();
 const signalDebounceTimers = new Map<string, NodeJS.Timeout>();
@@ -203,12 +208,12 @@ const TASK_CACHE_TTL_MS = 5000;
 // ============================================================================
 
 /**
- * Get current task snapshots via lib/tasks.js (reads from SQLite)
+ * Get current task snapshots via lib/tasks.js
  * Returns a map of task ID → snapshot with tracked fields
  */
-function getTaskSnapshots(): Map<string, TaskSnapshot> {
+async function getTaskSnapshots(): Promise<Map<string, TaskSnapshot>> {
 	try {
-		const tasks = getTasks({});
+		const tasks = await getTasks({});
 		const snapshots = new Map<string, TaskSnapshot>();
 		for (const t of tasks as any[]) {
 			snapshots.set(t.id, {
@@ -233,10 +238,10 @@ function getTaskSnapshots(): Map<string, TaskSnapshot> {
  *
  * A task is never broadcast as both new AND updated (no duplicates).
  */
-function checkTaskChanges(): void {
+async function checkTaskChanges(): Promise<void> {
 	if (!isInitialized()) return;
 
-	const currentSnapshots = getTaskSnapshots();
+	const currentSnapshots = await getTaskSnapshots();
 
 	// Find new tasks
 	const newTasks: string[] = [];
@@ -297,7 +302,7 @@ function checkTaskChanges(): void {
 /**
  * Start watching the .jat/last-touched sentinel file for task mutations
  */
-function startTaskWatcher(): void {
+async function startTaskWatcher(): Promise<void> {
 	if (taskWatcher) {
 		console.log('[WS Watcher] Task watcher already running');
 		return;
@@ -306,7 +311,7 @@ function startTaskWatcher(): void {
 	console.log(`[WS Watcher] Starting task watcher: ${JAT_DIR}`);
 
 	// Initialize previous task snapshots
-	previousTaskSnapshots = getTaskSnapshots();
+	previousTaskSnapshots = await getTaskSnapshots();
 	console.log(`[WS Watcher] Initialized with ${previousTaskSnapshots.size} existing tasks`);
 
 	try {
@@ -547,17 +552,18 @@ function readCompletionBundle(sessionName: string): Record<string, unknown> | nu
 }
 
 /**
- * Process a signal file change and broadcast appropriate events
+ * Process a signal file change and broadcast appropriate events.
+ * Always updates signalFileStates even if no subscribers — state must be
+ * populated so replaySignalStates() can send it when a client first connects.
  */
-function processSignalFileChange(sessionName: string): void {
+function processSignalFileChange(sessionName: string, broadcastEnabled = true): void {
 	if (!isInitialized()) return;
-
-	// Check if anyone is subscribed to sessions channel
-	const subscriberCount = getChannelSubscriberCount('sessions');
-	if (subscriberCount === 0) return;
 
 	const signal = readSignalFile(sessionName);
 	if (!signal) return;
+
+	const subscriberCount = getChannelSubscriberCount('sessions');
+	const canBroadcast = broadcastEnabled && subscriberCount > 0;
 
 	const prevFileState = signalFileStates.get(sessionName) || { state: null, completeHash: null, payloadHash: null };
 	const currentFileState = { state: prevFileState.state, completeHash: prevFileState.completeHash, payloadHash: prevFileState.payloadHash };
@@ -572,16 +578,18 @@ function processSignalFileChange(sessionName: string): void {
 		if (stateChanged || payloadChanged) {
 			currentFileState.state = mappedState;
 			currentFileState.payloadHash = newPayloadHash;
-			broadcastSessionState(sessionName, mappedState, {
-				previousState: prevFileState.state,
-				signalPayload: signal.data ? { type: signal.state, ...signal.data as object } : undefined
-			});
+			if (canBroadcast) {
+				broadcastSessionState(sessionName, mappedState, {
+					previousState: prevFileState.state,
+					signalPayload: signal.data ? { type: signal.state, ...signal.data as object } : undefined
+				});
+			}
 			if (stateChanged) {
 				console.log(`[WS Watcher] Signal state change for ${sessionName}: ${prevFileState.state} -> ${mappedState}${signal.data ? ' (with payload)' : ''}`);
 			} else {
 				console.log(`[WS Watcher] Signal payload update for ${sessionName}: ${mappedState} (data changed)`);
 			}
-			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
+			if (canBroadcast && stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
 				dispatchStatePush(sessionName, mappedState, signal.data as Record<string, unknown> | undefined);
 			}
 			if (stateChanged) {
@@ -605,16 +613,18 @@ function processSignalFileChange(sessionName: string): void {
 		if (stateChanged || payloadChanged) {
 			currentFileState.state = mappedState;
 			currentFileState.payloadHash = newPayloadHash;
-			broadcastSessionState(sessionName, mappedState, {
-				previousState: prevFileState.state,
-				signalPayload: hasPayload ? { type: signal.type as string, ...idePayloadData } : undefined
-			});
+			if (canBroadcast) {
+				broadcastSessionState(sessionName, mappedState, {
+					previousState: prevFileState.state,
+					signalPayload: hasPayload ? { type: signal.type as string, ...idePayloadData } : undefined
+				});
+			}
 			if (stateChanged) {
 				console.log(`[WS Watcher] IDE signal state for ${sessionName}: ${prevFileState.state} -> ${mappedState}${hasPayload ? ' (with payload)' : ''}`);
 			} else {
 				console.log(`[WS Watcher] IDE signal payload update for ${sessionName}: ${mappedState} (data changed)`);
 			}
-			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
+			if (canBroadcast && stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
 				dispatchStatePush(sessionName, mappedState, idePayloadData);
 			}
 			if (stateChanged) {
@@ -650,27 +660,33 @@ function processSignalFileChange(sessionName: string): void {
 					}
 				}
 
-				// Broadcast completion bundle
-				broadcastSessionComplete(sessionName, bundle);
-				console.log(`[WS Watcher] Complete bundle for ${sessionName}: ${(bundle.summary as string[])?.length || 0} summary items`);
+				if (canBroadcast) {
+					// Broadcast completion bundle
+					broadcastSessionComplete(sessionName, bundle);
+					console.log(`[WS Watcher] Complete bundle for ${sessionName}: ${(bundle.summary as string[])?.length || 0} summary items`);
+				}
 
 				// Also broadcast the appropriate state change
 				if ((bundle.completionMode as string) === 'auto_proceed') {
 					currentFileState.state = 'auto_proceed';
-					broadcastSessionState(sessionName, 'auto_proceed', {
-						previousState: prevFileState.state,
-						signalPayload: {
-							taskId: bundle.taskId,
-							nextTaskId: bundle.nextTaskId,
-							nextTaskTitle: bundle.nextTaskTitle
-						}
-					});
-					console.log(`[WS Watcher] Auto-proceed triggered for ${sessionName}: next task ${bundle.nextTaskId}`);
+					if (canBroadcast) {
+						broadcastSessionState(sessionName, 'auto_proceed', {
+							previousState: prevFileState.state,
+							signalPayload: {
+								taskId: bundle.taskId,
+								nextTaskId: bundle.nextTaskId,
+								nextTaskTitle: bundle.nextTaskTitle
+							}
+						});
+						console.log(`[WS Watcher] Auto-proceed triggered for ${sessionName}: next task ${bundle.nextTaskId}`);
+					}
 				} else {
 					currentFileState.state = 'completed';
-					broadcastSessionState(sessionName, 'completed', {
-						previousState: prevFileState.state
-					});
+					if (canBroadcast) {
+						broadcastSessionState(sessionName, 'completed', {
+							previousState: prevFileState.state
+						});
+					}
 				}
 			}
 		}
@@ -680,8 +696,9 @@ function processSignalFileChange(sessionName: string): void {
 }
 
 /**
- * Process all existing signal files on startup
- * Ensures clients get current state when connecting
+ * Process all existing signal files on startup.
+ * Populates signalFileStates without broadcasting (no subscribers yet).
+ * Broadcasting happens via replaySignalStatesToSubscribers() once a client connects.
  */
 function processExistingSignalFiles(): void {
 	try {
@@ -690,11 +707,13 @@ function processExistingSignalFiles(): void {
 		);
 
 		signalFileStates.clear();
+		signalStatesReplayed = false;
 
 		for (const filename of files) {
 			const sessionName = filename.replace('jat-signal-tmux-', '').replace('.json', '');
 			if (sessionName) {
-				processSignalFileChange(sessionName);
+				// broadcastEnabled=false: update state map only, no broadcast (no subscribers yet)
+				processSignalFileChange(sessionName, false);
 			}
 		}
 
@@ -702,6 +721,24 @@ function processExistingSignalFiles(): void {
 	} catch (err) {
 		console.error('[WS Watcher] Failed to process existing signal files:', err);
 	}
+}
+
+/**
+ * Replay all known signal states to current subscribers.
+ * Called once when the first subscriber connects after a restart, so agents
+ * already running don't appear idle just because JAT restarted while they worked.
+ */
+function replaySignalStatesToSubscribers(): void {
+	if (!isInitialized()) return;
+	const count = signalFileStates.size;
+	if (count === 0) return;
+
+	console.log(`[WS Watcher] Replaying ${count} signal states to new subscribers`);
+	for (const [sessionName] of signalFileStates) {
+		// Re-process with broadcastEnabled=true so each state gets sent
+		processSignalFileChange(sessionName, true);
+	}
+	signalStatesReplayed = true;
 }
 
 /**
@@ -862,11 +899,12 @@ async function getTmuxSessions(): Promise<string[]> {
 /**
  * Get tasks with caching to avoid expensive JSONL parsing on every poll
  */
-function getCachedTasks(): TaskInfo[] {
+async function getCachedTasks(): Promise<TaskInfo[]> {
 	const now = Date.now();
 	if (now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0) {
 		try {
-			cachedTasks = getTasks({});
+			const result = await getTasks({});
+			cachedTasks = Array.isArray(result) ? result : [];
 			taskCacheTimestamp = now;
 		} catch {
 			// Continue with stale cache on error
@@ -884,7 +922,17 @@ async function pollSessionLifecycle(): Promise<void> {
 
 	// Only poll if there are subscribers to the sessions channel
 	const subscriberCount = getChannelSubscriberCount('sessions');
-	if (subscriberCount === 0) return;
+	if (subscriberCount === 0) {
+		// Reset replay flag so next subscriber always gets a fresh replay
+		if (signalStatesReplayed) signalStatesReplayed = false;
+		return;
+	}
+
+	// First subscriber after a restart: replay all known signal states so running
+	// agents don't appear idle just because JAT restarted while they were working.
+	if (!signalStatesReplayed) {
+		replaySignalStatesToSubscribers();
+	}
 
 	isLifecyclePolling = true;
 
@@ -893,7 +941,7 @@ async function pollSessionLifecycle(): Promise<void> {
 		const currentSessionNames = new Set(sessions);
 
 		// Get task info for agent lookup
-		const allTasks = getCachedTasks();
+		const allTasks = await getCachedTasks();
 		const agentTaskMap = new Map<string, TaskInfo>();
 		allTasks
 			.filter((t: TaskInfo) => t.status === 'in_progress' && t.assignee)
@@ -1110,7 +1158,7 @@ export function startWatchers(): void {
 	}
 
 	console.log('[WS Watcher] Starting all watchers...');
-	startTaskWatcher();
+	startTaskWatcher().catch(console.error);
 	startSessionsWatcher();
 	startSignalAndQuestionWatcher();
 	startSessionLifecyclePolling();

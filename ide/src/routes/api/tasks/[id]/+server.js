@@ -89,7 +89,7 @@ export async function GET({ params }) {
 	if (pgBackend) {
 		task = await pgBackend.getById(taskId);
 	} else {
-		task = getTaskById(taskId);
+		task = await getTaskById(taskId);
 	}
 
 	if (!task) {
@@ -136,7 +136,7 @@ export async function PUT({ params, request }) {
 
 	try {
 		// Get existing task — try SQLite first, then Postgres for graduated projects
-		let existingTask = getTaskById(taskId);
+		let existingTask = await getTaskById(taskId);
 		const pgBackendForPut = existingTask ? null : await getPgBackendForTask(taskId);
 		if (!existingTask && pgBackendForPut) {
 			existingTask = await pgBackendForPut.getById(taskId);
@@ -227,7 +227,7 @@ export async function PUT({ params, request }) {
 				await pgBackendForPut.update(taskId, updateFields);
 			} else {
 				updateFields.projectPath = existingTask.project_path;
-				updateTask(taskId, updateFields);
+				await updateTask(taskId, updateFields);
 			}
 		}
 
@@ -239,7 +239,7 @@ export async function PUT({ params, request }) {
 		// Get updated task — re-fetch from the same backend used for the update
 		const updatedTask = pgBackendForPut
 			? await pgBackendForPut.getById(taskId)
-			: getTaskById(taskId);
+			: await getTaskById(taskId);
 
 		if (!updatedTask) {
 			return json({ error: 'Task not found after update' }, { status: 404 });
@@ -283,7 +283,7 @@ export async function PATCH({ params, request }) {
 
 	try {
 		// Check if task exists — try SQLite first, then Postgres for graduated projects
-		let existingTask = getTaskById(taskId);
+		let existingTask = await getTaskById(taskId);
 		const pgBackendForPatch = existingTask ? null : await getPgBackendForTask(taskId);
 		if (!existingTask && pgBackendForPatch) {
 			existingTask = await pgBackendForPatch.getById(taskId);
@@ -442,7 +442,7 @@ export async function PATCH({ params, request }) {
 				await pgBackendForPatch.update(taskId, updateFields);
 			} else {
 				updateFields.projectPath = projectPath;
-				updateTask(taskId, updateFields);
+				await updateTask(taskId, updateFields);
 			}
 		}
 
@@ -463,7 +463,7 @@ export async function PATCH({ params, request }) {
 			// Add new dependencies
 			for (const depId of depsToAdd) {
 				try {
-					addDependency(taskId, depId, projectPath);
+					await addDependency(taskId, depId, projectPath);
 				} catch (err) {
 					const error = /** @type {Error} */ (err);
 					console.error(`Failed to add dependency ${depId}:`, error.message);
@@ -474,7 +474,7 @@ export async function PATCH({ params, request }) {
 			// Remove old dependencies
 			for (const depId of depsToRemove) {
 				try {
-					removeDependency(taskId, depId, projectPath);
+					await removeDependency(taskId, depId, projectPath);
 				} catch (err) {
 					const error = /** @type {Error} */ (err);
 					console.error(`Failed to remove dependency ${depId}:`, error.message);
@@ -490,7 +490,7 @@ export async function PATCH({ params, request }) {
 				// Get current notes from the task (re-fetch in case notes were updated above)
 				const currentTask = pgBackendForPatch
 					? await pgBackendForPatch.getById(taskId)
-					: getTaskById(taskId);
+					: await getTaskById(taskId);
 				let currentNotes = currentTask?.notes || '';
 
 				// Remove existing review override tag if present
@@ -502,13 +502,13 @@ export async function PATCH({ params, request }) {
 					if (pgBackendForPatch) {
 						await pgBackendForPatch.update(taskId, { notes: newNotes });
 					} else {
-						updateTask(taskId, { notes: newNotes, projectPath });
+						await updateTask(taskId, { notes: newNotes, projectPath });
 					}
 				} else if (value === null || value === '' || value === 'null') {
 					if (pgBackendForPatch) {
 						await pgBackendForPatch.update(taskId, { notes: currentNotes });
 					} else {
-						updateTask(taskId, { notes: currentNotes, projectPath });
+						await updateTask(taskId, { notes: currentNotes, projectPath });
 					}
 				}
 			} catch (err) {
@@ -526,7 +526,7 @@ export async function PATCH({ params, request }) {
 		// Fetch and return updated task — use the same backend that performed the update
 		const updatedTask = pgBackendForPatch
 			? await pgBackendForPatch.getById(taskId)
-			: getTaskById(taskId);
+			: await getTaskById(taskId);
 
 		if (!updatedTask) {
 			return json(
@@ -568,7 +568,7 @@ export async function DELETE({ params }) {
 
 	try {
 		// Check if task exists — try SQLite first, then Postgres for graduated projects
-		let existingTask = getTaskById(taskId);
+		let existingTask = await getTaskById(taskId);
 		const pgBackendForDelete = existingTask ? null : await getPgBackendForTask(taskId);
 		if (!existingTask && pgBackendForDelete) {
 			existingTask = await pgBackendForDelete.getById(taskId);
@@ -587,7 +587,7 @@ export async function DELETE({ params }) {
 		if (pgBackendForDelete) {
 			await pgBackendForDelete.delete(taskId);
 		} else {
-			deleteTask(taskId, existingTask.project_path);
+			await deleteTask(taskId, existingTask.project_path);
 		}
 
 		// Invalidate related caches (both apiCache and module-level task cache in agents endpoint)

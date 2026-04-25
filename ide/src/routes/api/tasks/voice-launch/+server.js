@@ -114,7 +114,7 @@ async function launchTopTask(tasks, origin) {
 
 	let created;
 	try {
-		created = createTask({
+		created = await createTask({
 			projectPath,
 			title: pick.title || 'Voice launch task',
 			description: pick.description || pick.context || '',

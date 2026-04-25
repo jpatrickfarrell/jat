@@ -69,7 +69,7 @@ export async function GET({ params }) {
 
 			// Find task assigned to this agent
 			try {
-				const allTasks = getTasks({});
+				const allTasks = await getTasks({});
 				task = allTasks.find(
 					t => t.status === 'in_progress' && t.assignee === agentName
 				);

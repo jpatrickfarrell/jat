@@ -47,7 +47,7 @@ export async function DELETE({ params }) {
 		// Step 2: Find any in_progress task assigned to this agent
 		let taskToClose = null;
 		try {
-			const allTasks = getTasks({});
+			const allTasks = await getTasks({});
 			taskToClose = allTasks.find(
 				t => t.status === 'in_progress' && t.assignee === agentName
 			);

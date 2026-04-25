@@ -72,7 +72,7 @@ export async function POST({ params, request, fetch: internalFetch }) {
 
 	try {
 		// Check if task exists — try SQLite first, then Postgres for graduated projects
-		let existingTask = getTaskById(taskId);
+		let existingTask = await getTaskById(taskId);
 		const pgBackend = existingTask ? null : await getPgBackendForTask(taskId);
 		if (!existingTask && pgBackend) {
 			existingTask = await pgBackend.getById(taskId);
@@ -107,7 +107,7 @@ export async function POST({ params, request, fetch: internalFetch }) {
 		// Close the task — route through Postgres backend for graduated projects
 		const closedTask = pgBackend
 			? await pgBackend.close(taskId, reason)
-			: closeTask(taskId, reason, existingTask.project_path);
+			: await closeTask(taskId, reason, existingTask.project_path);
 
 		console.log(`[close] Closed task ${taskId}`);
 

@@ -20,9 +20,9 @@ interface EpicInfo {
 /**
  * Get info about an epic (exists, type, status)
  */
-function getEpicInfo(epicId: string): EpicInfo {
+async function getEpicInfo(epicId: string): Promise<EpicInfo> {
 	try {
-		const epic = getTaskById(epicId);
+		const epic = await getTaskById(epicId);
 		if (!epic) return { exists: false, isEpic: false, isClosed: false };
 		return {
 			exists: true,
@@ -37,9 +37,9 @@ function getEpicInfo(epicId: string): EpicInfo {
 /**
  * Reopen a closed epic
  */
-function reopenEpic(epicId: string, projectPath?: string): boolean {
+async function reopenEpic(epicId: string, projectPath?: string): Promise<boolean> {
 	try {
-		updateTask(epicId, { status: 'open', projectPath });
+		await updateTask(epicId, { status: 'open', projectPath });
 		console.log(`[task-epic] Reopened closed epic ${epicId}`);
 		return true;
 	} catch (error) {
@@ -51,10 +51,10 @@ function reopenEpic(epicId: string, projectPath?: string): boolean {
 /**
  * Find the epic(s) that a task is currently linked to (parent epics that depend on this task)
  */
-function findParentEpics(taskId: string, projectPath?: string): string[] {
+async function findParentEpics(taskId: string, projectPath?: string): Promise<string[]> {
 	try {
 		// getDependencyTree with reverse=true shows what depends ON this task
-		const result = getDependencyTree(taskId, { reverse: true, projectPath });
+		const result = await getDependencyTree(taskId, { reverse: true, projectPath });
 
 		// Result is an array of tasks. depth=0 is the task itself, depth>0 are parents.
 		// Filter to only return epics at depth > 0 (direct parent epics)
@@ -80,10 +80,10 @@ function findParentEpics(taskId: string, projectPath?: string): string[] {
  * This is the wrong direction - the correct direction is epic depends on task.
  * Returns true if such a backwards dep exists for the given epicId.
  */
-function hasBackwardsDependency(taskId: string, epicId: string, projectPath?: string): boolean {
+async function hasBackwardsDependency(taskId: string, epicId: string, projectPath?: string): Promise<boolean> {
 	try {
 		// getDependencyTree without reverse shows what this task depends ON
-		const result = getDependencyTree(taskId, { reverse: false, projectPath });
+		const result = await getDependencyTree(taskId, { reverse: false, projectPath });
 		if (Array.isArray(result)) {
 			return result.some(item => item.id === epicId && item.depth === 1);
 		}
@@ -96,9 +96,9 @@ function hasBackwardsDependency(taskId: string, epicId: string, projectPath?: st
 /**
  * Remove a task from an epic (remove the epic->task dependency)
  */
-function unlinkFromEpic(taskId: string, epicId: string, projectPath?: string): boolean {
+async function unlinkFromEpic(taskId: string, epicId: string, projectPath?: string): Promise<boolean> {
 	try {
-		removeDependency(epicId, taskId, projectPath);
+		await removeDependency(epicId, taskId, projectPath);
 		console.log(`[task-epic] Removed task ${taskId} from epic ${epicId}`);
 		return true;
 	} catch (error) {
@@ -127,7 +127,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Get the task to find project path
-		const task = getTaskById(taskId);
+		const task = await getTaskById(taskId);
 		if (!task) {
 			return json(
 				{ success: false, error: `Task '${taskId}' not found` },
@@ -138,7 +138,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const projectPath = task.project_path;
 
 		// Verify the epic exists
-		const epicInfo = getEpicInfo(epicId);
+		const epicInfo = await getEpicInfo(epicId);
 		if (!epicInfo.exists || !epicInfo.isEpic) {
 			return json(
 				{ success: false, error: `Epic '${epicId}' not found` },
@@ -149,7 +149,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// If epic is closed, auto-reopen it since user is adding work to it
 		let epicReopened = false;
 		if (epicInfo.isClosed) {
-			epicReopened = reopenEpic(epicId, projectPath);
+			epicReopened = await reopenEpic(epicId, projectPath);
 			if (!epicReopened) {
 				return json(
 					{ success: false, error: `Failed to reopen closed epic '${epicId}'` },
@@ -159,7 +159,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Check if task is already in an epic (support "move" between epics)
-		const currentEpics = findParentEpics(taskId, projectPath);
+		const currentEpics = await findParentEpics(taskId, projectPath);
 		let movedFrom: string | null = null;
 
 		// If already in the target epic, return early
@@ -176,7 +176,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// If in a different epic, remove from the old one first (move operation)
 		if (currentEpics.length > 0) {
 			for (const oldEpicId of currentEpics) {
-				const removed = unlinkFromEpic(taskId, oldEpicId, projectPath);
+				const removed = await unlinkFromEpic(taskId, oldEpicId, projectPath);
 				if (removed) {
 					movedFrom = oldEpicId;
 					console.log(`[task-epic] Moving task ${taskId} from epic ${oldEpicId} to ${epicId}`);
@@ -186,9 +186,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// Check for backwards dependency (task depends on epic - wrong direction from --parent flag)
 		// If found, auto-fix by removing the wrong dep before adding the correct one
-		if (hasBackwardsDependency(taskId, epicId, projectPath)) {
+		if (await hasBackwardsDependency(taskId, epicId, projectPath)) {
 			try {
-				removeDependency(taskId, epicId, projectPath);
+				await removeDependency(taskId, epicId, projectPath);
 				console.log(`[task-epic] Fixed backwards dependency: removed ${taskId} -> ${epicId}`);
 			} catch (fixError) {
 				console.error(`[task-epic] Failed to remove backwards dependency:`, fixError);
@@ -198,7 +198,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// CRITICAL: Dependency direction is epic depends on child
 		// This makes child READY (can be worked on) and epic BLOCKED (until children complete)
 		try {
-			addDependency(epicId, taskId, projectPath);
+			await addDependency(epicId, taskId, projectPath);
 		} catch (depError) {
 			const errorMessage = depError instanceof Error ? depError.message : String(depError);
 
@@ -310,7 +310,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Get the task to find project path
-		const task = getTaskById(taskId);
+		const task = await getTaskById(taskId);
 		if (!task) {
 			return json(
 				{ success: false, error: `Task '${taskId}' not found` },
@@ -322,7 +322,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 
 		// Remove the dependency: epic depends on child
 		try {
-			removeDependency(epicId, taskId, projectPath);
+			await removeDependency(epicId, taskId, projectPath);
 		} catch (depError) {
 			const errorMessage = depError instanceof Error ? depError.message : String(depError);
 			// "not found" is fine - dependency already removed

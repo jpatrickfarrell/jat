@@ -86,7 +86,7 @@ export async function GET() {
 		}
 
 		// Get scheduled tasks count and next run
-		const scheduledTasks = getScheduledTasks();
+		const scheduledTasks = await getScheduledTasks();
 		const scheduledCount = scheduledTasks.length;
 
 		// Find the nearest next_run_at

@@ -37,7 +37,7 @@ export async function POST({ params, request }) {
 		}
 
 		// Validate task exists
-		const task = getTaskById(id);
+		const task = await getTaskById(id);
 		if (!task) {
 			return json(
 				{ ok: false, error: 'Report not found' },

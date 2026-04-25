@@ -130,7 +130,7 @@ export const GET: RequestHandler = async ({ url }) => {
                 let isClosed = closedCache.get(taskId);
                 if (isClosed === undefined) {
                     try {
-                        const task = getTaskById(taskId);
+                        const task = await getTaskById(taskId);
                         isClosed = task?.status === 'closed';
                     } catch {
                         isClosed = false;

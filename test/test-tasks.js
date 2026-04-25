@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * Test script for JAT Tasks SQLite Query Layer
+ * Test script for JAT Tasks Query Layer
  *
- * Validates that lib/tasks.js can query all JAT task databases from Node
+ * Validates that lib/tasks.js can route task operations to the correct
+ * backend (SQLite or Postgres) based on project configuration.
  */
 
 import { getProjects, getTasks, getTaskById, getReadyTasks } from '../lib/tasks.js';
 
-console.log('🧪 Testing JAT Tasks SQLite Query Layer\n');
+console.log('🧪 Testing JAT Tasks Query Layer\n');
 console.log('═'.repeat(80));
 
-// Test 1: getProjects()
+const projects = await getProjects();
 console.log('\n📂 TEST 1: getProjects()');
 console.log('─'.repeat(80));
-const projects = getProjects();
 console.log(`✓ Found ${projects.length} project(s) with JAT databases:`);
 projects.forEach(p => {
   console.log(`  • ${p.name}`);
@@ -29,7 +29,7 @@ if (projects.length === 0) {
 // Test 2: getTasks()
 console.log('\n📋 TEST 2: getTasks() - All tasks');
 console.log('─'.repeat(80));
-const allTasks = getTasks();
+const allTasks = await getTasks();
 console.log(`✓ Found ${allTasks.length} total task(s) across all projects:`);
 
 // Group by project
@@ -55,7 +55,7 @@ for (const [project, tasks] of Object.entries(tasksByProject)) {
 // Test 3: getTasks() with filters
 console.log('\n📋 TEST 3: getTasks() - With filters (status=open, priority=0)');
 console.log('─'.repeat(80));
-const openP0Tasks = getTasks({ status: 'open', priority: 0 });
+const openP0Tasks = await getTasks({ status: 'open', priority: 0 });
 console.log(`✓ Found ${openP0Tasks.length} open P0 task(s):`);
 openP0Tasks.forEach(task => {
   console.log(`  • ${task.id} - ${task.title}`);
@@ -68,7 +68,7 @@ console.log('─'.repeat(80));
 if (allTasks.length > 0) {
   const testTaskId = allTasks[0].id;
   console.log(`Testing with task: ${testTaskId}`);
-  const taskDetails = getTaskById(testTaskId);
+  const taskDetails = await getTaskById(testTaskId);
 
   if (taskDetails) {
     console.log(`✓ Retrieved task details:`);
@@ -103,7 +103,7 @@ if (allTasks.length > 0) {
 // Test 5: getReadyTasks()
 console.log('\n🚀 TEST 5: getReadyTasks() - Tasks ready to work on');
 console.log('─'.repeat(80));
-const readyTasks = getReadyTasks();
+const readyTasks = await getReadyTasks();
 console.log(`✓ Found ${readyTasks.length} ready task(s):`);
 readyTasks.slice(0, 5).forEach(task => {
   console.log(`  • [P${task.priority}] ${task.id} - ${task.title}`);
@@ -125,4 +125,4 @@ console.log(`✓ getProjects() works: ${projects.length} projects found`);
 console.log(`✓ getTasks() works: ${allTasks.length} tasks retrieved`);
 console.log(`✓ getTaskById() works: Successfully retrieved task details`);
 console.log(`✓ getReadyTasks() works: ${readyTasks.length} ready tasks found`);
-console.log('\n🎉 JAT Tasks SQLite Query Layer is fully functional!\n');
+console.log('\n🎉 JAT Tasks Query Layer is fully functional!\n');

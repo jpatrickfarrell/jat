@@ -15,7 +15,7 @@ export async function GET({ url }) {
 
 		// Fetch all data sources
 		const agents = getAgents(projectFilter);
-		const tasks = getTasks({ projectName: projectFilter });
+		const tasks = await getTasks({ projectName: projectFilter });
 
 		// Calculate agent statistics
 		const agentStats = agents.map(agent => {

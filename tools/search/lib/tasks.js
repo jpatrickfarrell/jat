@@ -50,7 +50,7 @@ export async function searchTasks(query, options = {}) {
 
       // Sqlite — fetch extra, filter by project id prefix.
       const fetchLimit = limit * 5;
-      const results = _searchTasks(query, { limit: fetchLimit });
+      const results = await _searchTasks(query, { limit: fetchLimit });
       const filtered = results
         .filter((t) => t.id.startsWith(projName + '-'))
         .slice(0, limit);
@@ -61,7 +61,7 @@ export async function searchTasks(query, options = {}) {
 
   // No project filter — sqlite global FTS plus fan-out to every
   // postgres-backed project listed in ~/.config/jat/projects.json.
-  const sqliteResults = _searchTasks(query, { limit }).map(shapeTask);
+  const sqliteResults = (await _searchTasks(query, { limit })).map(shapeTask);
 
   const cfg = readProjectsConfig();
   const postgresNames = [];

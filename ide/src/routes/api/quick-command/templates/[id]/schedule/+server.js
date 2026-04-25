@@ -38,9 +38,9 @@ async function readTemplates() {
  * @param {string} templateId
  * @returns {object|null}
  */
-function findScheduledTask(templateId) {
+async function findScheduledTask(templateId) {
 	const quickCommand = `/quick-command:${templateId}`;
-	const scheduled = getScheduledTasks();
+	const scheduled = await getScheduledTasks();
 	// Match by quick-command prefix OR by title pattern for spawn-agent mode
 	return scheduled.find((t) => {
 		if (t.status === 'closed') return false;
@@ -65,7 +65,7 @@ function getRunMode(task, templateId) {
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
 	try {
-		const task = findScheduledTask(params.id);
+		const task = await findScheduledTask(params.id);
 		if (!task) {
 			return json({ scheduled: false });
 		}
@@ -121,7 +121,7 @@ export async function POST({ params, request }) {
 		}
 
 		// Check if already scheduled
-		const existing = findScheduledTask(params.id);
+		const existing = await findScheduledTask(params.id);
 		if (existing) {
 			return json(
 				{
@@ -182,7 +182,7 @@ export async function POST({ params, request }) {
 		});
 
 		// Create the task
-		const task = createTask({
+		const task = await createTask({
 			projectPath: projectInfo.path,
 			title: `Scheduled: ${template.name}`,
 			description,
@@ -220,7 +220,7 @@ export async function POST({ params, request }) {
 /** @type {import('./$types').RequestHandler} */
 export async function DELETE({ params }) {
 	try {
-		const task = findScheduledTask(params.id);
+		const task = await findScheduledTask(params.id);
 		if (!task) {
 			return json(
 				{ error: 'Not scheduled', message: 'Template is not currently scheduled' },
@@ -229,7 +229,7 @@ export async function DELETE({ params }) {
 		}
 
 		// Close the scheduled task
-		closeTask(task.id, 'Schedule removed');
+		await closeTask(task.id, 'Schedule removed');
 
 		return json({
 			success: true,

@@ -200,7 +200,7 @@ async function initializeJat(projectPath) {
 
 	// Initialize task database directly via lib/tasks.js
 	try {
-		initProject(projectPath);
+		await initProject(projectPath);
 		steps.push('Initialized task management');
 		return { success: true, steps };
 	} catch (initError) {
@@ -218,16 +218,16 @@ async function initializeJat(projectPath) {
  * Previously: 24 projects × getTasks() each opening 24 DBs = 576 DB opens + OOM.
  * Now: 1 × getTasks() opening 24 DBs = 24 DB opens total.
  *
- * @returns {{ taskCounts: Map<string, {open: number, total: number}>, agentCounts: Map<string, {active: number, total: number}> }}
+ * @returns {Promise<{ taskCounts: Map<string, {open: number, total: number}>, agentCounts: Map<string, {active: number, total: number}> }>}
  */
-function getAllProjectStats() {
+async function getAllProjectStats() {
 	/** @type {Map<string, {open: number, total: number}>} */
 	const taskCounts = new Map();
 	/** @type {Map<string, {active: number, total: number}>} */
 	const agentCounts = new Map();
 
 	try {
-		const allTasks = getTasks({});
+		const allTasks = await getTasks({});
 		for (const task of allTasks) {
 			// Extract project prefix from task ID (e.g., "jat-abc123" -> "jat")
 			const match = task.id?.match(/^([a-zA-Z0-9_-]+?)-([a-zA-Z0-9.]+)$/);
@@ -510,7 +510,7 @@ export async function GET({ url }) {
 		// Now calls getTasks() once, groups by project = 24 DB opens total.
 		if (includeStats) {
 			// Single-pass: get all task counts and agent counts from one getTasks() call
-			const { taskCounts: taskCountsByProject, agentCounts: agentCountsByProject } = getAllProjectStats();
+			const { taskCounts: taskCountsByProject, agentCounts: agentCountsByProject } = await getAllProjectStats();
 
 			projects = await Promise.all(projects.map(async (project) => {
 				// Check if .jat/ directory exists

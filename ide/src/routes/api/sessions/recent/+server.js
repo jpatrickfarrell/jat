@@ -297,7 +297,7 @@ export async function GET({ url }) {
 		for (const session of sessions) {
 			if (session.taskId) {
 				try {
-					const task = getTaskById(session.taskId);
+					const task = await getTaskById(session.taskId);
 					if (task) {
 						session.taskStatus = task.status;
 						session.taskCreatedAt = task.created_at;
@@ -311,14 +311,14 @@ export async function GET({ url }) {
 		}
 
 		// Enrich sessions with integration source info (from task.source column)
-		const tasksForIntegration = sessions
+		const tasksForIntegration = (await Promise.all(sessions
 			.filter(s => s.taskId)
-			.map(s => {
+			.map(async s => {
 				try {
-					const t = getTaskById(s.taskId);
+					const t = await getTaskById(s.taskId);
 					return t ? { id: t.id, source: t.source, source_item_id: t.source_item_id, metadata: t.metadata } : null;
 				} catch { return null; }
-			})
+			})))
 			.filter(Boolean);
 		if (tasksForIntegration.length > 0) {
 			const integrations = lookupIntegrations(tasksForIntegration);

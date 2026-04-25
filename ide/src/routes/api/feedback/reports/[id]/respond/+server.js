@@ -51,7 +51,7 @@ export async function PATCH({ params, request }) {
 		const projectPath = process.cwd().replace(/\/ide$/, '');
 
 		// Get current task
-		const task = getTaskById(id);
+		const task = await getTaskById(id);
 		if (!task) {
 			return json(
 				{ ok: false, error: 'Report not found' },
@@ -117,13 +117,13 @@ export async function PATCH({ params, request }) {
 
 		if (response === 'accepted') {
 			// Close the task as accepted
-			closeTask(id, 'Accepted by requester', projectPath);
+			await closeTask(id, 'Accepted by requester', projectPath);
 		} else {
 			// Rejected - reopen the task for another work cycle
 			const notes = task.notes
 				? `${task.notes}\n\nRejected: ${reason}`
 				: `Rejected: ${reason}`;
-			updateTask(id, { status: 'open', notes, projectPath });
+			await updateTask(id, { status: 'open', notes, projectPath });
 		}
 
 		// Append thread entry

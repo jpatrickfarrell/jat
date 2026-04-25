@@ -73,7 +73,7 @@ export async function GET({ url }) {
 				tasks = [];
 			}
 		} else if (scheduled === 'true') {
-			tasks = getScheduledTasks({ projectName: project || undefined });
+			tasks = await getScheduledTasks({ projectName: project || undefined });
 		} else {
 			const filters = {};
 			if (project) filters.projectName = project;
@@ -82,7 +82,7 @@ export async function GET({ url }) {
 			if (closedAfter) filters.closedAfter = closedAfter;
 			if (closedBefore) filters.closedBefore = closedBefore;
 
-			tasks = getTasks(filters);
+			tasks = await getTasks(filters);
 
 			// Cross-project views (no `project` param) must also include tasks from
 			// postgres-backed projects (meadow, headcount, flush, steelbridge, ...).
@@ -124,7 +124,7 @@ export async function GET({ url }) {
 				}
 			}
 		}
-		const projects = getProjects();
+		const projects = await getProjects();
 
 		// Apply search filter if provided
 		if (search && search.trim()) {
@@ -401,8 +401,8 @@ export async function POST({ request }) {
 		const parentId = (body.parent_id && typeof body.parent_id === 'string') ? body.parent_id.trim() : null;
 
 		/** @type {any} */
-		const createdTask = pgBackendForCreate
-			? await pgBackendForCreate.create({
+		const createdTask = await (pgBackendForCreate
+			? pgBackendForCreate.create({
 				projectPath,
 				title,
 				description,
@@ -433,7 +433,7 @@ export async function POST({ request }) {
 				requester: sqliteRequester,
 				notes,
 				...schedulingFields
-			});
+			}));
 
 		// Invalidate caches so subsequent fetches get fresh data
 		invalidateCache.tasks();

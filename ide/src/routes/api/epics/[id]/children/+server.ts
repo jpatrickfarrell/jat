@@ -52,10 +52,10 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	try {
 		// Get all tasks first (needed for both epic lookup and child detection)
-		const allTasks = getTasks();
+		const allTasks = await getTasks();
 
 		// Get the epic details using jat-tasks.js library (much faster than jt CLI)
-		const epic = getTaskById(epicId);
+		const epic = await getTaskById(epicId);
 
 		// Method 1: Find children by hierarchical ID pattern (e.g., jat-cptest.1, jat-cptest.2)
 		const childPattern = new RegExp(`^${epicId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\d+$`);

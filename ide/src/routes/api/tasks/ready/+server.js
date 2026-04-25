@@ -22,10 +22,10 @@ export async function GET() {
 		}
 
 		// Get ready tasks from SQLite-backed projects
-		const tasks = getReadyTasks();
+		const tasks = await getReadyTasks();
 
 		// Get active (in_progress) tasks from SQLite-backed projects
-		const inProgressTasks = getTasks({ status: 'in_progress' });
+		const inProgressTasks = await getTasks({ status: 'in_progress' });
 
 		// Also include ready + in_progress tasks from postgres-graduated projects.
 		// These don't flow through the SQLite backend, so they need to be fetched

@@ -51,7 +51,7 @@ export async function GET({ params }) {
 		if (pgBackend) {
 			task = await pgBackend.getById(id);
 		} else {
-			task = getTaskById(id);
+			task = await getTaskById(id);
 		}
 
 		if (!task) {

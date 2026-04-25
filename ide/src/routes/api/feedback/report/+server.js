@@ -291,7 +291,7 @@ export async function POST({ request }) {
 		// Create the task — catch unique-constraint conflicts (dedup) silently
 		let createdTask;
 		try {
-			createdTask = createTask({
+			createdTask = await createTask({
 				projectPath,
 				title: `[Feedback] ${title}`,
 				description: fullDescription,

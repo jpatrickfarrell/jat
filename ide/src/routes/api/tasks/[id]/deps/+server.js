@@ -15,7 +15,7 @@ import { _resetTaskCache } from '../../../../api/agents/+server.js';
 export async function GET({ params }) {
 	const taskId = params.id;
 
-	const task = getTaskById(taskId);
+	const task = await getTaskById(taskId);
 
 	if (!task) {
 		return json({ error: 'Task not found' }, { status: 404 });
@@ -91,7 +91,7 @@ export async function POST({ params, request }) {
 		if (pgBackend) {
 			await pgBackend.addDependency(taskId, dependsOnId, undefined);
 		} else {
-			addDependency(taskId, dependsOnId, body?.projectPath || null);
+			await addDependency(taskId, dependsOnId, body?.projectPath || null);
 		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
@@ -150,7 +150,7 @@ export async function DELETE({ params, request }) {
 		if (pgBackend) {
 			await pgBackend.removeDependency(taskId, dependsOnId, undefined);
 		} else {
-			removeDependency(taskId, dependsOnId, body?.projectPath || null);
+			await removeDependency(taskId, dependsOnId, body?.projectPath || null);
 		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);

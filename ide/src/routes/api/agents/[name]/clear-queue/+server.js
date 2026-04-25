@@ -27,7 +27,7 @@ export async function POST({ params }) {
 
 		// Get all tasks from all projects and filter to this agent's open tasks
 		try {
-			const allTasks = getTasks({ status: 'open' });
+			const allTasks = await getTasks({ status: 'open' });
 
 			// Filter to tasks assigned to this agent
 			const agentTasks = allTasks.filter(

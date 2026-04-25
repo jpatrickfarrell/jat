@@ -184,9 +184,9 @@ function validateTask(task: unknown, index: number): { valid: boolean; error?: s
 /**
  * Check if an epic is still open (not closed)
  */
-function isEpicOpen(epicId: string): boolean {
+async function isEpicOpen(epicId: string): Promise<boolean> {
 	try {
-		const epic = getTaskById(epicId);
+		const epic = await getTaskById(epicId);
 		if (!epic) return false;
 		return epic.status !== 'closed';
 	} catch {
@@ -202,14 +202,14 @@ function isEpicOpen(epicId: string): boolean {
  * IMPORTANT: This function checks if the epic is still open before linking.
  * Tasks will NOT be linked to closed epics (prevents stale epic state bugs).
  */
-function linkTaskToEpic(
+async function linkTaskToEpic(
 	epicId: string,
 	childId: string,
 	projectPath?: string
-): { success: boolean; error?: string; skipped?: boolean } {
+): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
 	try {
 		// Check if epic is still open before linking
-		const epicOpen = isEpicOpen(epicId);
+		const epicOpen = await isEpicOpen(epicId);
 		if (!epicOpen) {
 			console.warn(
 				`Skipping epic link: Epic ${epicId} is closed or not found. ` +
@@ -342,7 +342,7 @@ async function createTask(
 		};
 
 		if (epicId) {
-			const linkResult = linkTaskToEpic(epicId, taskId, projectPath);
+			const linkResult = await linkTaskToEpic(epicId, taskId, projectPath);
 			if (linkResult.success && !linkResult.skipped) {
 				taskResult.linkedToEpic = true;
 				console.log(`Linked task ${taskId} to epic ${epicId}`);

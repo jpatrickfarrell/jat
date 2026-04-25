@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Get all tasks and filter to epics
-		const allTasks = getTasks(filters);
+		const allTasks = await getTasks(filters);
 		let epics: Epic[] = allTasks.filter((t: any) => t.issue_type === 'epic');
 
 		// Filter by project if specified
@@ -134,7 +134,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
 
 		// Create the epic directly using lib/tasks.js
-		const createdEpic = createTask({
+		const createdEpic = await createTask({
 			projectPath,
 			title: title.trim(),
 			type: 'epic',
@@ -150,7 +150,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (linkTaskId) {
 			try {
 				// Epic depends on task (correct direction - makes task READY, epic BLOCKED)
-				addDependency(epicId, linkTaskId, projectPath);
+				await addDependency(epicId, linkTaskId, projectPath);
 				console.log(`[epics] Linked task ${linkTaskId} to epic ${epicId}`);
 			} catch (linkError) {
 				console.error('[epics] Failed to link task to epic:', linkError);

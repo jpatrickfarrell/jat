@@ -318,11 +318,11 @@ let cachedTasks = [];
 let taskCacheTimestamp = 0;
 const TASK_CACHE_TTL_MS = 5000;
 
-function getCachedTasks() {
+async function getCachedTasks() {
 	const now = Date.now();
 	if (now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0) {
 		try {
-			cachedTasks = getTasks({});
+			cachedTasks = await getTasks({});
 			taskCacheTimestamp = now;
 		} catch (err) {
 			console.error('Failed to fetch tasks:', err);
@@ -726,7 +726,7 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 		// (Previously ran tmux resize-window for every session on every request, causing ~200ms overhead)
 
 		// Step 2: Get all tasks from JAT (for lookup) - uses cache to avoid expensive JSONL parsing
-		const allTasks = getCachedTasks();
+		const allTasks = await getCachedTasks();
 
 		// Create a map of agent -> in_progress task
 		/** @type {Map<string, Task>} */

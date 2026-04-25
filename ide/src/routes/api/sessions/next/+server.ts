@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		let nextTask;
 		if (nextTaskId) {
 			// If nextTaskId provided, use it (from signal)
-			const readyTasks = getReadyTasks();
+			const readyTasks = await getReadyTasks();
 			nextTask = readyTasks.find(t => t.id === nextTaskId);
 			if (!nextTask) {
 				// Task ID was provided but not found in ready list - it may have been taken
@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		} else {
 			// Find first ready task
-			const readyTasks = getReadyTasks();
+			const readyTasks = await getReadyTasks();
 			nextTask = readyTasks[0];
 		}
 

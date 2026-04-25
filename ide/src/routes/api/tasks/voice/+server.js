@@ -108,7 +108,7 @@ export async function PATCH({ url, request }) {
 				email: widgetRequester?.includes('@') ? widgetRequester : undefined,
 				name: !widgetRequester?.includes('@') ? widgetRequester : undefined,
 			});
-			const createdTask = createTask({
+			const createdTask = await createTask({
 				projectPath,
 				title,
 				description,
@@ -296,7 +296,7 @@ export async function POST({ request }) {
 						email: postRequester?.includes('@') ? postRequester : undefined,
 						name: !postRequester?.includes('@') ? postRequester : undefined,
 					});
-					const createdTask = createTask({
+					const createdTask = await createTask({
 						projectPath, title, description: text, type: 'task',
 						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
 						labels: ['voice'], deps: [], assignee: null,

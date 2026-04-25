@@ -106,7 +106,7 @@ export async function POST({ params, request }) {
 		if (!taskId) {
 			// Try to find task from agent's in_progress/closed task
 			try {
-				const allTasks = getTasks({});
+				const allTasks = await getTasks({});
 				// First look for in_progress task
 				let agentTask = allTasks.find(
 					t => t.assignee === agentName && t.status === 'in_progress'

@@ -379,7 +379,7 @@ ACTION_EXECUTORS['CreateTask'] = async ({ actionConfig, project }) => {
 	const identity = buildTaskIdentity({ source: 'ide' });
 	const sqliteCreator = identity.creator.email || identity.creator.name || identity.creator.source;
 
-	const result = createTask({
+	const result = await createTask({
 		projectPath,
 		title: String(title).trim(),
 		type: taskType,
@@ -410,7 +410,7 @@ ACTION_EXECUTORS['UpdateTask'] = async ({ actionConfig }) => {
 		return { success: false, message: 'UpdateTask: taskId is required' };
 	}
 
-	const existing = getTaskById(String(taskId));
+	const existing = await getTaskById(String(taskId));
 	if (!existing) {
 		return { success: false, message: `Task not found: ${taskId}` };
 	}
@@ -428,7 +428,7 @@ ACTION_EXECUTORS['UpdateTask'] = async ({ actionConfig }) => {
 		return { success: false, message: 'No valid update fields provided' };
 	}
 
-	updateJatTask(String(taskId), fields);
+	await updateJatTask(String(taskId), fields);
 	invalidateCache.tasks();
 
 	const updatedFields = Object.keys(fields).filter(k => k !== 'projectPath');

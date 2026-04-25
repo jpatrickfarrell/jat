@@ -36,7 +36,7 @@ function getProjectFromTaskId(taskId) {
  * @returns {string|null} Project path or null if not found
  */
 function getProjectPath(projectName) {
-	const projects = getProjects();
+	const projects = await getProjects();
 	const project = projects.find((p) => p.name === projectName);
 	return project ? project.path : null;
 }

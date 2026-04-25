@@ -310,7 +310,7 @@ export async function DELETE({ params }) {
 			const t3 = Date.now();
 			try {
 				// Use jat-tasks.js to find tasks across all SQLite projects
-				const allTasks = getTasks({ status: 'in_progress' });
+				const allTasks = await getTasks({ status: 'in_progress' });
 				const agentTask = allTasks.find(t => t.assignee === agentName);
 				console.log(`[Session DELETE] getTasks scan took ${Date.now() - t3}ms (found ${allTasks.length} in_progress tasks, match: ${agentTask?.id || 'none'})`);
 

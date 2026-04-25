@@ -18536,7 +18536,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(d, p) {
   push(p, !0), append_styles(d, $$css$1);
-  const h = "3.4.3";
+  const h = "3.5.0";
   let g = prop(p, "endpoint", 7), m = prop(p, "project", 7), _ = prop(p, "isOpen", 7, !1), b = prop(p, "userId", 7, ""), y = prop(p, "userEmail", 7, ""), w = prop(p, "userName", 7, ""), x = prop(p, "userRole", 7, ""), E = prop(p, "orgId", 7, ""), k = prop(p, "orgName", 7, ""), S = prop(p, "onclose", 7), I = prop(p, "ongrip", 7), R = prop(p, "agentProxy", 7, ""), M = prop(p, "agentModel", 7, ""), A = prop(p, "agentContext", 7, ""), C = prop(p, "registeredTools", 23, () => []), $ = prop(p, "supabaseUrl", 7, ""), N = prop(p, "supabaseAnonKey", 7, ""), O = /* @__PURE__ */ state("new"), F = /* @__PURE__ */ state(!1), W = /* @__PURE__ */ state(!1), V = /* @__PURE__ */ state(!1), q = /* @__PURE__ */ state(proxy([]));
   function ue() {
     if (get(V)) {

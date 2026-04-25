@@ -13,9 +13,36 @@
  */
 import { json } from '@sveltejs/kit';
 import { getBase } from '$lib/server/jat-bases.js';
-import { getTableRows } from '$lib/server/jat-data.js';
+import { getTableRows, pgGetTableRows } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { evaluateFormula } from '$lib/utils/formulaEval.js';
+import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../../lib/bases-postgres.js';
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Walk a formula expression and return the set of table names referenced via
+ * TableFilter('tableName', ...). Used to pre-populate the table cache on
+ * postgres-backed projects (where fetches are async) before running the
+ * synchronous formula loop.
+ */
+function extractTableFilterTables(expression) {
+	const names = new Set();
+	const re = /TableFilter\s*\(\s*['"]([^'"]+)['"]/gi;
+	let m;
+	while ((m = re.exec(expression)) !== null) {
+		names.add(m[1]);
+	}
+	return names;
+}
 
 /**
  * Execute a TableFilter call server-side.
@@ -115,7 +142,10 @@ export async function POST({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = getBase(path, baseId);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = pgUrl
+			? await pgBases.getBase(pgUrl, baseId)
+			: getBase(path, baseId);
 		if (!base) {
 			return json({ error: `Base not found: ${baseId}` }, { status: 404 });
 		}
@@ -128,8 +158,28 @@ export async function POST({ params, request }) {
 
 		const controlRow = { ...controlValues };
 
-		// Cache for table data
+		// Pre-populate the table cache for postgres projects so the synchronous
+		// formula loop below can resolve TableFilter calls without awaiting.
+		// On sqlite, fetchTableRows pulls lazily from the sync helper instead.
 		const tableCache = new Map();
+
+		if (pgUrl) {
+			const tablesNeeded = new Set();
+			for (const block of formulaBlocks) {
+				const expr = block.expression || '';
+				if (/TableFilter\s*\(/i.test(expr)) {
+					for (const t of extractTableFilterTables(expr)) tablesNeeded.add(t);
+				}
+			}
+			for (const tableName of tablesNeeded) {
+				try {
+					const result = await pgGetTableRows(project, tableName, { limit: 10000 });
+					tableCache.set(tableName, result?.rows ?? []);
+				} catch {
+					tableCache.set(tableName, []);
+				}
+			}
+		}
 
 		function fetchTableRows(tableName) {
 			if (tableCache.has(tableName)) {

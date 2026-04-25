@@ -106,7 +106,7 @@ function mapPgTask(task, projectPath) {
 		: 'feedback';
 
 	return {
-		id: task.db_id || task.id,  // use UUID for /api/tasks/:id/comments lookups
+		id: task.id,  // JAT-format id (e.g. jat-abc123) — IDE comments API expects this
 		title,
 		description,
 		type: task.issue_type || 'bug',

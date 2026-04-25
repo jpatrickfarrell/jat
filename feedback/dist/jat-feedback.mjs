@@ -11378,7 +11378,7 @@ function RequestList(d, p) {
     if (get(M).has(Z)) return;
     set(M, /* @__PURE__ */ new Set([...get(M), Z]), !0);
     const fe = await fetchTaskComments(h(), Z);
-    get(M).delete(Z), set(M, new Set(get(M)), !0), fe.error ? set(A, new Map([...get(A), [Z, fe.error]]), !0) : (set(R, new Map([...get(R), [Z, fe.comments]]), !0), get(A).delete(Z), set(A, new Map(get(A)), !0));
+    get(M).delete(Z), set(M, new Set(get(M)), !0), set(R, new Map([...get(R), [Z, fe.comments]]), !0), fe.error ? set(A, new Map([...get(A), [Z, fe.error]]), !0) : (get(A).delete(Z), set(A, new Map(get(A)), !0));
   }
   function F(Z) {
     if (N.has(Z)) return;

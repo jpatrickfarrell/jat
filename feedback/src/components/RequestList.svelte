@@ -46,10 +46,12 @@
     const result = await fetchTaskComments(endpoint, reportId);
     commentsLoading.delete(reportId);
     commentsLoading = new Set(commentsLoading);
+    // Always populate taskComments (even on error, with empty array) so the
+    // reply box renders instead of staying in the "not loaded" state.
+    taskComments = new Map([...taskComments, [reportId, result.comments]]);
     if (result.error) {
       commentErrors = new Map([...commentErrors, [reportId, result.error]]);
     } else {
-      taskComments = new Map([...taskComments, [reportId, result.comments]]);
       commentErrors.delete(reportId);
       commentErrors = new Map(commentErrors);
     }

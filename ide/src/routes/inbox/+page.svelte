@@ -169,6 +169,8 @@
 		openStatus: () => void;
 		openPriority: () => void;
 		openType: () => void;
+		openEpic: () => void;
+		openMilestone: () => void;
 		spawnAgent: () => void;
 		openFullDrawer: () => void;
 		dismissTask: () => void;
@@ -756,10 +758,20 @@
 
 		// Fire the spawn in the background. Failures are logged + surface
 		// via a rollback so the inbox doesn't lie about the task state.
+		//
+		// claimAssignee / claimAssigneeEmail tell the spawn API: if the task
+		// is currently unassigned, set the dev as assignee. preserveAssignee
+		// = "don't replace a human with an agent" — but null isn't a human,
+		// it's a vacancy, and the act of spawning is the dev claiming it.
 		fetch("/api/work/spawn", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ taskId, preserveAssignee: true }),
+			body: JSON.stringify({
+				taskId,
+				preserveAssignee: true,
+				claimAssignee: currentUser || undefined,
+				claimAssigneeEmail: currentUserEmail || undefined,
+			}),
 		})
 			.then(async (res) => {
 				if (!res.ok) {

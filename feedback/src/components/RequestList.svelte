@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { respondToReport, type ReportSummary } from '../lib/api';
+  import { respondToReport, fetchTaskComments, postTaskComment, type ReportSummary, type TaskComment } from '../lib/api';
   import type { ThreadEntry, ElementData } from '../lib/types';
   import { captureViewport } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
   import { slide } from 'svelte/transition';
+  import { onDestroy } from 'svelte';
   import TimelineViewer from './TimelineViewer.svelte';
 
   let {
@@ -12,18 +13,100 @@
     loading,
     error,
     onreload,
+    userId = '',
+    userName = '',
+    userEmail = '',
   }: {
     endpoint: string;
     reports: ReportSummary[];
     loading: boolean;
     error: string;
     onreload: () => void;
+    userId?: string;
+    userName?: string;
+    userEmail?: string;
   } = $props();
 
   let expandedScreenshot = $state<string | null>(null);
   let expandedThreadId = $state<string | null>(null);
   let expandedCardId = $state<string | null>(null);
   let scrollEl = $state<HTMLElement | undefined>();
+
+  // Task comment thread state
+  let taskComments = $state<Map<string, TaskComment[]>>(new Map());
+  let commentsLoading = $state<Set<string>>(new Set());
+  let commentErrors = $state<Map<string, string>>(new Map());
+  let replyText = $state<Map<string, string>>(new Map());
+  let replySending = $state<Set<string>>(new Set());
+  let pollTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+  async function loadComments(reportId: string) {
+    if (commentsLoading.has(reportId)) return;
+    commentsLoading = new Set([...commentsLoading, reportId]);
+    const result = await fetchTaskComments(endpoint, reportId);
+    commentsLoading.delete(reportId);
+    commentsLoading = new Set(commentsLoading);
+    if (result.error) {
+      commentErrors = new Map([...commentErrors, [reportId, result.error]]);
+    } else {
+      taskComments = new Map([...taskComments, [reportId, result.comments]]);
+      commentErrors.delete(reportId);
+      commentErrors = new Map(commentErrors);
+    }
+  }
+
+  function startPolling(reportId: string) {
+    if (pollTimers.has(reportId)) return;
+    const t = setInterval(() => loadComments(reportId), 30_000);
+    pollTimers.set(reportId, t);
+  }
+
+  function stopPolling(reportId: string) {
+    const t = pollTimers.get(reportId);
+    if (t !== undefined) { clearInterval(t); pollTimers.delete(reportId); }
+  }
+
+  async function sendReply(reportId: string) {
+    const text = replyText.get(reportId)?.trim();
+    if (!text || replySending.has(reportId)) return;
+    replySending = new Set([...replySending, reportId]);
+    const author = userName || userEmail || 'You';
+    const result = await postTaskComment(endpoint, reportId, {
+      text,
+      author,
+      author_email: userEmail || undefined,
+      author_type: 'user',
+      comment_type: 'note',
+    });
+    replySending.delete(reportId);
+    replySending = new Set(replySending);
+    if (result.ok && result.comment) {
+      const existing = taskComments.get(reportId) || [];
+      taskComments = new Map([...taskComments, [reportId, [...existing, result.comment]]]);
+      replyText = new Map([...replyText, [reportId, '']]);
+    }
+  }
+
+  function authorLabel(comment: TaskComment): string {
+    if (comment.author_type === 'agent') return 'Agent';
+    if (comment.author_type === 'user') {
+      // If the author matches the current user, show "You"
+      if (userEmail && comment.author === userEmail) return 'You';
+      if (userName && comment.author === userName) return 'You';
+      return comment.author || 'You';
+    }
+    return comment.author || 'Team';
+  }
+
+  function commentStyle(comment: TaskComment): 'reporter' | 'agent' | 'team' {
+    if (comment.author_type === 'agent') return 'agent';
+    if (comment.author_type === 'user') return 'reporter';
+    return 'team';
+  }
+
+  onDestroy(() => {
+    for (const t of pollTimers.values()) clearInterval(t);
+  });
 
   let respondingId = $state('');
   let rejectingId = $state('');
@@ -91,12 +174,13 @@
   function toggleCard(reportId: string) {
     const wasExpanded = expandedCardId === reportId;
     expandedCardId = wasExpanded ? null : reportId;
-    // Close thread/screenshot when collapsing
     if (wasExpanded) {
       if (expandedThreadId === reportId) expandedThreadId = null;
       expandedScreenshot = null;
+      stopPolling(reportId);
     } else {
-      // Scroll expanded card into view after slide animation completes
+      loadComments(reportId);
+      startPolling(reportId);
       setTimeout(() => {
         if (!scrollEl) return;
         const card = scrollEl.querySelector(`[data-card-id="${reportId}"]`) as HTMLElement | null;
@@ -336,8 +420,58 @@
                   <p class="revision-note">Revision {report.revision_count}</p>
                 {/if}
 
-                <!-- Thread display (expandable) -->
-                {#if report.thread && report.thread.length > 0}
+                <!-- Comment thread (new unified model) -->
+                {#if commentsLoading.has(report.id) && !taskComments.has(report.id)}
+                  <div class="comments-loading"><span class="spinner"></span></div>
+
+                {:else if (taskComments.get(report.id) ?? []).length > 0}
+                  <button class="thread-toggle" onclick={() => toggleThread(report.id)}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="thread-toggle-icon" class:expanded={expandedThreadId === report.id}>
+                      <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>{(taskComments.get(report.id) ?? []).length} {(taskComments.get(report.id) ?? []).length === 1 ? 'message' : 'messages'}</span>
+                  </button>
+
+                  {#if expandedThreadId === report.id}
+                    <div class="thread">
+                      {#each (taskComments.get(report.id) ?? []) as comment (comment.id)}
+                        <div class="thread-entry"
+                             class:thread-reporter={commentStyle(comment) === 'reporter'}
+                             class:thread-agent={commentStyle(comment) === 'agent'}
+                             class:thread-team={commentStyle(comment) === 'team'}>
+                          <div class="thread-entry-header">
+                            <span class="thread-from">{authorLabel(comment)}</span>
+                            {#if commentStyle(comment) === 'agent'}
+                              <span class="thread-type-badge agent-badge">Agent</span>
+                            {:else if commentStyle(comment) === 'team'}
+                              <span class="thread-type-badge team-badge">Team</span>
+                            {/if}
+                            <span class="thread-time">{timeAgo(comment.created_at)}</span>
+                          </div>
+                          <p class="thread-message">{@html renderMarkdown(comment.text)}</p>
+                        </div>
+                      {/each}
+                    </div>
+
+                    <div class="reply-form">
+                      <textarea
+                        class="reply-input"
+                        placeholder="Reply…"
+                        rows="2"
+                        value={replyText.get(report.id) || ''}
+                        oninput={(e) => replyText = new Map([...replyText, [report.id, (e.target as HTMLTextAreaElement).value]])}
+                        onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(report.id); } }}
+                      ></textarea>
+                      <button
+                        class="reply-send-btn"
+                        disabled={!replyText.get(report.id)?.trim() || replySending.has(report.id)}
+                        onclick={() => sendReply(report.id)}
+                      >{replySending.has(report.id) ? '…' : 'Send'}</button>
+                    </div>
+                  {/if}
+
+                {:else if taskComments.has(report.id) && report.thread && report.thread.length > 0}
+                  <!-- Legacy sidecar thread fallback (no comments yet) -->
                   <button class="thread-toggle" onclick={() => toggleThread(report.id)}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="thread-toggle-icon" class:expanded={expandedThreadId === report.id}>
                       <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -348,7 +482,7 @@
                   {#if expandedThreadId === report.id}
                     <div class="thread">
                       {#each report.thread as entry (entry.id)}
-                        <div class="thread-entry" class:thread-user={entry.from === 'user'} class:thread-dev={entry.from === 'dev'}>
+                        <div class="thread-entry" class:thread-reporter={entry.from === 'user'} class:thread-team={entry.from === 'dev'}>
                           <div class="thread-entry-header">
                             <span class="thread-from">{entry.from === 'user' ? 'You' : 'Dev'}</span>
                             <span class="thread-type-badge" class:submission={entry.type === 'submission'} class:completion={entry.type === 'completion'} class:rejection={entry.type === 'rejection'} class:acceptance={entry.type === 'acceptance'}>
@@ -360,9 +494,7 @@
 
                           {#if entry.summary && entry.summary.length > 0}
                             <ul class="thread-summary">
-                              {#each entry.summary as item}
-                                <li>{item}</li>
-                              {/each}
+                              {#each entry.summary as item}<li>{item}</li>{/each}
                             </ul>
                           {/if}
 
@@ -377,13 +509,12 @@
                               {/each}
                             </div>
                             {#if expandedScreenshot}
-                              {@const matchingScreenshot = entry.screenshots.find(s => s.url === expandedScreenshot)}
-                              {#if matchingScreenshot}
+                              {#each entry.screenshots.filter(s => s.url === expandedScreenshot) as s}
                                 <div class="screenshot-expanded">
                                   <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
                                   <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
                                 </div>
-                              {/if}
+                              {/each}
                             {/if}
                           {/if}
 
@@ -400,8 +531,30 @@
                       {/each}
                     </div>
                   {/if}
+
+                {:else if taskComments.has(report.id)}
+                  <!-- Loaded, no comments — show description + reply box -->
+                  {#if report.description}
+                    <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
+                  {/if}
+                  <div class="reply-form">
+                    <textarea
+                      class="reply-input"
+                      placeholder="Add a message…"
+                      rows="2"
+                      value={replyText.get(report.id) || ''}
+                      oninput={(e) => replyText = new Map([...replyText, [report.id, (e.target as HTMLTextAreaElement).value]])}
+                      onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(report.id); } }}
+                    ></textarea>
+                    <button
+                      class="reply-send-btn"
+                      disabled={!replyText.get(report.id)?.trim() || replySending.has(report.id)}
+                      onclick={() => sendReply(report.id)}
+                    >{replySending.has(report.id) ? '…' : 'Send'}</button>
+                  </div>
+
                 {:else if report.description}
-                  <!-- Fallback for reports without thread -->
+                  <!-- Not loaded yet — show description excerpt -->
                   <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
                 {/if}
 
@@ -962,13 +1115,17 @@
     font-size: 12px;
     border-left: 2px solid;
   }
-  .thread-user {
+  .thread-reporter {
     background: #111827;
     border-left-color: #6b7280;
   }
-  .thread-dev {
+  .thread-agent {
     background: #0f172a;
     border-left-color: #3b82f6;
+  }
+  .thread-team {
+    background: #0f1a2e;
+    border-left-color: #8b5cf6;
   }
   .thread-entry-header {
     display: flex;
@@ -1005,6 +1162,63 @@
     background: #10b98120;
     color: #34d399;
   }
+  .thread-type-badge.agent-badge {
+    background: #3b82f620;
+    color: #60a5fa;
+  }
+  .thread-type-badge.team-badge {
+    background: #8b5cf620;
+    color: #a78bfa;
+  }
+
+  .comments-loading {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  /* Reply form */
+  .reply-form {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    align-items: flex-end;
+  }
+  .reply-input {
+    flex: 1;
+    padding: 5px 8px;
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 5px;
+    color: #d1d5db;
+    font-size: 12px;
+    font-family: inherit;
+    resize: none;
+    min-height: 36px;
+    line-height: 1.4;
+  }
+  .reply-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  .reply-input::placeholder { color: #4b5563; }
+  .reply-send-btn {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    background: #3b82f618;
+    border: 1px solid #3b82f640;
+    border-radius: 5px;
+    color: #60a5fa;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s;
+    align-self: flex-end;
+  }
+  .reply-send-btn:hover:not(:disabled) { background: #3b82f630; }
+  .reply-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .thread-time {
     font-size: 10px;
     color: #4b5563;

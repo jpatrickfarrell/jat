@@ -12,7 +12,7 @@
 	 * Reply input posts to POST /api/tasks/[id]/comments. The API handles
 	 * resume-trigger logic when the reply answers a pending agent question.
 	 */
-	import { onMount } from 'svelte';
+
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { richPaste } from '$lib/actions/richPaste';
 
@@ -85,8 +85,10 @@
 		}
 	}
 
-	onMount(load);
-
+	// $effect handles both initial load and taskId changes — onMount is redundant
+	// here and would cause a double-fetch on every task switch (the {#key} block
+	// in InboxDetail destroys/remounts this component when taskId changes, which
+	// triggers $effect on the fresh mount just like onMount would).
 	$effect(() => {
 		if (taskId) load();
 	});

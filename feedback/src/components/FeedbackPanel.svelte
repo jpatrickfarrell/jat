@@ -1080,6 +1080,9 @@
         loading={reportsLoading}
         error={reportsError}
         onreload={loadReports}
+        {userId}
+        {userName}
+        {userEmail}
       />
     </div>
   {/if}

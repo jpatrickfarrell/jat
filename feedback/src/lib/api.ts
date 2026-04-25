@@ -242,6 +242,72 @@ export async function fetchRecordingSummary(
   }
 }
 
+// --- Task Comments (external thread for reporter view) ---
+
+export interface TaskComment {
+  id: string;
+  text: string;
+  author: string;
+  author_type: string | null;
+  comment_type: string | null;
+  external: boolean;
+  created_at: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export async function fetchTaskComments(
+  endpoint: string,
+  taskId: string,
+): Promise<{ comments: TaskComment[]; error?: string }> {
+  try {
+    const url = `${endpoint.replace(/\/$/, '')}/api/tasks/${encodeURIComponent(taskId)}/comments?external=true`;
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) return { comments: [] };
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      return { comments: [], error: data.error || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { comments: data.comments || [] };
+  } catch (err) {
+    return { comments: [], error: err instanceof Error ? err.message : 'Failed to fetch comments' };
+  }
+}
+
+export async function postTaskComment(
+  endpoint: string,
+  taskId: string,
+  opts: {
+    text: string;
+    author: string;
+    author_email?: string;
+    author_type?: string;
+    comment_type?: string;
+  },
+): Promise<{ ok: boolean; comment?: TaskComment; error?: string }> {
+  try {
+    const url = `${endpoint.replace(/\/$/, '')}/api/tasks/${encodeURIComponent(taskId)}/comments`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        text: opts.text,
+        author: opts.author,
+        author_email: opts.author_email,
+        author_type: opts.author_type ?? 'user',
+        comment_type: opts.comment_type ?? 'note',
+        external: true,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, comment: data.comment };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to post comment' };
+  }
+}
+
 export async function deleteNote(endpoint: string, id: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${notesUrl(endpoint)}/${id}`, { method: 'DELETE' });

@@ -888,7 +888,15 @@ export async function POST({ request }) {
 			// as the assignee of record while the agent does the work. Status
 			// still flips to in_progress and agent_program/model still update
 			// so session pairing on /tasks works normally.
-			preserveAssignee = false
+			preserveAssignee = false,
+			// Used together with preserveAssignee=true. If the task currently
+			// has no assignee (filed via widget, never claimed), the spawn API
+			// auto-claims it for the dev so the in_progress task has a real
+			// owner. Pass the dev's display name (claimAssignee) and email
+			// (claimAssigneeEmail) — email enables UUID resolution for
+			// postgres-backed projects.
+			claimAssignee = null,
+			claimAssigneeEmail = null
 		} = body;
 		const explicitProjectProvided =
 			project !== null && project !== undefined && String(project).trim() !== '';
@@ -1134,6 +1142,18 @@ export async function POST({ request }) {
 				};
 				if (!preserveAssignee) {
 					updates.assignee = agentName;
+				} else if (
+					claimAssignee &&
+					typeof claimAssignee === 'string' &&
+					claimAssignee.trim() &&
+					(!task?.assignee || !String(task.assignee).trim())
+				) {
+					// preserveAssignee=true means "don't replace a human" — but
+					// a null assignee isn't a human, it's a vacancy. Fill it
+					// with the dev who clicked, so the in_progress task has a
+					// real owner for completion routing + filters.
+					updates.assignee = claimAssignee.trim();
+					console.log(`[spawn] Task ${taskId} was unassigned; claiming on behalf of ${claimAssignee.trim()}`);
 				}
 				if (pgBackend) {
 					// For graduated (postgres) projects, also set assignee_id to the
@@ -1149,6 +1169,39 @@ export async function POST({ request }) {
 							}
 						} catch (err) {
 							console.warn(`[spawn] Could not read jat_agent_user_id for ${projectName}:`, err);
+						}
+					} else if (
+						preserveAssignee &&
+						updates.assignee &&
+						claimAssigneeEmail &&
+						typeof claimAssigneeEmail === 'string' &&
+						claimAssigneeEmail.trim()
+					) {
+						// Resolve dev email → auth.users.id so postgres tasks get
+						// a proper assignee_id link (drives "my work" filters,
+						// avatar lookup, etc.). Best-effort: if the user isn't
+						// in auth.users for this project, the assignee name is
+						// still set above.
+						try {
+							// pgBackend is the postgres TaskBackend instance; .pool
+							// is set in its constructor but isn't on the public
+							// TaskBackend interface, hence the cast.
+							const pool = /** @type {any} */ (pgBackend).pool;
+							const client = await pool.connect();
+							try {
+								const { rows } = await client.query(
+									`SELECT id FROM auth.users WHERE lower(email) = lower($1) LIMIT 1`,
+									[claimAssigneeEmail.trim()]
+								);
+								if (rows.length && rows[0].id) {
+									updates.assignee_id = String(rows[0].id);
+								}
+							} finally {
+								client.release();
+							}
+						} catch (err) {
+							const msg = err instanceof Error ? err.message : String(err);
+							console.warn(`[spawn] Could not resolve assignee_id for ${claimAssigneeEmail}: ${msg}`);
 						}
 					}
 					await pgBackend.update(taskId, updates);

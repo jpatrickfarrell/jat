@@ -133,7 +133,6 @@
 	}
 
 	function closeDropdown() {
-		console.log('[MPS] closeDropdown called from:', new Error().stack?.split('\n').slice(1, 5).join(' | '));
 		showDropdown = false;
 		serverError = null;
 		// Keep the global Alt+S store in sync so the next press re-opens cleanly
@@ -174,7 +173,6 @@
 						queueMicrotask(() => focusFirstMenuItem());
 					}
 				} else if (!isOpen && showDropdown) {
-					console.log('[MPS] STORE callback closing - isOpen=', isOpen, 'showDropdown=', showDropdown);
 					// Local-only close; avoid re-entering closeStartDropdown (already false)
 					showDropdown = false;
 					serverError = null;

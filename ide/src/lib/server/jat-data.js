@@ -11,6 +11,8 @@
 export {
 	isPostgresProject,
 	getDataTables as pgGetDataTables,
+	getDataTable as pgGetDataTable,
+	updateDataTable as pgUpdateDataTable,
 	getTableSchema as pgGetTableSchema,
 	getTableRows as pgGetTableRows,
 	getColumnMetadata as pgGetColumnMetadata,
@@ -20,6 +22,7 @@ export {
 	dropDataTable as pgDropDataTable,
 	insertRow as pgInsertRow,
 	insertRows as pgInsertRows,
+	getRow as pgGetRow,
 	updateRow as pgUpdateRow,
 	deleteRow as pgDeleteRow,
 	getAllViews as pgGetAllViews,
@@ -38,9 +41,11 @@ export {
 	validateSemanticType,
 	// Tables
 	getDataTables,
+	getDataTable,
 	getTableSchema,
 	createDataTable,
 	dropDataTable,
+	updateDataTable,
 	renameDataTable,
 	duplicateDataTable,
 	// Column Metadata
@@ -50,6 +55,7 @@ export {
 	deleteTableColumnMetadata,
 	// Rows
 	getTableRows,
+	getRow,
 	insertRow,
 	insertRows,
 	updateRow,

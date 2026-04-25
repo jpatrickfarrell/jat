@@ -5,6 +5,17 @@
 import { json } from '@sveltejs/kit';
 import { reorderBases } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../lib/bases-postgres.js';
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
@@ -23,7 +34,10 @@ export async function POST({ request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const result = reorderBases(path, order);
+		const pgUrl = getPostgresUrlForProject(project);
+		const result = pgUrl
+			? await pgBases.reorderBases(pgUrl, order)
+			: reorderBases(path, order);
 		return json({ success: true, ...result });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });

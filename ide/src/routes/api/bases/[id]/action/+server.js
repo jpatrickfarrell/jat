@@ -17,8 +17,19 @@ import { evaluateFormula } from '$lib/utils/formulaEval';
 import { createTask, updateTask as updateJatTask, getTaskById } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { buildTaskIdentity } from '$lib/server/task-identity.js';
+import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../../lib/bases-postgres.js';
 
 const execAsync = promisify(exec);
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Base action executor endpoint.
@@ -53,6 +64,25 @@ export async function POST({ params, request, fetch }) {
 			);
 		}
 
+		// Route data-table actions through the postgres helpers when the
+		// project is postgres-backed. The pg helper returns null for action
+		// types it doesn't handle, in which case we fall through to the
+		// SQLite executor (e.g. RunFormula, RunCommand, SpawnAgent).
+		const pgUrl = getPostgresUrlForProject(project);
+		if (pgUrl) {
+			const pgResult = await pgBases.runBaseAction(pgUrl, {
+				projectName: project,
+				actionType,
+				actionConfig,
+			});
+			if (pgResult !== null) {
+				if (pgResult.success && actionConfig?.table) {
+					broadcastDataChanged(actionConfig.table, project, mapActionToOp(actionType));
+				}
+				return json(pgResult);
+			}
+		}
+
 		const result = await executor({ actionConfig, project, baseId, fetch });
 		return json(result);
 	} catch (err) {
@@ -73,6 +103,15 @@ async function resolveProject(project) {
 	if (!exists) throw new Error(`Project not found: ${project}`);
 	initDataDb(path);
 	return path;
+}
+
+function mapActionToOp(actionType) {
+	switch (actionType) {
+		case 'AddRow': return 'insert';
+		case 'ModifyRows': return 'update';
+		case 'DeleteRows': return 'delete';
+		default: return 'update';
+	}
 }
 
 function buildWhereClause(filter, validColumns) {

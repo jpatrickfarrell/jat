@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { get } from 'svelte/store';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
@@ -133,6 +133,7 @@
 	}
 
 	function closeDropdown() {
+		console.log('[MPS] closeDropdown called from:', new Error().stack?.split('\n').slice(1, 5).join(' | '));
 		showDropdown = false;
 		serverError = null;
 		// Keep the global Alt+S store in sync so the next press re-opens cleanly
@@ -156,23 +157,29 @@
 
 	// Mirror Alt+S global shortcut (`isStartDropdownOpen` store) on narrow screens.
 	// Desktop ProjectSelector owns this store on wide; here we take over under lg breakpoint.
+	// Wrap callback body in `untrack` so reads of `showDropdown` here don't make this
+	// effect re-subscribe on every dropdown toggle — which would re-fire the store
+	// callback with the stale (false) initial value and immediately close the panel.
 	$effect(() => {
 		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
-			if (typeof window === 'undefined') return;
-			const isNarrow = window.matchMedia('(max-width: 1023.98px)').matches;
-			if (!isNarrow) return;
-			if (isOpen && !showDropdown) {
-				openDropdown();
-				// If opened by keyboard, move focus into the panel so arrow keys navigate it
-				// instead of scrolling the page.
-				if (get(startDropdownOpenedViaKeyboard)) {
-					queueMicrotask(() => focusFirstMenuItem());
+			untrack(() => {
+				if (typeof window === 'undefined') return;
+				const isNarrow = window.matchMedia('(max-width: 1023.98px)').matches;
+				if (!isNarrow) return;
+				if (isOpen && !showDropdown) {
+					openDropdown();
+					// If opened by keyboard, move focus into the panel so arrow keys navigate it
+					// instead of scrolling the page.
+					if (get(startDropdownOpenedViaKeyboard)) {
+						queueMicrotask(() => focusFirstMenuItem());
+					}
+				} else if (!isOpen && showDropdown) {
+					console.log('[MPS] STORE callback closing - isOpen=', isOpen, 'showDropdown=', showDropdown);
+					// Local-only close; avoid re-entering closeStartDropdown (already false)
+					showDropdown = false;
+					serverError = null;
 				}
-			} else if (!isOpen && showDropdown) {
-				// Local-only close; avoid re-entering closeStartDropdown (already false)
-				showDropdown = false;
-				serverError = null;
-			}
+			});
 		});
 		return unsubscribe;
 	});

@@ -982,11 +982,15 @@
 	// (e.g. clicking a ProjectSelector chip in the TopBar). This is a one-way read:
 	// it only updates filterProject; the filter-to-URL effect above handles the
 	// reverse direction and guards against loops via untrack().
+	// fetchTasks() must also be called here because it passes ?project= to the server
+	// API — the tasks array still holds the old project's data after a URL-driven
+	// project switch, which causes filteredTasks to show zero results.
 	$effect(() => {
 		if (!hydrated || !browser) return;
 		const projectFromUrl = $page.url.searchParams.get("project") ?? "";
 		if (projectFromUrl !== filterProject) {
 			filterProject = projectFromUrl;
+			fetchTasks();
 		}
 	});
 

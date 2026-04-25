@@ -5,6 +5,17 @@
 import { json } from '@sveltejs/kit';
 import { renderBase } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../../lib/bases-postgres.js';
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -23,7 +34,10 @@ export async function POST({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const rendered = await renderBase(path, baseId, { collapsible: !!collapsible });
+		const pgUrl = getPostgresUrlForProject(project);
+		const rendered = pgUrl
+			? await pgBases.renderBase(pgUrl, { projectName: project, projectPath: path, collapsible: !!collapsible }, baseId)
+			: await renderBase(path, baseId, { collapsible: !!collapsible });
 		return json({ rendered });
 	} catch (error) {
 		if (error.message.includes('not found')) {

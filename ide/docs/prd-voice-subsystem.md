@@ -4,6 +4,9 @@
 **Author:** jw
 **Date:** 2026-04-21
 
+**Related PRDs:**
+- `specs/prd-voice-intelligence.md` — Context injection, speaker resolution, memory files, push notifications. Built on top of voice-core.js. jat-68j78.24 (refactor voice-core) must absorb these features — see that task's description for the preservation checklist.
+
 ---
 
 ## 1. Executive summary

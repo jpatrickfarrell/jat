@@ -28,6 +28,7 @@
 	import HarnessTray from '$lib/components/sessions/HarnessTray.svelte';
 	import { STATUS_OPTIONS, TERMINAL_STATUSES } from '$lib/config/task-statuses';
 	import { jkFocusedOpenTaskId, openMobileSessionName } from '$lib/stores/drawerStore';
+	import MilestoneBadge from '$lib/components/MilestoneBadge.svelte';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -2016,6 +2017,7 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
 								{/if}
+								<MilestoneBadge taskId={task.id} variant="inline" separator />
 								{#if typeVisual}
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>

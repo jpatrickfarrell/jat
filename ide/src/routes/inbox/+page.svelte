@@ -90,7 +90,11 @@
 	// Bulk selection
 	let selectedTaskIds = $state<Set<string>>(new Set());
 	let bulkEpicOpen = $state(false);
+	let bulkTypeOpen = $state(false);
+	let bulkStatusOpen = $state(false);
+	let bulkPriorityOpen = $state(false);
 	let bulkWorking = $state(false);
+	let bulkSpawning = $state(false);
 	let epics = $state<Task[]>([]);
 	let focusZone = $state<FocusZone>("list");
 
@@ -417,7 +421,8 @@
 			shortcuts: [
 				{ key: "j / ↓", description: "Focus next task" },
 				{ key: "k / ↑", description: "Focus previous task" },
-				{ key: "Enter / Space", description: "Open detail panel" },
+				{ key: "Space", description: "Peek focused task" },
+				{ key: "Enter", description: "Open detail panel" },
 				{ key: "/", description: "Focus filter search input" },
 				{ key: "u", description: "Undo last dismiss (while toast is visible)" },
 				{ key: "Esc", description: "Close panel / exit filter" },
@@ -438,12 +443,12 @@
 			shortcuts: [
 				{ key: "r / c", description: "Jump to compose box" },
 				{ key: "a", description: "Open assign picker" },
-				{ key: "s", description: "Open status picker" },
+				{ key: "s", description: "Spawn agent on this task" },
+				{ key: "S", description: "Open status picker" },
 				{ key: "p", description: "Open priority picker" },
 				{ key: "t", description: "Open type picker" },
 				{ key: "e", description: "Open epic picker" },
 				{ key: "m", description: "Open milestone picker" },
-				{ key: "Space", description: "Spawn agent on this task" },
 				{ key: "o", description: "Open full task detail drawer" },
 				{ key: "d", description: "Dismiss / close task" },
 				{ key: "j / k", description: "Move to next / previous task" },
@@ -586,9 +591,57 @@
 				bulkEpicOpen = true;
 				return;
 			}
+			if (e.key === 't') {
+				e.preventDefault();
+				bulkTypeOpen = true;
+				bulkStatusOpen = false;
+				bulkPriorityOpen = false;
+				return;
+			}
+			if (e.key === 's') {
+				e.preventDefault();
+				bulkStatusOpen = true;
+				bulkTypeOpen = false;
+				bulkPriorityOpen = false;
+				return;
+			}
+			if (e.key === 'p') {
+				e.preventDefault();
+				bulkPriorityOpen = true;
+				bulkTypeOpen = false;
+				bulkStatusOpen = false;
+				return;
+			}
+			if (e.key === 'S') {
+				e.preventDefault();
+				void bulkSpawn();
+				return;
+			}
+			if (e.key === 'o') {
+				e.preventDefault();
+				void bulkPromote();
+				return;
+			}
+			if (e.key === 'c') {
+				e.preventDefault();
+				void bulkClose();
+				return;
+			}
+			if (e.key === 'd') {
+				e.preventDefault();
+				void bulkDelete();
+				return;
+			}
 			if (e.key === 'Escape') {
 				e.preventDefault();
-				clearBulkSelection();
+				if (bulkTypeOpen || bulkStatusOpen || bulkPriorityOpen || bulkEpicOpen) {
+					bulkTypeOpen = false;
+					bulkStatusOpen = false;
+					bulkPriorityOpen = false;
+					bulkEpicOpen = false;
+				} else {
+					clearBulkSelection();
+				}
 				return;
 			}
 		}
@@ -605,6 +658,9 @@
 			}
 
 			// Action-bar shortcuts (jat-nm0nq.6).
+			// NB: lowercase `s` is "spawn agent" to match /triage's
+			// solve/spawn convention; status picker is uppercase `S`. Space
+			// is reserved for the universal peek drawer (jat-pgryk).
 			if (detailRef) {
 				switch (e.key) {
 					case "a":
@@ -612,6 +668,10 @@
 						detailRef.openAssign();
 						return;
 					case "s":
+						e.preventDefault();
+						detailRef.spawnAgent();
+						return;
+					case "S":
 						e.preventDefault();
 						detailRef.openStatus();
 						return;
@@ -638,10 +698,6 @@
 					case "d":
 						e.preventDefault();
 						detailRef.dismissTask();
-						return;
-					case " ":
-						e.preventDefault();
-						detailRef.spawnAgent();
 						return;
 				}
 			}
@@ -941,6 +997,9 @@
 	function clearBulkSelection() {
 		selectedTaskIds = new Set();
 		bulkEpicOpen = false;
+		bulkTypeOpen = false;
+		bulkStatusOpen = false;
+		bulkPriorityOpen = false;
 	}
 
 	async function loadEpics() {
@@ -989,6 +1048,192 @@
 			addToast({ message: `Assigned ${success}/${ids.length} task${ids.length === 1 ? '' : 's'} to epic`, type: success === ids.length ? 'success' : 'info' });
 			clearBulkSelection();
 			fetchTasks();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkChangeType(type: string) {
+		bulkTypeOpen = false;
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ issue_type: type }),
+					});
+					if (res.ok) {
+						success++;
+						handleTaskUpdated({ id, issue_type: type } as any);
+					}
+				} catch { /* continue */ }
+			}));
+			addToast({ message: `Changed ${success}/${ids.length} task${ids.length === 1 ? '' : 's'} to ${type}`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkChangeStatus(status: string) {
+		bulkStatusOpen = false;
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ status }),
+					});
+					if (res.ok) {
+						success++;
+						handleTaskUpdated({ id, status } as any);
+					}
+				} catch { /* continue */ }
+			}));
+			addToast({ message: `Changed ${success}/${ids.length} task${ids.length === 1 ? '' : 's'} to ${displayStatus(status)}`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkChangePriority(priority: number) {
+		bulkPriorityOpen = false;
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ priority }),
+					});
+					if (res.ok) {
+						success++;
+						handleTaskUpdated({ id, priority } as any);
+					}
+				} catch { /* continue */ }
+			}));
+			addToast({ message: `Set P${priority} on ${success}/${ids.length} task${ids.length === 1 ? '' : 's'}`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkSpawn() {
+		if (bulkSpawning || bulkWorking) return;
+		bulkSpawning = true;
+		const ids = Array.from(selectedTaskIds);
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ taskId: id }),
+					});
+					if (res.ok) {
+						success++;
+						handleTaskUpdated({ id, status: 'in_progress' } as any);
+					}
+				} catch { /* continue */ }
+			}));
+			addToast({ message: `Spawned ${success}/${ids.length} agent${ids.length === 1 ? '' : 's'}`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkSpawning = false;
+		}
+	}
+
+	async function bulkPromote() {
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ status: 'open' }),
+					});
+					if (res.ok) {
+						success++;
+						handleTaskUpdated({ id, status: 'open' } as any);
+					}
+				} catch { /* continue */ }
+			}));
+			addToast({ message: `Promoted ${success}/${ids.length} task${ids.length === 1 ? '' : 's'} to open`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkClose() {
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ status: 'closed' }),
+					});
+					if (res.ok) {
+						success++;
+						const srcIdx = tasks.findIndex((t) => t.id === id);
+						if (srcIdx >= 0) tasks.splice(srcIdx, 1);
+					}
+				} catch { /* continue */ }
+			}));
+			tasks = tasks;
+			addToast({ message: `Closed ${success}/${ids.length} task${ids.length === 1 ? '' : 's'}`, type: success === ids.length ? 'success' : 'info' });
+			clearBulkSelection();
+		} finally {
+			bulkWorking = false;
+		}
+	}
+
+	async function bulkDelete() {
+		const ids = Array.from(selectedTaskIds);
+		if (ids.length === 0 || bulkWorking) return;
+		if (!confirm(`Delete ${ids.length} task${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+		bulkWorking = true;
+		let success = 0;
+		try {
+			await Promise.all(ids.map(async id => {
+				try {
+					const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+					if (res.ok) {
+						success++;
+						const srcIdx = tasks.findIndex((t) => t.id === id);
+						if (srcIdx >= 0) tasks.splice(srcIdx, 1);
+					}
+				} catch { /* continue */ }
+			}));
+			tasks = tasks;
+			addToast({ message: `Deleted ${success}/${ids.length} task${ids.length === 1 ? '' : 's'}`, type: success === ids.length ? 'success' : 'warning' });
+			clearBulkSelection();
 		} finally {
 			bulkWorking = false;
 		}
@@ -1954,10 +2199,125 @@
 			count={selectedTaskIds.size}
 			label={selectedTaskIds.size === 1 ? 'task selected' : 'tasks selected'}
 			actions={[
-				{ key: 'a', label: 'Add to Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking }
+				{ key: 't', label: 'Type', onAction: () => { bulkTypeOpen = !bulkTypeOpen; bulkStatusOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking },
+				{ key: 's', label: 'Status', onAction: () => { bulkStatusOpen = !bulkStatusOpen; bulkTypeOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking },
+				{ key: 'p', label: 'Priority', onAction: () => { bulkPriorityOpen = !bulkPriorityOpen; bulkTypeOpen = false; bulkStatusOpen = false; }, disabled: bulkWorking },
+				{ key: 'a', label: 'Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking },
+				{ key: 'S', label: 'Spawn', onAction: bulkSpawn, disabled: bulkWorking || bulkSpawning },
+				{ key: 'o', label: 'Promote', onAction: bulkPromote, disabled: bulkWorking },
+				{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking },
+				{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking },
 			]}
 			onClear={clearBulkSelection}
 		/>
+
+		{#if bulkTypeOpen}
+			<div
+				class="bulk-epic-overlay"
+				role="button"
+				tabindex="-1"
+				onclick={() => { bulkTypeOpen = false; }}
+				onkeydown={(e) => { if (e.key === 'Escape') bulkTypeOpen = false; }}
+			>
+				<div
+					class="bulk-epic-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Change task type"
+					onclick={(e) => e.stopPropagation()}
+					onkeydown={(e) => e.stopPropagation()}
+					tabindex="-1"
+				>
+					<div class="bulk-epic-header">
+						<span>Change type for {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'}</span>
+						<button class="bulk-epic-close" onclick={() => { bulkTypeOpen = false; }} aria-label="Close">×</button>
+					</div>
+					<div class="bulk-epic-list">
+						{#each TYPE_OPTIONS as type}
+							<button
+								class="bulk-epic-row"
+								disabled={bulkWorking}
+								onclick={() => bulkChangeType(type)}
+							>
+								<span class="bulk-epic-row-title">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		{#if bulkStatusOpen}
+			<div
+				class="bulk-epic-overlay"
+				role="button"
+				tabindex="-1"
+				onclick={() => { bulkStatusOpen = false; }}
+				onkeydown={(e) => { if (e.key === 'Escape') bulkStatusOpen = false; }}
+			>
+				<div
+					class="bulk-epic-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Change task status"
+					onclick={(e) => e.stopPropagation()}
+					onkeydown={(e) => e.stopPropagation()}
+					tabindex="-1"
+				>
+					<div class="bulk-epic-header">
+						<span>Change status for {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'}</span>
+						<button class="bulk-epic-close" onclick={() => { bulkStatusOpen = false; }} aria-label="Close">×</button>
+					</div>
+					<div class="bulk-epic-list">
+						{#each STATUS_OPTIONS as status}
+							<button
+								class="bulk-epic-row"
+								disabled={bulkWorking}
+								onclick={() => bulkChangeStatus(status)}
+							>
+								<span class="bulk-epic-row-title">{displayStatus(status)}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		{#if bulkPriorityOpen}
+			<div
+				class="bulk-epic-overlay"
+				role="button"
+				tabindex="-1"
+				onclick={() => { bulkPriorityOpen = false; }}
+				onkeydown={(e) => { if (e.key === 'Escape') bulkPriorityOpen = false; }}
+			>
+				<div
+					class="bulk-epic-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Change task priority"
+					onclick={(e) => e.stopPropagation()}
+					onkeydown={(e) => e.stopPropagation()}
+					tabindex="-1"
+				>
+					<div class="bulk-epic-header">
+						<span>Change priority for {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'}</span>
+						<button class="bulk-epic-close" onclick={() => { bulkPriorityOpen = false; }} aria-label="Close">×</button>
+					</div>
+					<div class="bulk-epic-list">
+						{#each PRIORITY_OPTIONS as priority}
+							<button
+								class="bulk-epic-row"
+								disabled={bulkWorking}
+								onclick={() => bulkChangePriority(priority)}
+							>
+								<span class="bulk-epic-row-title">P{priority} — {['Critical', 'High', 'Medium', 'Low', 'Lowest'][priority]}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		{#if bulkEpicOpen}
 			<div
@@ -2086,8 +2446,9 @@
 					</div>
 					<div class="inbox-summary-shortcuts">
 						<span>j/k <span class="inbox-shortcut-desc">navigate</span></span>
+						<span>Space <span class="inbox-shortcut-desc">peek</span></span>
 						<span>Enter <span class="inbox-shortcut-desc">open</span></span>
-						<span>Space <span class="inbox-shortcut-desc">spawn</span></span>
+						<span>s <span class="inbox-shortcut-desc">spawn</span></span>
 						<span>/ <span class="inbox-shortcut-desc">filter</span></span>
 						<span>? <span class="inbox-shortcut-desc">help</span></span>
 					</div>

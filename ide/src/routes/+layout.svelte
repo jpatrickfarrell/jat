@@ -18,6 +18,7 @@
 	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
 	import PeekDrawer from '$lib/components/PeekDrawer.svelte';
 	import TaskPeekContent from '$lib/components/peek/TaskPeekContent.svelte';
+	import FilePeekContent from '$lib/components/peek/FilePeekContent.svelte';
 	import { registerPeek } from '$lib/peek/registry';
 	import { getTaskCountByProject, getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { classifySession } from '$lib/utils/sessionNaming';
@@ -434,12 +435,31 @@
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
 
-		// Register peek-drawer handlers. Task IDs follow `{project}-{hash}` —
-		// anything matching that shape gets a lightweight task preview.
+		// Register peek-drawer handlers. Order matters — first match wins.
+		// File-path navIds are detected by leading slash, contained slash, or
+		// an explicit `data-peek-kind="file"` ancestor (used by FileTree where
+		// nav-ids can be bare names like `.agents`).
+		registerPeek({
+			id: 'file-path',
+			kind: 'file',
+			label: 'File',
+			match: (navId) => navId.startsWith('/') || navId.startsWith('./') || navId.includes('/'),
+			component: FilePeekContent,
+			propsForId: (navId, el) => ({
+				path: navId,
+				project: el?.closest<HTMLElement>('[data-peek-project]')?.dataset.peekProject ?? '',
+			}),
+		});
+		// Task IDs follow `{project}-{hash}` where the hash always contains
+		// at least one digit (e.g. `jat-pgryk`, `linux-nfcyr.3`). Requiring
+		// a digit in the hash filters out menu nav-ids like `edit-identity`
+		// or `toggle-sound`. Lowercase-only also excludes mixed-case session
+		// names like `jat-LoneTumbleweed` used by /kanban.
 		registerPeek({
 			id: 'task',
 			label: 'Task',
-			match: (navId) => /^[a-z][a-z0-9_-]*-[a-z0-9]+(?:\.\d+)?$/i.test(navId),
+			match: (navId) =>
+				/^[a-z][a-z0-9_-]*-[a-z0-9]*\d[a-z0-9]*(?:\.\d+)?$/.test(navId),
 			component: TaskPeekContent,
 			propsForId: (navId) => ({ taskId: navId }),
 		});

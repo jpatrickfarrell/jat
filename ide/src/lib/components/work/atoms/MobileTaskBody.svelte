@@ -10,6 +10,7 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import type { FormattedElapsed } from '$lib/utils/elapsedTime';
+	import MilestoneBadge from '$lib/components/MilestoneBadge.svelte';
 
 	interface TaskShape {
 		id: string;
@@ -94,6 +95,7 @@
 			<span class="mobile-separator">·</span>
 			<span class="mobile-priority {priorityClass}" title={`P${task.priority}`}>P{task.priority}</span>
 		{/if}
+		<MilestoneBadge taskId={task.id} variant="inline" separator />
 		{#if extra}{@render extra()}{/if}
 		<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 	</div>

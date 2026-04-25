@@ -1800,6 +1800,10 @@ ensure_project_dbs() {
     local schema_migrated=0
     for db in "$HOME"/code/*/.jat/tasks.db; do
         [[ -f "$db" ]] || continue
+        # Skip empty or schema-less databases (e.g. postgres-migrated projects leave a 0-byte placeholder)
+        local has_tasks
+        has_tasks="$(sqlite3 "$db" "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks';" 2>/dev/null || true)"
+        [[ -z "$has_tasks" ]] && continue
         # v2: add reserved_files column (jat-8vpc9)
         local has_rf
         has_rf="$(sqlite3 "$db" "PRAGMA table_info(tasks);" | grep -c 'reserved_files' || true)"

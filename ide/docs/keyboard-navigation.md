@@ -15,6 +15,36 @@ Available on every page, regardless of context.
 
 ---
 
+## Universal Peek (Space-to-Glance)
+
+**Mental model:** `Space` = glance, `Enter` = commit.
+
+On any list with j/k navigation, `Space` opens a 40vw right-side **peek drawer** previewing the focused item. j/k continues to navigate underneath; the drawer content swaps in place. Second `Space` (or `Esc`) closes it.
+
+| Shortcut | Action |
+|----------|--------|
+| `Space` | Open peek drawer for focused item — or close if already on same item |
+| `Space` (different item) | Swap drawer content to the new item (no flicker) |
+| `j` / `k` while open | Move focus; drawer follows in place |
+| `Enter` while open | Promote: close peek + open full detail drawer in one motion |
+| `Esc` while open | Close peek without promoting |
+
+**What gets peeked** is determined by the navId pattern:
+
+| navId pattern | Peek content |
+|---|---|
+| `{project}-{hash}` (lowercase) — e.g. `jat-abc`, `linux-nfcyr.3` | Lightweight task preview (TaskPeekContent) |
+| File path (contains `/` or starts with `/` or `./`) | File preview, ~80 lines (FilePeekContent) |
+| Anything else | No peek — Space no-ops on that route |
+
+**Peek is universal except `/servers`**, which keeps `Space` for start/stop toggle (server cards use `data-session-name` instead of `data-nav-id`, so they're naturally outside the peek system).
+
+**Opt-out mechanism:** any container with `data-peek="false"` (or an ancestor that has it) is excluded from peek. Used by the UserProfile dropdown menu and `/kanban` session cards (where the navId is a session name, not a task).
+
+**Adding a new peek content type:** register in `+layout.svelte` onMount with `registerPeek({ id, label, match, component, propsForId })`. Order matters — first match wins.
+
+---
+
 ## Universal List Motions (Vim)
 
 These work on every route that uses `createListNav` / `use:listNav` — i.e. every route with j/k navigation. They're layered on top of the plain `j` / `k` / Enter / Esc behaviour.
@@ -76,7 +106,8 @@ Split-panel layout: left task list, right detail panel.
 |----------|--------|
 | `j` / `↓` | Focus next task |
 | `k` / `↑` | Focus previous task |
-| `Enter` / `Space` | Open detail panel |
+| `Space` | Peek focused task (universal — see top of doc) |
+| `Enter` | Open detail panel |
 | `/` | Focus filter input |
 | `u` | Undo last dismiss (while toast visible) |
 | `x` | Toggle select focused task |
@@ -92,16 +123,18 @@ Split-panel layout: left task list, right detail panel.
 |----------|--------|
 | `r` / `c` | Jump to compose box |
 | `a` | Open assign picker |
-| `s` | Open status picker |
+| `s` | Spawn agent on this task |
+| `S` | Open status picker |
 | `p` | Open priority picker |
 | `t` | Open type picker |
 | `e` | Open epic picker |
 | `m` | Open milestone picker |
-| `Space` | Spawn agent on this task |
 | `o` | Open full task detail drawer |
 | `d` | Dismiss / close task |
 | `j` / `k` | Move to next / previous task |
 | `Esc` | Close detail panel |
+
+> **Note:** Detail-zone `Space` (formerly spawn agent) was moved to lowercase `s` in jat-pgryk so `Space` is universally reserved for the peek drawer. Status picker moved from `s` to uppercase `S`.
 
 ---
 
@@ -178,6 +211,8 @@ Two shortcut contexts: server session cards (top panel) and project table rows (
 | `Space` | Toggle start / stop for focused card |
 | `Esc` | Clear focus |
 
+> **Note:** `/servers` is the **single carve-out** from the universal Space=peek convention — `Space` here keeps its play/pause meaning. Server cards use `data-session-name` and `server-card-focused` rather than the standard `data-nav-id`/`jk-focused`, so they're naturally outside the peek system.
+
 #### Project Table Rows (hover)
 
 | Shortcut | Action |
@@ -198,8 +233,10 @@ Two shortcut contexts: server session cards (top panel) and project table rows (
 | `k` / `↑` | Focus previous card in column |
 | `→` / `l` | Move to next non-empty column |
 | `←` / `h` | Move to previous non-empty column |
-| `Enter` / `Space` | Open task detail drawer |
+| `Enter` | Open task detail drawer |
 | `Esc` | Clear focus |
+
+> **Note:** `/kanban` cards use session names (e.g. `jat-LoneTumbleweed`) as their navId, which aren't peekable as tasks. The board opts out of peek via `data-peek="false"` on each card wrapper, so `Space` is a no-op here. If a SessionPeekContent is added later, this can be enabled.
 
 ---
 
@@ -291,10 +328,11 @@ Three panels: Git, Supabase, Cloudflare.
 | `Alt+G` | Switch to Git tab |
 | `Alt+U` | Switch to Supabase tab |
 | `Alt+C` | Switch to Cloudflare tab |
-| `Space` | Stage / unstage selected file (Git) |
 | `S` | Stage selected file (Git) |
 | `U` | Unstage selected file (Git) |
 | `D` | Discard changes to selected file (Git) |
+
+> **Note:** The redundant `Space` alias for stage/unstage was removed in jat-pgryk to free `Space` for the universal peek drawer. Use uppercase `S` to stage and `U` to unstage.
 | `Ctrl+\` | Toggle left panel |
 | `Esc` | Clear selection |
 

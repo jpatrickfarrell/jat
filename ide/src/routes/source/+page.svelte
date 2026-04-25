@@ -807,7 +807,7 @@
 	{ key: 'Alt+U', description: 'Switch to Supabase tab' },
 	{ key: 'Alt+C', description: 'Switch to Cloudflare tab' },
 	{ key: 'Ctrl+\\', description: 'Toggle left panel' },
-	{ key: 'Space', description: 'Stage / unstage selected file (Git)' },
+	{ key: 'Space', description: 'Peek focused file (universal — see Universal Peek)' },
 	{ key: 'S', description: 'Stage selected file (Git)' },
 	{ key: 'U', description: 'Unstage selected file (Git)' },
 	{ key: 'D', description: 'Discard changes to selected file (Git)' },

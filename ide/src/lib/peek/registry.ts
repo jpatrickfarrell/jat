@@ -24,12 +24,20 @@ import type { Component } from 'svelte';
 export interface PeekEntry {
 	/** Stable identifier — used for deduping if the same prefix is registered twice. */
 	id: string;
-	/** Return true if this entry handles the given navId. */
+	/**
+	 * Explicit kind hint that an element may declare via `data-peek-kind`.
+	 * When the focused listNav item carries `data-peek-kind="file"`, the
+	 * entry with `kind === 'file'` is matched directly without consulting
+	 * the navId pattern. Useful when the navId itself doesn't carry enough
+	 * shape (e.g. file tree entries like `.agents` or `README`).
+	 */
+	kind?: string;
+	/** Return true if this entry handles the given navId (used when no kind matches). */
 	match: (navId: string) => boolean;
 	/** The Svelte component to render inside the peek drawer. */
 	component: Component<Record<string, unknown>>;
 	/** Build props for the component from the navId. */
-	propsForId: (navId: string) => Record<string, unknown>;
+	propsForId: (navId: string, el?: HTMLElement) => Record<string, unknown>;
 	/** Optional label shown in the drawer header (e.g. "Task", "File"). */
 	label?: string;
 }
@@ -50,7 +58,21 @@ export function unregisterPeek(id: string): void {
 	if (idx >= 0) entries.splice(idx, 1);
 }
 
-export function getPeekEntry(navId: string): PeekEntry | null {
+export function getPeekEntry(navId: string, el?: HTMLElement | null): PeekEntry | null {
+	// Explicit kind hint wins: walk up looking for `data-peek-kind`.
+	if (el) {
+		let cur: HTMLElement | null = el;
+		while (cur) {
+			const kind = cur.getAttribute('data-peek-kind');
+			if (kind) {
+				const found = entries.find((e) => e.kind === kind);
+				if (found) return found;
+				break;
+			}
+			cur = cur.parentElement;
+		}
+	}
+	// Fall back to navId pattern matchers in registration order.
 	for (const e of entries) {
 		try {
 			if (e.match(navId)) return e;

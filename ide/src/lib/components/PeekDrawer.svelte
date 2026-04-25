@@ -11,13 +11,41 @@
 	 * looked up to find the matching `{ component, propsForId, label }` entry.
 	 */
 
-	import { peekState, closePeek, scrollFocusedIntoView } from '$lib/stores/peekStore.svelte';
+	import {
+		peekState,
+		closePeek,
+		togglePeek,
+		setPeek,
+		scrollFocusedIntoView,
+	} from '$lib/stores/peekStore.svelte';
 	import { getPeekEntry } from '$lib/peek/registry';
+
+	const FOCUSED_CLASS = 'jk-focused';
+	const ITEM_SELECTOR = '[data-nav-id]';
+	/**
+	 * Routes that own Space for something else (e.g. /servers play/pause)
+	 * mark their list container with `data-peek="false"` to opt out. Detail
+	 * components inside peek can also set this if they want to swallow Space.
+	 */
+	const OPT_OUT_ATTR = 'data-peek';
+
+	const focusedEl = $derived.by(() => {
+		const id = peekState.navId;
+		if (!id) return null;
+		// CSS.escape protects nav-ids that contain special chars (e.g. paths).
+		try {
+			return document.querySelector<HTMLElement>(
+				`[data-nav-id="${CSS.escape(id)}"]`,
+			);
+		} catch {
+			return null;
+		}
+	});
 
 	const entry = $derived.by(() => {
 		const id = peekState.navId;
 		if (!id) return null;
-		return getPeekEntry(id);
+		return getPeekEntry(id, focusedEl);
 	});
 
 	const props = $derived.by(() => {
@@ -25,7 +53,7 @@
 		const e = entry;
 		if (!id || !e) return null;
 		try {
-			return e.propsForId(id);
+			return e.propsForId(id, focusedEl ?? undefined);
 		} catch {
 			return null;
 		}
@@ -39,17 +67,76 @@
 		return false;
 	}
 
+	/**
+	 * Walk up from the focused element looking for an explicit
+	 * `data-peek="false"` ancestor. If found, this list opts out of peek
+	 * (e.g. /servers, where Space toggles start/stop).
+	 */
+	function isOptedOut(el: HTMLElement | null): boolean {
+		let cur: HTMLElement | null = el;
+		while (cur) {
+			const v = cur.getAttribute(OPT_OUT_ATTR);
+			if (v === 'false') return true;
+			cur = cur.parentElement;
+		}
+		return false;
+	}
+
+	function findFocusedItem(): HTMLElement | null {
+		const els = document.querySelectorAll<HTMLElement>(`.${FOCUSED_CLASS}`);
+		// Iterate in document order; first focused list item wins. (Pages
+		// almost never have multiple .jk-focused at once; this is a guard.)
+		for (const el of els) {
+			if (!el.matches(ITEM_SELECTOR)) continue;
+			if (!el.dataset.navId) continue;
+			if (isOptedOut(el)) continue;
+			return el;
+		}
+		return null;
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
-		if (!peekState.isOpen) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (isTypingTarget(e.target)) return;
+
 		if (e.key === 'Escape') {
+			if (!peekState.isOpen) return;
 			// Capture phase + stopImmediatePropagation so we close peek
 			// BEFORE listNav's own Escape handler sees it (otherwise listNav
-			// clears focus first, which leaves the drawer stranded without
-			// the user's j/k context).
+			// clears focus first, which leaves the drawer stranded).
 			e.preventDefault();
 			e.stopImmediatePropagation();
 			closePeek();
+			return;
+		}
+
+		if (e.key === ' ') {
+			const focused = findFocusedItem();
+			if (!focused) return;
+			const navId = focused.dataset.navId!;
+			// Only intercept Space if a peek handler is registered for this
+			// navId (or the element declares a `data-peek-kind`). Routes with
+			// non-peekable nav-ids simply no-op on Space rather than showing
+			// an empty "No peek handler" drawer.
+			if (!getPeekEntry(navId, focused)) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			togglePeek(navId);
+			return;
+		}
+
+		if (e.key === 'Enter' && peekState.isOpen) {
+			// Promote: close peek and let Enter bubble through to listNav's
+			// onSelect, which opens the full detail drawer in one motion.
+			const focused = findFocusedItem();
+			if (!focused) {
+				// Edge case: peek open but no focus. Just close.
+				closePeek();
+				return;
+			}
+			closePeek();
+			// Don't preventDefault — listNav's bubble-phase Enter handler
+			// fires onSelect, opening the full detail.
 		}
 	}
 
@@ -61,12 +148,31 @@
 		}
 	});
 
-
-	// Register Esc handler at capture phase on window so we run before
-	// any listNav-installed bubble-phase handlers or route-level onkeydown.
+	// Global Space/Enter/Esc handler at capture phase. Runs before listNav's
+	// bubble-phase window listener so peek wins on Space.
 	$effect(() => {
 		window.addEventListener('keydown', handleKeydown, { capture: true });
 		return () => window.removeEventListener('keydown', handleKeydown, { capture: true });
+	});
+
+	// While peek is open, follow the focused list item as j/k moves it.
+	// Only active when peek is open — observer disconnects on close.
+	$effect(() => {
+		if (!peekState.isOpen) return;
+
+		const observer = new MutationObserver(() => {
+			if (!peekState.isOpen) return;
+			const focused = findFocusedItem();
+			if (focused?.dataset.navId) setPeek(focused.dataset.navId);
+		});
+
+		observer.observe(document.body, {
+			subtree: true,
+			attributes: true,
+			attributeFilter: ['class'],
+		});
+
+		return () => observer.disconnect();
 	});
 </script>
 

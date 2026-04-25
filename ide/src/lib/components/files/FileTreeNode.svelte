@@ -267,6 +267,8 @@
 		data-path={entry.path}
 		data-nav-id={entry.path}
 		data-type={entry.type}
+		data-peek={isFolder ? 'false' : undefined}
+		data-peek-kind={isFolder ? undefined : 'file'}
 	>
 		<!-- Indentation -->
 		<span class="indent" style="width: {depth * 16}px"></span>

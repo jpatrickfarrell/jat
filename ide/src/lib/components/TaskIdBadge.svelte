@@ -7,6 +7,8 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { getIntegrationIcon } from '$lib/config/integrationIcons';
+	import MilestoneBadge from '$lib/components/MilestoneBadge.svelte';
+	import { getTaskMilestone } from '$lib/stores/milestones.svelte';
 
 	/** Dependency task info */
 	interface DepTask {
@@ -94,6 +96,11 @@
 
 	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
 	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
+
+	// Milestone presence — only used to widen the Row 3 visibility predicate
+	// below. The badge itself is rendered by <MilestoneBadge/>, which owns the
+	// store load and styling.
+	const taskMilestone = $derived(getTaskMilestone(task.id));
 
 	// Dependency graph state
 	let depGraphData = $state<DepGraphData | null>(null);
@@ -517,7 +524,7 @@
 				>{agentName}</span>
 			{/if}
 			<!-- Row 3: Icons -->
-			{#if !isClosed && (showType && task.issue_type || task.priority !== undefined || (harness && agentName) || (integrationIcon && resolvedIntegration) || taskAgeInfo.label || resumed || attached || browserPort)}
+			{#if !isClosed && (showType && task.issue_type || task.priority !== undefined || taskMilestone || (harness && agentName) || (integrationIcon && resolvedIntegration) || taskAgeInfo.label || resumed || attached || browserPort)}
 				<div class="flex items-center gap-1.5 mt-0.5">
 					{#if showType && task.issue_type}
 						<span class="text-[10px] leading-none">{typeVisual.icon}</span>
@@ -528,6 +535,7 @@
 							style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
 						>P{task.priority}</span>
 					{/if}
+					<MilestoneBadge taskId={task.id} variant="compact" />
 					{#if harness && agentName}
 						<span class="inline-flex" title={harness}>
 							<ProviderLogo agentId={harness} size={10} />
@@ -651,6 +659,7 @@
 					style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
 				>P{task.priority}</span>
 			{/if}
+			<MilestoneBadge taskId={task.id} variant="compact" />
 			{#if isHuman && !isClosed}
 				<span class="inline-flex scale-70 mt-0.25" title="Human task">
 					<ProviderLogo agentId="human" size={12} />

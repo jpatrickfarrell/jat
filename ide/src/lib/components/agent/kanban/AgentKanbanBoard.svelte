@@ -468,6 +468,7 @@
 					class:jk-focused={focusedColumn === colIdx && focusedIdx === rowIdx}
 					data-nav-id={session.sessionName}
 					data-nav-column={state}
+					data-peek="false"
 				>
 					<SessionCard
 						mode="compact"

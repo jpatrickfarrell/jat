@@ -207,14 +207,9 @@
 				}
 				break;
 			}
-			case ' ': // Space = toggle stage/unstage
-				e.preventDefault();
-				if (isStaged) {
-					unstageFile(selectedFilePath!);
-				} else {
-					stageFile(selectedFilePath!);
-				}
-				break;
+			// Space alias for stage/unstage was removed in jat-pgryk so Space
+			// is universally reserved for the peek drawer. `s` and `u` below
+			// remain the explicit stage / unstage shortcuts.
 			case 's': // S = stage
 				e.preventDefault();
 				if (!isStaged) stageFile(selectedFilePath!);

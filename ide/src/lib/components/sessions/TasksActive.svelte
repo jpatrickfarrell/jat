@@ -21,6 +21,7 @@
 	import StateCardCompact from '$lib/components/work/StateCardCompact.svelte';
 	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 	import ActivityPulse from '$lib/components/work/ActivityPulse.svelte';
+	import MilestoneBadge from '$lib/components/MilestoneBadge.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -1883,6 +1884,7 @@
 										<span class="ta-separator">·</span>
 										<span class="ta-priority ta-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
 									{/if}
+									<MilestoneBadge taskId={sessionTask.id} variant="inline" separator />
 									{#if /d$|w$|mo$/.test(taskAge.label)}
 										<span class="ta-separator">·</span>
 										<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>

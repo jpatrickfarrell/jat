@@ -9,7 +9,6 @@
 
 	import { onMount } from 'svelte';
 	import { createListNav } from '$lib/actions/listNav';
-	import { peek } from '$lib/actions/peek';
 	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 
 	interface DemoTask {
@@ -78,7 +77,7 @@
 	{:else if tasks.length === 0}
 		<div class="opacity-60">No open tasks to preview.</div>
 	{:else}
-		<div bind:this={listEl} use:peek class="flex flex-col gap-1" role="list">
+		<div bind:this={listEl} class="flex flex-col gap-1" role="list">
 			{#each tasks as task (task.id)}
 				<button
 					type="button"

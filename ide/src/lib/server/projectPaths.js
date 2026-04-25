@@ -166,7 +166,17 @@ export async function getJatDefaults() {
 		vps_host: '',
 		vps_user: '',
 		vps_max_agents: 8,
-		vps_project_path: '~/code'
+		vps_project_path: '~/code',
+		// Ephemeral worker provisioning (jat-hnkta epic). The cloud_* fields
+		// configure the dynamic provider abstraction (lib/providers); they are
+		// independent of the static vps_* fields above (which describe the
+		// always-on brain VPS).
+		cloud_provider: '', // 'linode' | 'digitalocean' | '' (disabled)
+		cloud_region: '',
+		cloud_size: '',
+		cloud_image: '',
+		cloud_ssh_key_ids: [],
+		cloud_tag: 'jat-worker'
 	};
 
 	// Override with config values if present
@@ -186,6 +196,12 @@ export async function getJatDefaults() {
 		if (configDefaults.vps_user) defaults.vps_user = configDefaults.vps_user;
 		if (typeof configDefaults.vps_max_agents === 'number') defaults.vps_max_agents = configDefaults.vps_max_agents;
 		if (configDefaults.vps_project_path) defaults.vps_project_path = configDefaults.vps_project_path;
+		if (configDefaults.cloud_provider) defaults.cloud_provider = configDefaults.cloud_provider;
+		if (configDefaults.cloud_region) defaults.cloud_region = configDefaults.cloud_region;
+		if (configDefaults.cloud_size) defaults.cloud_size = configDefaults.cloud_size;
+		if (configDefaults.cloud_image) defaults.cloud_image = configDefaults.cloud_image;
+		if (Array.isArray(configDefaults.cloud_ssh_key_ids)) defaults.cloud_ssh_key_ids = configDefaults.cloud_ssh_key_ids;
+		if (configDefaults.cloud_tag) defaults.cloud_tag = configDefaults.cloud_tag;
 	}
 
 	return defaults;

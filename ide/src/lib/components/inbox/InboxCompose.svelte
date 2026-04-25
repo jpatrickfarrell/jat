@@ -17,6 +17,12 @@
 		getActorDisplayName,
 	} from "$lib/utils/taskRouting";
 	import RoleChip from "$lib/components/RoleChip.svelte";
+	import {
+		playSuccessChime,
+		playPickupSound,
+		playTaskExitSound,
+		playAgentJoinSound,
+	} from "$lib/utils/soundEffects";
 
 	// Minimal task shape needed to resolve the routing target. Using a local
 	// interface keeps this component structurally compatible with the varied
@@ -104,6 +110,22 @@
 	let draft = $state("");
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
+	// Brief success flash on the compose area border after a clean send.
+	// Tagged with the action kind so the visual + audio cue are distinct
+	// per action (external/internal/route/spawn) — builds muscle memory and
+	// gives the user a clean "it took, move on" signal without forcing them
+	// to read text.
+	type FlashKind = "external" | "internal" | "route" | "spawn";
+	let justSentKind = $state<FlashKind | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+	function flashSuccess(kind: FlashKind, durationMs = 550) {
+		if (flashTimer) clearTimeout(flashTimer);
+		justSentKind = kind;
+		flashTimer = setTimeout(() => {
+			justSentKind = null;
+			flashTimer = null;
+		}, durationMs);
+	}
 
 	// Visibility toggle: false = external (reporter sees it via widget),
 	// true = internal (dev-only). Resets to external after every successful
@@ -173,6 +195,17 @@
 			}
 			const data = await res.json();
 			draft = "";
+			// Visual + audio "it took" feedback. Different cue per visibility
+			// so muscle memory tells you whether you just sent something the
+			// reporter will see. isInternal will be reset below — capture the
+			// flag here.
+			if (sendInternal) {
+				flashSuccess("internal");
+				playPickupSound();
+			} else {
+				flashSuccess("external");
+				playSuccessChime();
+			}
 			// Reset to external so the next reply defaults back to the safe (visible)
 			// state. Internal is always explicit opt-in per draft.
 			isInternal = false;
@@ -261,6 +294,18 @@
 			} else {
 				await onSendAndRoute?.(text);
 			}
+			// Both flows succeeded → visual + audio cue. Spawn gets the
+			// "agent joining" arpeggio + purple flash; route gets the "task
+			// moving on" descending whoosh + blue flash. The user's eyes are
+			// already moving to the next task in the queue, so the audio
+			// carries the load while the flash gives a peripheral confirm.
+			if (isSpawnFlow) {
+				flashSuccess("spawn", 700);
+				playAgentJoinSound();
+			} else {
+				flashSuccess("route", 600);
+				playTaskExitSound();
+			}
 		} catch (e: any) {
 			const action = isSpawnFlow ? "spawn" : "route";
 			const base = e?.message || `Failed to send and ${action}`;
@@ -303,7 +348,15 @@
 	}
 </script>
 
-<div class="compose" class:compose-internal={isInternal}>
+<div
+	class="compose"
+	class:compose-internal={isInternal}
+	class:compose-sent={justSentKind !== null}
+	class:compose-sent-external={justSentKind === "external"}
+	class:compose-sent-internal={justSentKind === "internal"}
+	class:compose-sent-route={justSentKind === "route"}
+	class:compose-sent-spawn={justSentKind === "spawn"}
+>
 	<div class="reply-to" aria-live="polite">
 		<div class="reply-to-main">
 			{#if isInternal}
@@ -546,6 +599,49 @@
 		transition:
 			background-color 120ms ease,
 			border-color 120ms ease;
+	}
+
+	/* Success flash — brief border-top glow confirms the action landed.
+	 * The color shifts per action kind so muscle memory builds:
+	 *   external (Send)         → green   (positive ack, customer sees this)
+	 *   internal (Post Internal)→ amber   (matches internal-mode ambient tint)
+	 *   route   (Send + Route)  → blue    (info / forward motion)
+	 *   spawn   (Internal+Spawn)→ violet  (agent joining the work)
+	 *
+	 * The base animation is the same so the *shape* of the feedback is
+	 * consistent even when the color varies. Audio cue (in script) carries
+	 * the bigger differentiation. */
+	.compose.compose-sent {
+		animation: compose-sent-flash 0.55s
+			cubic-bezier(0.22, 1, 0.36, 1) both;
+		--flash-color: oklch(0.70 0.22 145 / 0.95);
+	}
+	.compose.compose-sent-external { --flash-color: oklch(0.70 0.22 145 / 0.95); }
+	.compose.compose-sent-internal { --flash-color: oklch(0.78 0.18 85 / 0.95); }
+	.compose.compose-sent-route    { --flash-color: oklch(0.70 0.20 240 / 0.95); }
+	.compose.compose-sent-spawn {
+		--flash-color: oklch(0.70 0.22 290 / 0.95);
+		/* Spawn is the most consequential action (a new agent is on the way) —
+		 * give it a slightly bigger gesture: full-row glow + slightly longer
+		 * duration. Still under 750ms so it doesn't slow the operator down. */
+		animation:
+			compose-sent-flash 0.7s cubic-bezier(0.22, 1, 0.36, 1) both,
+			compose-sent-glow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	@keyframes compose-sent-flash {
+		0%   { border-top-color: var(--flash-color); }
+		100% { border-top-color: oklch(var(--b3, 0.22 0.02 250)); }
+	}
+
+	@keyframes compose-sent-glow {
+		0%   { box-shadow: inset 0 1px 0 0 var(--flash-color), 0 -2px 16px -2px var(--flash-color); }
+		100% { box-shadow: inset 0 0 0 0 transparent, 0 0 0 0 transparent; }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.compose.compose-sent,
+		.compose.compose-sent-spawn { animation: none; }
 	}
 
 	/* Internal mode — subtle amber wash across the whole compose region so

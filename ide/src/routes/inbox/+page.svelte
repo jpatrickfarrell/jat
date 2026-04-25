@@ -91,6 +91,7 @@
 
 	// Resizable divider between list and detail panels.
 	const SPLIT_STORAGE_KEY = "jat-inbox-split-percent";
+	const FILTER_STORAGE_KEY = "jat-inbox-filters";
 	const DEFAULT_SPLIT = 38;
 	const MIN_SPLIT = 22;
 	const MAX_SPLIT = 72;
@@ -749,9 +750,22 @@
 		// Optimistic: flip local status + advance immediately. The session
 		// card will appear on /work once the signal layer catches up; no need
 		// to wait for the HTTP response.
+		//
+		// If the task is currently unassigned, optimistically claim it for the
+		// dev too — the spawn API will do the same server-side (see
+		// claimAssignee). Keeps the inbox UI honest before the next poll.
 		const idx = tasks.findIndex((t) => t.id === taskId);
 		if (idx >= 0) {
-			tasks[idx] = { ...tasks[idx], status: "in_progress" };
+			const wasUnassigned =
+				!tasks[idx].assignee || !String(tasks[idx].assignee).trim();
+			tasks[idx] = {
+				...tasks[idx],
+				status: "in_progress",
+				assignee:
+					wasUnassigned && currentUser
+						? currentUser
+						: tasks[idx].assignee,
+			};
 		}
 		triggerFlash(taskId);
 		tick().then(() => advanceAfterRoute(taskId));
@@ -781,11 +795,16 @@
 						errBody.message ||
 						`Spawn failed (HTTP ${res.status})`;
 					console.error(`[inbox] Spawn for ${taskId} failed: ${msg}`);
-					// Roll back the optimistic status flip so the task
-					// reappears in the inbox on next filter pass.
+					// Roll back the optimistic status flip + claim so the task
+					// reappears in the inbox in its original state on the next
+					// filter pass.
 					const j = tasks.findIndex((t) => t.id === taskId);
 					if (j >= 0 && tasks[j].status === "in_progress") {
-						tasks[j] = { ...tasks[j], status: task.status };
+						tasks[j] = {
+							...tasks[j],
+							status: task.status,
+							assignee: task.assignee,
+						};
 					}
 				}
 			})
@@ -990,6 +1009,24 @@
 		goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 	});
 
+	// Persist filter state to localStorage so it survives SvelteKit navigation.
+	// Snapshot deps at the top level to ensure reliable tracking (see filteredTasks comment).
+	$effect(() => {
+		if (!hydrated || !browser) return;
+		const state = {
+			filterStatuses,
+			filterPriorities,
+			filterProject,
+			sortBy,
+			sortDir,
+			filterTypes,
+			filterAssignee,
+			filterSearch,
+			filterMilestones,
+		};
+		try { localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+	});
+
 	// Sync URL → filterProject when the layout changes the project param externally
 	// (e.g. clicking a ProjectSelector chip in the TopBar). This is a one-way read:
 	// it only updates filterProject; the filter-to-URL effect above handles the
@@ -1167,6 +1204,24 @@
 		filterMilestones = [];
 		sortBy = "priority";
 		sortDir = DEFAULT_SORT_DIR.priority;
+	}
+
+	function loadFiltersFromStorage(): boolean {
+		try {
+			const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+			if (!raw) return false;
+			const saved = JSON.parse(raw);
+			if (Array.isArray(saved.filterStatuses)) filterStatuses = saved.filterStatuses;
+			if (Array.isArray(saved.filterPriorities)) filterPriorities = saved.filterPriorities;
+			if (typeof saved.filterProject === "string") filterProject = saved.filterProject;
+			if (typeof saved.sortBy === "string" && ["priority","age","updated","status","type"].includes(saved.sortBy)) sortBy = saved.sortBy as SortBy;
+			if (saved.sortDir === "asc" || saved.sortDir === "desc") sortDir = saved.sortDir;
+			if (Array.isArray(saved.filterTypes)) filterTypes = saved.filterTypes;
+			if (typeof saved.filterAssignee === "string") filterAssignee = saved.filterAssignee;
+			if (typeof saved.filterSearch === "string") filterSearch = saved.filterSearch;
+			if (Array.isArray(saved.filterMilestones)) filterMilestones = saved.filterMilestones;
+			return true;
+		} catch { return false; }
 	}
 
 	async function focusFilter() {
@@ -1412,7 +1467,13 @@
 	// ---- Mount ----
 
 	onMount(() => {
-		hydrateFromUrl($page.url.searchParams);
+		const sp = $page.url.searchParams;
+		const FILTER_PARAM_KEYS = ["status","priority","project","sort","sortDir","type","assignee","q","milestone"];
+		if (FILTER_PARAM_KEYS.some(k => sp.has(k))) {
+			hydrateFromUrl(sp);
+		} else {
+			loadFiltersFromStorage();
+		}
 		hydrated = true;
 
 		// Restore persisted divider position.
@@ -1463,6 +1524,9 @@
 	<section class="list-panel" aria-label="Task list">
 		<header class="panel-header">
 			<h1 class="panel-title">Inbox</h1>
+			{#if tasks.length > 0}
+				<span class="panel-count">{tasks.length}</span>
+			{/if}
 		</header>
 
 		<!-- FILTER BAR -->
@@ -2099,13 +2163,29 @@
 	}
 
 	.panel-header {
-		padding: 0.75rem 1rem 0.5rem;
+		padding: 0.5rem 1rem 0.375rem;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
 	}
 
 	.panel-title {
-		font-size: 1rem;
-		font-weight: 600;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: oklch(0.70 0.18 240);
+		opacity: 0.9;
 		margin: 0;
+	}
+
+	.panel-count {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
+		opacity: 0.35;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.02em;
 	}
 
 	/* ---- Filter bar ---- */
@@ -2115,7 +2195,7 @@
 		flex-direction: column;
 		/* Generous gap between filter rows — creates breathing room between
 		 * distinct filter concepts (search+sort / filter chips / secondary). */
-		gap: 0.55rem;
+		gap: 0.5rem;
 		padding: 0.2rem 1rem 0.65rem;
 		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
 	}
@@ -2126,7 +2206,7 @@
 		align-items: center;
 		/* Tight within-row gap: groups feel anchored as a single composition.
 		 * Rhythm comes from the row-level gap above, not from group-level gaps. */
-		gap: 0.35rem 0.75rem;
+		gap: 0.375rem 0.75rem;
 		min-width: 0;
 	}
 
@@ -2170,12 +2250,18 @@
 		color: inherit;
 		cursor: pointer;
 		opacity: 0.7;
-		transition: all 0.1s ease;
+		transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
 	}
 
 	.chip:hover {
 		opacity: 1;
 		background: oklch(0.30 0.03 250 / 0.4);
+	}
+
+	/* Tactile press: cockpit button feel — short scale-down confirms the click. */
+	.chip:active {
+		transform: scale(0.90);
+		transition: transform 0.07s ease-out;
 	}
 
 	.chip.active {
@@ -2362,6 +2448,22 @@
 		border-radius: 999px;
 	}
 
+	/* Instrument warning light — submitted tasks need triage, so the dot
+	 * pulses like a panel indicator demanding attention. badge-secondary is
+	 * the class getTaskStatusBadge() returns for "submitted". */
+	.status-dot.badge-secondary {
+		animation: submitted-warn 2.6s ease-in-out infinite;
+	}
+
+	@keyframes submitted-warn {
+		0%, 100% { box-shadow: 0 0 0 0 oklch(0.65 0.18 310 / 0); }
+		45%       { box-shadow: 0 0 0 3.5px oklch(0.65 0.18 310 / 0.35); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.status-dot.badge-secondary { animation: none; }
+	}
+
 	.task-id {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 		font-size: 0.75rem;
@@ -2394,6 +2496,12 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* Content lift on hover — title brightens as you approach it. */
+	.task-row:hover .task-title {
+		color: oklch(0.98 0.02 250);
+		transition: color 0.1s ease;
 	}
 
 	.task-age {
@@ -2536,9 +2644,9 @@
 	}
 
 	@keyframes inbox-zero-arrive {
-		0%   { transform: scale(0.5); opacity: 0; }
-		70%  { transform: scale(1.2); }
-		100% { transform: scale(1);   opacity: 1; }
+		0%   { transform: scale(0.6); opacity: 0; }
+		60%  { opacity: 1; }
+		100% { transform: scale(1); opacity: 1; }
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -2751,6 +2859,7 @@
 		padding: 0.375rem;
 		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
 		animation: ctxMenuIn 0.1s ease;
+		transform-origin: top left;
 	}
 
 	.ctx-menu-hidden {
@@ -2824,6 +2933,7 @@
 		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
 		animation: ctxMenuIn 0.1s ease;
 		margin-left: 2px;
+		transform-origin: top left;
 	}
 
 	.ctx-item-has-submenu {

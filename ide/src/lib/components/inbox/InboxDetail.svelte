@@ -371,7 +371,9 @@
 
 	<header class="detail-header">
 		<div class="detail-title-row">
-			<h2 class="detail-title">{task.title}</h2>
+			{#key task.id}
+				<h2 class="detail-title">{task.title}</h2>
+			{/key}
 		</div>
 		<div class="detail-badges">
 			<span class="badge badge-sm badge-outline">{task.id}</span>
@@ -390,47 +392,44 @@
 		</div>
 	</header>
 
-	<div class="detail-meta">
+	<dl class="detail-meta">
 		{#if task.creator}
-			<span>
-				<strong>Creator:</strong>
-				{getActorDisplayName(task.creator)}
-				<RoleChip role={task.creator.role} />
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Creator</dt>
+				<dd class="meta-val">{getActorDisplayName(task.creator)}<RoleChip role={task.creator.role} /></dd>
+			</div>
 		{/if}
 		{#if task.requester}
-			<span>
-				<strong>Requester:</strong>
-				{getActorDisplayName(task.requester)}
-				<RoleChip role={task.requester.role} />
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Requester</dt>
+				<dd class="meta-val">{getActorDisplayName(task.requester)}<RoleChip role={task.requester.role} /></dd>
+			</div>
 		{/if}
 		{#if task.approver}
-			<span>
-				<strong>Approver:</strong>
-				{getActorDisplayName(task.approver)}
-				<RoleChip role={task.approver.role} />
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Approver</dt>
+				<dd class="meta-val">{getActorDisplayName(task.approver)}<RoleChip role={task.approver.role} /></dd>
+			</div>
 		{/if}
 		{#if task.assignee}
-			<span>
-				<strong>Assignee:</strong>
-				{task.assignee}
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Assignee</dt>
+				<dd class="meta-val">{task.assignee}</dd>
+			</div>
 		{/if}
 		{#if task.created_at}
-			<span>
-				<strong>Created:</strong>
-				{formatRelativeTime(task.created_at)}
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Created</dt>
+				<dd class="meta-val">{formatRelativeTime(task.created_at)}</dd>
+			</div>
 		{/if}
 		{#if task.updated_at && task.updated_at !== task.created_at}
-			<span>
-				<strong>Updated:</strong>
-				{formatRelativeTime(task.updated_at)}
-			</span>
+			<div class="meta-item">
+				<dt class="meta-key">Updated</dt>
+				<dd class="meta-val">{formatRelativeTime(task.updated_at)}</dd>
+			</div>
 		{/if}
-	</div>
+	</dl>
 
 	<div class="detail-body" bind:this={commentsScroll}>
 		{#if task.description}
@@ -639,10 +638,22 @@
 	}
 
 	.detail-title {
-		font-size: 1.125rem;
+		font-size: 1.0625rem;
 		font-weight: 600;
 		margin: 0 0 0.5rem;
 		word-break: break-word;
+		line-height: 1.3;
+		/* Slide-in from above on each task switch — {#key task.id} triggers it. */
+		animation: title-arrive 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+	}
+
+	@keyframes title-arrive {
+		from { opacity: 0.5; transform: translateY(-4px); }
+		to   { opacity: 1;   transform: translateY(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.detail-title { animation: none; }
 	}
 
 	.detail-badges {
@@ -654,11 +665,35 @@
 	.detail-meta {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 1rem;
-		padding: 0.625rem 1.25rem;
+		gap: 0.25rem 1.25rem;
+		padding: 0.5rem 1.25rem 0.625rem;
 		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
-		font-size: 0.8125rem;
+		margin: 0;
+	}
+
+	.meta-item {
+		display: flex;
+		align-items: baseline;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+	}
+
+	.meta-key {
+		font-size: 0.6375rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		opacity: 0.45;
+		white-space: nowrap;
+		color: inherit;
+	}
+
+	.meta-val {
 		opacity: 0.85;
+		display: flex;
+		align-items: baseline;
+		gap: 0.25rem;
+		margin: 0;
 	}
 
 	.detail-body {
@@ -699,17 +734,22 @@
 	}
 
 	.description-toggle {
+		display: inline-flex;
+		align-items: center;
 		margin-top: 0.5rem;
-		padding: 0.25rem 0.5rem;
-		font-size: 0.75rem;
-		color: oklch(0.70 0.18 240);
-		background: transparent;
-		border: 0;
+		padding: 0.2rem 0.625rem;
+		font-size: 0.7rem;
+		color: oklch(0.75 0.15 240);
+		background: oklch(0.70 0.18 240 / 0.08);
+		border: 1px solid oklch(0.70 0.18 240 / 0.25);
+		border-radius: 999px;
 		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
 	}
 
 	.description-toggle:hover {
-		text-decoration: underline;
+		background: oklch(0.70 0.18 240 / 0.16);
+		border-color: oklch(0.70 0.18 240 / 0.45);
 	}
 
 	.section-label {

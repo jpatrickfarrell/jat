@@ -736,6 +736,13 @@
 		font-size: 0.7rem;
 		opacity: 0.75;
 		letter-spacing: 0.02em;
+		transition: opacity 0.12s ease;
+	}
+
+	/* Reveal the shortcut hint fully when the user's cursor is over the slot —
+	 * teaches keyboard shortcuts without constant visual noise. */
+	.slot-picker:hover .kbd-label {
+		opacity: 1;
 	}
 
 	kbd {
@@ -773,6 +780,11 @@
 		border-color: oklch(0.35 0.03 250);
 	}
 
+	.action-btn:active:not(:disabled) {
+		transform: scale(0.94);
+		transition: transform 0.07s ease-out;
+	}
+
 	.action-btn:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
@@ -792,6 +804,18 @@
 		background: oklch(0.70 0.18 25 / 0.18);
 		border-color: oklch(0.70 0.18 25 / 0.9);
 		color: oklch(0.90 0.12 25);
+		/* Single attention pulse — instrument panel alert signal. */
+		animation: dismiss-alert 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94) 1;
+	}
+
+	@keyframes dismiss-alert {
+		0%   { transform: scale(1); }
+		40%  { transform: scale(1.06); }
+		100% { transform: scale(1); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.action-btn-danger.confirm { animation: none; }
 	}
 
 	.saving {

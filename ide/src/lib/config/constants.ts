@@ -231,6 +231,23 @@ export const JAT_DEFAULTS = {
 	/** Project base path on VPS (where repos are cloned) */
 	vps_project_path: '~/code',
 	/**
+	 * Ephemeral worker VPS provisioning (jat-hnkta epic). Independent of the
+	 * static vps_* fields above. The cloud_* fields configure the dynamic
+	 * provider abstraction in lib/providers; if cloud_provider is unset,
+	 * dynamic provisioning is disabled.
+	 */
+	cloud_provider: '' as '' | 'linode' | 'digitalocean',
+	/** Provider region slug (e.g. 'us-east' on Linode, 'nyc3' on DO). Empty = provider default. */
+	cloud_region: '',
+	/** Provider plan/size slug (e.g. 'g6-standard-2', 's-2vcpu-4gb'). Empty = provider default. */
+	cloud_size: '',
+	/** Provider OS image slug. Empty = provider default Ubuntu. */
+	cloud_image: '',
+	/** Provider-specific SSH key identifiers attached to new VPSes. */
+	cloud_ssh_key_ids: [] as string[],
+	/** Tag applied to provisioned VPSes for filtering & cost tracking. */
+	cloud_tag: 'jat-worker',
+	/**
 	 * Directories to ignore when detecting file tree changes.
 	 * Changes in these directories won't trigger the "changes detected" badge.
 	 */

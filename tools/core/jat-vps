@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+#
+# jat-vps - Test/operate the cloud provider abstraction layer.
+#
+# This is a thin wrapper around lib/providers/. It's the CLI surface for
+# manually exercising VPS lifecycle ops while building out the dynamic
+# provisioning epic (jat-hnkta). The IDE spawn path will use the same
+# provider modules directly.
+#
+# Usage:
+#   jat-vps providers                              # List providers + token status
+#   jat-vps create LABEL [--provider P] [...]      # Provision a new VPS
+#   jat-vps list [--provider P] [--tag TAG]        # List VPSes
+#   jat-vps get ID [--provider P]                  # Show one VPS
+#   jat-vps destroy ID [--provider P]              # Delete a VPS
+#
+# Provider selection (in order):
+#   1. --provider flag
+#   2. JAT_CLOUD_PROVIDER env var
+#   3. defaults.cloud_provider in ~/.config/jat/projects.json
+#   4. 'linode'
+#
+# Auth (per provider):
+#   linode:        jat-secret --set linode_api_token <PAT>
+#   digitalocean:  jat-secret --set digitalocean_api_token <PAT>
+#
+# Examples:
+#   jat-vps providers
+#   jat-vps create jat-worker-001 --provider linode --region us-east --size g6-nanode-1 --root-pass 'XXXX'
+#   jat-vps list --tag jat-worker
+#   jat-vps destroy 12345678
+#
+
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
+PROVIDERS_DIR="$REPO_ROOT/lib/providers"
+
+if [[ ! -d "$PROVIDERS_DIR" ]]; then
+	echo "jat-vps: cannot locate lib/providers (looked in $PROVIDERS_DIR)" >&2
+	exit 1
+fi
+command -v jq >/dev/null || { echo "jat-vps: jq is required" >&2; exit 1; }
+
+usage() {
+	sed -n '3,32p' "$SCRIPT_PATH" | sed 's/^# \{0,1\}//'
+	exit "${1:-0}"
+}
+
+[[ $# -eq 0 ]] && usage 1
+case "$1" in -h|--help|help) usage 0 ;; esac
+
+CMD="$1"; shift
+
+# Run a Node ESM snippet with `P` (the providers module) and `args` (parsed
+# from $JAT_ARGS) in scope. Wrapped in an async IIFE so `return` and
+# `await` work inside the snippet.
+run_node() {
+	local snippet="$1"
+	JAT_ARGS="${JAT_ARGS:-{\}}" node --input-type=module -e "
+		import * as P from '${PROVIDERS_DIR}/index.js';
+		const args = JSON.parse(process.env.JAT_ARGS || '{}');
+		const fmt = (v) => {
+			console.log(\`  id:        \${v.id}\`);
+			console.log(\`  provider:  \${v.provider}\`);
+			console.log(\`  label:     \${v.label}\`);
+			console.log(\`  status:    \${v.status}\`);
+			console.log(\`  ip:        \${v.ip || '(pending)'}\`);
+			console.log(\`  region:    \${v.region}\`);
+			console.log(\`  size:      \${v.size}\`);
+			console.log(\`  tags:      \${(v.tags||[]).join(', ') || '(none)'}\`);
+			console.log(\`  created:   \${v.createdAt}\`);
+		};
+		(async () => {
+			try { ${snippet} }
+			catch (err) { console.error(err && err.message ? err.message : err); process.exit(1); }
+		})();
+	"
+}
+
+# Build a JSON args object from named scalar / array fields, dropping empties.
+# Usage: build_args scalar:label scalar:provider array:tags
+# Reads each field's value from the like-named bash variable.
+case "$CMD" in
+	providers)
+		run_node "
+			const rows = P.listProvidersStatus();
+			console.log('Cloud providers:');
+			for (const r of rows) {
+				const mark = r.configured ? '✓' : '✗';
+				console.log(\`  \${mark} \${r.name.padEnd(15)} token: \${r.tokenKey}\`);
+			}
+			const d = P.readCloudDefaults();
+			console.log('');
+			console.log('Defaults (from ~/.config/jat/projects.json):');
+			console.log(\`  cloud_provider: \${d.provider || '(unset → linode)'}\`);
+			console.log(\`  cloud_region:   \${d.region || '(provider default)'}\`);
+			console.log(\`  cloud_size:     \${d.size || '(provider default)'}\`);
+			console.log(\`  cloud_image:    \${d.image || '(provider default)'}\`);
+			console.log(\`  cloud_tag:      \${d.tag}\`);
+			console.log(\`  ssh_key_ids:    \${d.sshKeyIds.join(', ') || '(none)'}\`);
+		"
+		;;
+
+	create)
+		[[ $# -lt 1 ]] && { echo "create: LABEL required" >&2; usage 1; }
+		LABEL="$1"; shift
+		PROVIDER="${JAT_CLOUD_PROVIDER:-}"
+		REGION=""; SIZE=""; IMAGE=""; ROOT_PASS=""; USER_DATA=""
+		TAGS_CSV=""; SSH_KEYS_CSV=""
+		while [[ $# -gt 0 ]]; do
+			case "$1" in
+				--provider)       PROVIDER="$2"; shift 2 ;;
+				--region)         REGION="$2"; shift 2 ;;
+				--size)           SIZE="$2"; shift 2 ;;
+				--image)          IMAGE="$2"; shift 2 ;;
+				--root-pass)      ROOT_PASS="$2"; shift 2 ;;
+				--user-data-file) USER_DATA="$(cat "$2")"; shift 2 ;;
+				--tag)            TAGS_CSV="$2"; shift 2 ;;
+				--ssh-key)        SSH_KEYS_CSV="$2"; shift 2 ;;
+				*) echo "create: unknown flag $1" >&2; usage 1 ;;
+			esac
+		done
+		# Build args JSON via jq. Empty strings become null so the Node side
+		# can fall back to provider defaults via `|| undefined`.
+		export JAT_ARGS="$(jq -nc \
+			--arg label "$LABEL" \
+			--arg provider "$PROVIDER" \
+			--arg region "$REGION" \
+			--arg size "$SIZE" \
+			--arg image "$IMAGE" \
+			--arg rootPass "$ROOT_PASS" \
+			--arg userData "$USER_DATA" \
+			--arg tags "$TAGS_CSV" \
+			--arg sshKeys "$SSH_KEYS_CSV" \
+			'def n(s): if s == "" then null else s end;
+			 def a(s): if s == "" then [] else (s | split(",")) end;
+			 {
+				label: $label,
+				provider: n($provider),
+				region:   n($region),
+				size:     n($size),
+				image:    n($image),
+				rootPass: n($rootPass),
+				userData: n($userData),
+				tags:     a($tags),
+				sshKeyIds: a($sshKeys)
+			 }')"
+		run_node "
+			const provider = P.getProvider(args.provider || undefined);
+			const opts = {
+				label: args.label,
+				region: args.region || undefined,
+				size: args.size || undefined,
+				image: args.image || undefined,
+				tags: args.tags || [],
+				sshKeyIds: args.sshKeyIds || [],
+				rootPass: args.rootPass || undefined,
+				userData: args.userData || undefined
+			};
+			console.log(\`Creating \${provider.name} VPS '\${opts.label}'…\`);
+			const vps = await provider.createVps(opts);
+			console.log('Created:');
+			fmt(vps);
+		"
+		;;
+
+	list)
+		PROVIDER="${JAT_CLOUD_PROVIDER:-}"; TAG=""
+		while [[ $# -gt 0 ]]; do
+			case "$1" in
+				--provider) PROVIDER="$2"; shift 2 ;;
+				--tag)      TAG="$2"; shift 2 ;;
+				*) echo "list: unknown flag $1" >&2; usage 1 ;;
+			esac
+		done
+		export JAT_ARGS="$(jq -nc --arg provider "$PROVIDER" --arg tag "$TAG" \
+			'def n(s): if s == "" then null else s end;
+			 { provider: n($provider), tag: n($tag) }')"
+		run_node "
+			const provider = P.getProvider(args.provider || undefined);
+			const rows = await provider.listVps(args.tag ? { tag: args.tag } : undefined);
+			if (!rows.length) { console.log('(no VPSes)'); return; }
+			console.log(\`\${provider.name}: \${rows.length} VPS(es)\`);
+			for (const v of rows) {
+				console.log(\`  \${String(v.id).padEnd(12)} \${(v.status || '').padEnd(13)} \${(v.ip || '').padEnd(16)} \${v.label}\`);
+			}
+		"
+		;;
+
+	get)
+		[[ $# -lt 1 ]] && { echo "get: ID required" >&2; usage 1; }
+		ID="$1"; shift
+		PROVIDER="${JAT_CLOUD_PROVIDER:-}"
+		while [[ $# -gt 0 ]]; do
+			case "$1" in
+				--provider) PROVIDER="$2"; shift 2 ;;
+				*) echo "get: unknown flag $1" >&2; usage 1 ;;
+			esac
+		done
+		export JAT_ARGS="$(jq -nc --arg id "$ID" --arg provider "$PROVIDER" \
+			'def n(s): if s == "" then null else s end;
+			 { id: $id, provider: n($provider) }')"
+		run_node "
+			const provider = P.getProvider(args.provider || undefined);
+			const vps = await provider.getVps(args.id);
+			if (!vps) { console.log('(not found)'); process.exit(1); }
+			fmt(vps);
+		"
+		;;
+
+	destroy)
+		[[ $# -lt 1 ]] && { echo "destroy: ID required" >&2; usage 1; }
+		ID="$1"; shift
+		PROVIDER="${JAT_CLOUD_PROVIDER:-}"; ASSUME_YES=false
+		while [[ $# -gt 0 ]]; do
+			case "$1" in
+				--provider) PROVIDER="$2"; shift 2 ;;
+				-y|--yes)   ASSUME_YES=true; shift ;;
+				*) echo "destroy: unknown flag $1" >&2; usage 1 ;;
+			esac
+		done
+		if ! $ASSUME_YES; then
+			read -r -p "Destroy ${PROVIDER:-default} VPS $ID? [y/N] " ans
+			[[ "$ans" =~ ^[yY]$ ]] || { echo "aborted"; exit 0; }
+		fi
+		export JAT_ARGS="$(jq -nc --arg id "$ID" --arg provider "$PROVIDER" \
+			'def n(s): if s == "" then null else s end;
+			 { id: $id, provider: n($provider) }')"
+		run_node "
+			const provider = P.getProvider(args.provider || undefined);
+			await provider.destroyVps(args.id);
+			console.log(\`destroyed \${provider.name} VPS \${args.id}\`);
+		"
+		;;
+
+	*)
+		echo "jat-vps: unknown command '$CMD'" >&2
+		usage 1
+		;;
+esac

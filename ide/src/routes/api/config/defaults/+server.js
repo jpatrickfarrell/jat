@@ -117,7 +117,7 @@ export async function PUT({ request }) {
 		}
 
 		// Validate string array fields
-		const stringArrayFields = ['file_watcher_ignored_dirs'];
+		const stringArrayFields = ['file_watcher_ignored_dirs', 'cloud_ssh_key_ids'];
 		for (const field of stringArrayFields) {
 			if (field in newDefaults) {
 				if (!Array.isArray(newDefaults[field])) {

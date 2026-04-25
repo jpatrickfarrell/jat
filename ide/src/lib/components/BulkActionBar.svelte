@@ -38,12 +38,15 @@
 		count,
 		actions,
 		onClear,
-		label = 'selected'
+		label = 'selected',
+		loadingMessage = null,
 	}: {
 		count: number;
 		actions: BulkAction[];
 		onClear: () => void;
 		label?: string;
+		/** When set, replaces action buttons with a spinner + this message. */
+		loadingMessage?: string | null;
 	} = $props();
 
 	const visible = $derived(count > 0);
@@ -62,23 +65,32 @@
 
 		<div class="bulk-divider" aria-hidden="true"></div>
 
-		<div class="bulk-actions">
-			{#each actions as action (action.label)}
-				<button
-					type="button"
-					class="bulk-btn"
-					class:bulk-btn-danger={action.danger}
-					disabled={action.disabled}
-					onclick={action.onAction}
-					title={action.key ? `${action.label} (${action.key})` : action.label}
-				>
-					{action.label}
-					{#if action.key}
-						<kbd class="bulk-key">{action.key}</kbd>
-					{/if}
-				</button>
-			{/each}
-		</div>
+		{#if loadingMessage}
+			<div class="bulk-loading" role="status" aria-live="polite">
+				<svg class="bulk-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true">
+					<path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+				</svg>
+				<span class="bulk-loading-msg">{loadingMessage}</span>
+			</div>
+		{:else}
+			<div class="bulk-actions">
+				{#each actions as action (action.label)}
+					<button
+						type="button"
+						class="bulk-btn"
+						class:bulk-btn-danger={action.danger}
+						disabled={action.disabled}
+						onclick={action.onAction}
+						title={action.key ? `${action.label} (${action.key})` : action.label}
+					>
+						{action.label}
+						{#if action.key}
+							<kbd class="bulk-key">{action.key}</kbd>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		{/if}
 
 		<div class="bulk-divider" aria-hidden="true"></div>
 
@@ -244,8 +256,47 @@
 		}
 	}
 
+	.bulk-loading {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.125rem 0.375rem;
+	}
+
+	.bulk-spinner {
+		animation: bulk-spin 0.9s linear infinite;
+		flex-shrink: 0;
+		color: oklch(0.75 0.15 240);
+	}
+
+	@keyframes bulk-spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.bulk-loading-msg {
+		font-size: 0.8125rem;
+		color: oklch(0.82 0.08 240);
+		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		.bulk-action-bar {
+			right: 0.75rem;
+			bottom: 0.75rem;
+			padding: 0.4375rem 0.5rem 0.4375rem 0.75rem;
+			font-size: 0.75rem;
+		}
+
+		.count-label {
+			display: none;
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.bulk-action-bar {
+			animation: none;
+		}
+		.bulk-spinner {
 			animation: none;
 		}
 	}

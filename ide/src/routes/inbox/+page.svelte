@@ -95,6 +95,7 @@
 	let bulkPriorityOpen = $state(false);
 	let bulkWorking = $state(false);
 	let bulkSpawning = $state(false);
+	let bulkSpawnProgress = $state<{ done: number; total: number } | null>(null);
 	let epics = $state<Task[]>([]);
 	let bulkEpicShowCreate = $state(false);
 	let bulkEpicNewTitle = $state('');
@@ -1177,6 +1178,7 @@
 		bulkSpawning = true;
 		const ids = Array.from(selectedTaskIds);
 		let success = 0;
+		bulkSpawnProgress = { done: 0, total: ids.length };
 		try {
 			await Promise.all(ids.map(async id => {
 				try {
@@ -1190,11 +1192,13 @@
 						handleTaskUpdated({ id, status: 'in_progress' } as any);
 					}
 				} catch { /* continue */ }
+				bulkSpawnProgress = { done: (bulkSpawnProgress?.done ?? 0) + 1, total: ids.length };
 			}));
 			addToast({ message: `Spawned ${success}/${ids.length} agent${ids.length === 1 ? '' : 's'}`, type: success === ids.length ? 'success' : 'info' });
 			clearBulkSelection();
 		} finally {
 			bulkSpawning = false;
+			bulkSpawnProgress = null;
 		}
 	}
 
@@ -2236,15 +2240,18 @@
 		<BulkActionBar
 			count={selectedTaskIds.size}
 			label={selectedTaskIds.size === 1 ? 'task selected' : 'tasks selected'}
+			loadingMessage={bulkSpawnProgress
+				? `Spawning agents… ${bulkSpawnProgress.done}/${bulkSpawnProgress.total}`
+				: null}
 			actions={[
-				{ key: 't', label: 'Type', onAction: () => { bulkTypeOpen = !bulkTypeOpen; bulkStatusOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking },
-				{ key: 's', label: 'Status', onAction: () => { bulkStatusOpen = !bulkStatusOpen; bulkTypeOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking },
-				{ key: 'p', label: 'Priority', onAction: () => { bulkPriorityOpen = !bulkPriorityOpen; bulkTypeOpen = false; bulkStatusOpen = false; }, disabled: bulkWorking },
-				{ key: 'a', label: 'Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking },
+				{ key: 't', label: 'Type', onAction: () => { bulkTypeOpen = !bulkTypeOpen; bulkStatusOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking || bulkSpawning },
+				{ key: 's', label: 'Status', onAction: () => { bulkStatusOpen = !bulkStatusOpen; bulkTypeOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking || bulkSpawning },
+				{ key: 'p', label: 'Priority', onAction: () => { bulkPriorityOpen = !bulkPriorityOpen; bulkTypeOpen = false; bulkStatusOpen = false; }, disabled: bulkWorking || bulkSpawning },
+				{ key: 'a', label: 'Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking || bulkSpawning },
 				{ key: 'S', label: 'Spawn', onAction: bulkSpawn, disabled: bulkWorking || bulkSpawning },
-				{ key: 'o', label: 'Promote', onAction: bulkPromote, disabled: bulkWorking },
-				{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking },
-				{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking },
+				{ key: 'o', label: 'Promote', onAction: bulkPromote, disabled: bulkWorking || bulkSpawning },
+				{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking || bulkSpawning },
+				{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking || bulkSpawning },
 			]}
 			onClear={clearBulkSelection}
 		/>

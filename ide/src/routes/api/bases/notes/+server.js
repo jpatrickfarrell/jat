@@ -11,12 +11,23 @@
 import { json } from '@sveltejs/kit';
 import { getBase, createBase, updateBase, initBasesDb } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+import * as pgBases from '../../../../../../lib/bases-postgres.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomBytes } from 'crypto';
 
 const CONFIG_FILE = join(homedir(), '.config', 'jat', 'projects.json');
+
+function getPostgresUrlForProject(projectName) {
+	try {
+		const cfg = resolveBackendForProject(projectName);
+		return cfg.kind === 'postgres' ? cfg.url : null;
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Generate the well-known base ID for a project's notes.
@@ -45,18 +56,43 @@ function getExistingNotes(project) {
 /**
  * Ensure the project notes base exists. Creates it if missing,
  * migrating content from projects.json if available.
+ *
+ * Routes between SQLite and Postgres based on the project's backend.
+ *
  * @param {string} projectPath
  * @param {string} project
- * @returns {Object} The notes base
+ * @param {string|null} pgUrl - postgres DSN for graduated projects, or null
+ * @returns {Promise<Object>|Object} The notes base
  */
-function ensureNotesBase(projectPath, project) {
+async function ensureNotesBase(projectPath, project, pgUrl) {
 	const id = notesBaseId(project);
-	initBasesDb(projectPath);
 
+	if (pgUrl) {
+		let base = await pgBases.getBase(pgUrl, id);
+		if (base) return base;
+
+		const existingNotes = getExistingNotes(project);
+		const blocks = existingNotes
+			? [{ type: 'text', id: randomBytes(4).toString('hex'), content: existingNotes }]
+			: [];
+
+		base = await pgBases.createBase(pgUrl, {
+			id,
+			name: 'Project Notes',
+			project,
+			blocks,
+			description: 'Scratchpad notes for this project — editable from the Tasks page',
+			always_inject: false,
+			token_estimate: existingNotes ? Math.ceil(existingNotes.length / 4) : 0,
+			source_config: { _projectNotes: true },
+		});
+		return base;
+	}
+
+	initBasesDb(projectPath);
 	let base = getBase(projectPath, id);
 	if (base) return base;
 
-	// Auto-create with migrated content
 	const existingNotes = getExistingNotes(project);
 	const blocks = existingNotes
 		? [{ type: 'text', id: randomBytes(4).toString('hex'), content: existingNotes }]
@@ -100,7 +136,8 @@ export async function GET({ url }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = ensureNotesBase(path, project);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = await ensureNotesBase(path, project, pgUrl);
 		const content = getNotesContent(base);
 
 		return json({
@@ -127,7 +164,8 @@ export async function PUT({ request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = ensureNotesBase(path, project);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = await ensureNotesBase(path, project, pgUrl);
 		const id = base.id;
 
 		// Update blocks with new content
@@ -135,10 +173,15 @@ export async function PUT({ request }) {
 			? [{ type: 'text', id: (base.blocks?.[0]?.id) || randomBytes(4).toString('hex'), content }]
 			: [];
 
-		updateBase(path, id, {
+		const patch = {
 			blocks,
 			token_estimate: content ? Math.ceil(content.length / 4) : 0,
-		});
+		};
+		if (pgUrl) {
+			await pgBases.updateBase(pgUrl, id, patch);
+		} else {
+			updateBase(path, id, patch);
+		}
 
 		return json({ success: true });
 	} catch (error) {
@@ -165,17 +208,23 @@ export async function POST({ request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const base = ensureNotesBase(path, project);
+		const pgUrl = getPostgresUrlForProject(project);
+		const base = await ensureNotesBase(path, project, pgUrl);
 		const id = base.id;
 
 		const blocks = content
 			? [{ type: 'text', id: (base.blocks?.[0]?.id) || randomBytes(4).toString('hex'), content }]
 			: [];
 
-		updateBase(path, id, {
+		const patch = {
 			blocks,
 			token_estimate: content ? Math.ceil(content.length / 4) : 0,
-		});
+		};
+		if (pgUrl) {
+			await pgBases.updateBase(pgUrl, id, patch);
+		} else {
+			updateBase(path, id, patch);
+		}
 
 		return json({ success: true });
 	} catch (error) {

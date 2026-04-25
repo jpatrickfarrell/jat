@@ -1628,6 +1628,7 @@
 					<div class="ta-card-inner ta-card-inner-agent">
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
+							<span class="ta-strip-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 							{#if stripDestructActive}
 								<span class="ta-strip-elapsed ta-strip-elapsed-destruct" title="Session self-destructing">
@@ -1865,8 +1866,6 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 							<div class="ta-row2-wrapper" onclick={(e) => { if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches) { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); } }}>
 								<div class="ta-card-row2">
-									<span class="ta-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
-									<span class="ta-separator">·</span>
 									<button class="ta-task-id" class:ta-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
 										<span class="ta-task-id-text">{sessionTask.id}</span>
 										{#if copiedMobileId === sessionTask.id}<span class="ta-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
@@ -1993,6 +1992,7 @@
 					<div class="ta-card-inner">
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
+							<span class="ta-strip-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -2984,6 +2984,20 @@
 		justify-content: center;
 		gap: 0.25rem;
 		overflow: hidden;
+	}
+
+	.ta-strip-agent-name {
+		display: block;
+		max-width: 100%;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: oklch(0.78 0.02 250);
+		letter-spacing: 0.01em;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		padding: 0 0.25rem;
+		text-align: center;
 	}
 
 	.ta-strip-elapsed {

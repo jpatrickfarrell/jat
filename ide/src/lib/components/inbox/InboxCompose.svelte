@@ -324,10 +324,11 @@
 			onEscape?.();
 			return;
 		}
-		// Cmd/Ctrl+Shift+I flips the internal toggle. Uses e.code so it
-		// survives keyboard layouts that remap "I". Handled before Enter so
-		// Cmd+Shift+Enter doesn't accidentally send.
-		if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === "KeyI") {
+		// Alt+I flips the internal toggle. Uses e.code so it survives
+		// keyboard layouts that remap "I". Avoids Cmd/Ctrl+Shift+I because
+		// that's Firefox/Chrome dev tools and preventDefault can't override
+		// it. Handled before Enter so Alt+Enter doesn't accidentally send.
+		if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyI") {
 			e.preventDefault();
 			isInternal = !isInternal;
 			return;
@@ -411,8 +412,8 @@
 			disabled={submitting}
 			onclick={() => (isInternal = !isInternal)}
 			title={isInternal
-				? "Internal — only visible in IDE. Click or Cmd+Shift+I to make external."
-				: "External — visible to the reporter. Click or Cmd+Shift+I to make internal."}
+				? "Internal — only visible in IDE. Click or Alt+I to make external."
+				: "External — visible to the reporter. Click or Alt+I to make internal."}
 		>
 			{#if isInternal}
 				<svg
@@ -480,9 +481,8 @@
 	></textarea>
 	<div class="compose-actions">
 		<span class="compose-hint">
-			<kbd>↵</kbd> send · <kbd>Ctrl</kbd>+<kbd>↵</kbd> send+route · <kbd
-				>⇧⌘I</kbd
-			> internal · <kbd>Esc</kbd> back
+			<kbd>↵</kbd> send · <kbd>Ctrl</kbd>+<kbd>↵</kbd> send+route ·
+			<kbd>Alt</kbd>+<kbd>I</kbd> internal · <kbd>Esc</kbd> back
 		</span>
 		<div class="compose-buttons">
 			<button

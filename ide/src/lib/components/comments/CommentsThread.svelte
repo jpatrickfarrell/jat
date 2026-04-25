@@ -163,9 +163,11 @@
 			submit();
 			return;
 		}
-		// Cmd/Ctrl+Shift+I flips the internal toggle without leaving the textarea.
+		// Alt+I flips the internal toggle without leaving the textarea.
 		// Uses e.code so it survives keyboard layouts that remap "I".
-		if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyI') {
+		// Avoids Cmd/Ctrl+Shift+I because that's Firefox/Chrome dev tools
+		// and the browser claims it before preventDefault can run.
+		if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyI') {
 			e.preventDefault();
 			isInternal = !isInternal;
 		}
@@ -335,8 +337,8 @@
 					aria-pressed={isInternal}
 					disabled={submitting}
 					title={isInternal
-						? 'Internal — only visible in IDE. Click or Cmd+Shift+I to make external.'
-						: 'External — visible to the reporter. Click or Cmd+Shift+I to make internal.'}
+						? 'Internal — only visible in IDE. Click or Alt+I to make external.'
+						: 'External — visible to the reporter. Click or Alt+I to make internal.'}
 					onclick={() => (isInternal = !isInternal)}
 				>
 					{#if isInternal}

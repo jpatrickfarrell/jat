@@ -245,7 +245,7 @@ export async function POST({ params }) {
 
 		// Capture window addresses before spawning terminal for color application
 		const windowsBefore = await getHyprlandWindowAddresses();
-		const attachCmd = `tmux attach-session -t "${sessionId}"`;
+		const attachCmd = `TERM=xterm-256color tmux attach-session -t "${sessionId}"`;
 
 		// Determine which terminal and build the command
 		let child;

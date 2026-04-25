@@ -16,6 +16,19 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { richPaste } from '$lib/actions/richPaste';
 
+	function renderMarkdown(text: string): string {
+		if (!text) return '';
+		const escaped = text
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		return escaped
+			.replace(/^#{1,3} (.+)$/gm, '<strong class="block mt-1">$1</strong>')
+			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*(.+?)\*/g, '<em>$1</em>')
+			.replace(/`(.+?)`/g, '<code class="px-1 rounded bg-base-300 text-xs font-mono">$1</code>')
+			.replace(/^[-*] (.+)$/gm, '<span class="block pl-3 before:content-[\'•\'] before:mr-1.5 before:opacity-50">$1</span>')
+			.replace(/\n/g, '<br>');
+	}
+
 	interface Comment {
 		id: string;
 		text: string;
@@ -226,7 +239,7 @@
 									{@render internalBadge()}
 								{/if}
 							</div>
-							<p class="leading-relaxed whitespace-pre-wrap break-words">{c.text}</p>
+							<p class="leading-relaxed break-words">{@html renderMarkdown(c.text)}</p>
 							<p class="opacity-40 text-[10px] mt-1">{formatTime(c.created_at)}</p>
 						</div>
 					</div>
@@ -249,7 +262,7 @@
 									{@render internalBadge()}
 								</div>
 							{/if}
-							<p class="leading-relaxed whitespace-pre-wrap break-words">{c.text}</p>
+							<p class="leading-relaxed break-words">{@html renderMarkdown(c.text)}</p>
 							<p class="opacity-40 text-[10px] mt-0.5 text-right">{formatTime(c.created_at)}</p>
 						</div>
 					</div>
@@ -273,7 +286,7 @@
 									{@render internalBadge()}
 								{/if}
 							</div>
-							<p class="leading-relaxed whitespace-pre-wrap break-words text-base-content/80">{c.text}</p>
+							<p class="leading-relaxed break-words text-base-content/80">{@html renderMarkdown(c.text)}</p>
 						</div>
 					</div>
 				{/if}

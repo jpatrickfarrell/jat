@@ -61,6 +61,7 @@
 		agent_program?: string | null;
 		model?: string | null;
 		created_at?: string;
+		comment_count?: number;
 	}
 
 	interface AgentSessionInfo {
@@ -78,6 +79,7 @@
 		agentProjects = new Map(),
 		projectColors = {},
 		taskIntegrations = {},
+		taskImages = {},
 		browserSessions = new Map(),
 		agentOutputs = new Map(),
 		onKillSession,
@@ -91,6 +93,7 @@
 		agentProjects: Map<string, string>;
 		projectColors: Record<string, string>;
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
+		taskImages?: Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>;
 		browserSessions?: Map<string, number>;
 		agentOutputs?: Map<string, string>;
 		onKillSession?: (sessionName: string) => Promise<void>;
@@ -1888,6 +1891,14 @@
 									{#if /d$|w$|mo$/.test(taskAge.label)}
 										<span class="ta-separator">·</span>
 										<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>
+									{/if}
+									{#if sessionTask.comment_count > 0}
+										<span class="ta-separator">·</span>
+										<span class="ta-count-badge">💬 {sessionTask.comment_count}</span>
+									{/if}
+									{#if sessionTask.id && taskImages[sessionTask.id]?.length > 0}
+										<span class="ta-separator">·</span>
+										<span class="ta-count-badge">📎 {taskImages[sessionTask.id].length}</span>
 									{/if}
 									<span class="ta-separator">·</span>
 									<button
@@ -3894,6 +3905,12 @@
 	.ta-age {
 		font-weight: 600;
 		font-size: 0.5625rem;
+	}
+
+	.ta-count-badge {
+		font-weight: 600;
+		font-size: 0.5625rem;
+		color: oklch(0.60 0.02 250);
 	}
 
 	.ta-priority {

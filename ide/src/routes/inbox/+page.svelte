@@ -96,6 +96,11 @@
 	let bulkWorking = $state(false);
 	let bulkSpawning = $state(false);
 	let epics = $state<Task[]>([]);
+	let bulkEpicShowCreate = $state(false);
+	let bulkEpicNewTitle = $state('');
+	let bulkEpicCreating = $state(false);
+	let bulkEpicCreateError = $state<string | null>(null);
+	let bulkEpicNewInputEl = $state<HTMLInputElement | undefined>(undefined);
 	let focusZone = $state<FocusZone>("list");
 
 	let loading = $state(true);
@@ -1000,6 +1005,9 @@
 		bulkTypeOpen = false;
 		bulkStatusOpen = false;
 		bulkPriorityOpen = false;
+		bulkEpicShowCreate = false;
+		bulkEpicNewTitle = '';
+		bulkEpicCreateError = null;
 	}
 
 	async function loadEpics() {
@@ -1050,6 +1058,36 @@
 			fetchTasks();
 		} finally {
 			bulkWorking = false;
+		}
+	}
+
+	async function bulkCreateEpic() {
+		if (!bulkEpicNewTitle.trim() || bulkEpicCreating) return;
+		bulkEpicCreating = true;
+		bulkEpicCreateError = null;
+		try {
+			const projects = new Set<string>(
+				Array.from(selectedTaskIds).map(id => getProjectFromTaskId(id)).filter((p): p is string => !!p)
+			);
+			const project = projects.size === 1 ? [...projects][0] : (filterProject || undefined);
+			const res = await fetch('/api/epics', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title: bulkEpicNewTitle.trim(), project }),
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d.error || 'Failed to create epic');
+			// Add to list and immediately assign selected tasks to it
+			const newEpic = { id: d.epicId || d.epic?.id, title: bulkEpicNewTitle.trim(), status: 'open', priority: 1 };
+			epics = [newEpic, ...epics];
+			bulkEpicNewTitle = '';
+			bulkEpicShowCreate = false;
+			// Now assign selected tasks to the new epic
+			await bulkAssignToEpic(newEpic.id);
+		} catch (err) {
+			bulkEpicCreateError = err instanceof Error ? err.message : 'Failed to create epic';
+		} finally {
+			bulkEpicCreating = false;
 		}
 	}
 
@@ -2324,8 +2362,8 @@
 				class="bulk-epic-overlay"
 				role="button"
 				tabindex="-1"
-				onclick={() => { bulkEpicOpen = false; }}
-				onkeydown={(e) => { if (e.key === 'Escape') bulkEpicOpen = false; }}
+				onclick={() => { bulkEpicOpen = false; bulkEpicShowCreate = false; bulkEpicNewTitle = ''; bulkEpicCreateError = null; }}
+				onkeydown={(e) => { if (e.key === 'Escape') { bulkEpicOpen = false; bulkEpicShowCreate = false; } }}
 			>
 				<div
 					class="bulk-epic-modal"
@@ -2338,22 +2376,72 @@
 				>
 					<div class="bulk-epic-header">
 						<span>Add {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'} to epic</span>
-						<button class="bulk-epic-close" onclick={() => { bulkEpicOpen = false; }} aria-label="Close">×</button>
+						<button class="bulk-epic-close" onclick={() => { bulkEpicOpen = false; bulkEpicShowCreate = false; }} aria-label="Close">×</button>
 					</div>
 					<div class="bulk-epic-list">
-						{#if epics.length === 0}
+						{#if epics.length === 0 && !bulkEpicShowCreate}
 							<div class="bulk-epic-empty">No open epics found.</div>
 						{:else}
 							{#each epics as epic (epic.id)}
 								<button
 									class="bulk-epic-row"
-									disabled={bulkWorking}
+									disabled={bulkWorking || bulkEpicCreating}
 									onclick={() => bulkAssignToEpic(epic.id)}
 								>
 									<span class="bulk-epic-row-id">{epic.id}</span>
 									<span class="bulk-epic-row-title">{epic.title}</span>
 								</button>
 							{/each}
+						{/if}
+					</div>
+					<!-- Inline create new epic -->
+					<div class="bulk-epic-create-section">
+						{#if bulkEpicShowCreate}
+							<div class="bulk-epic-create-form" transition:slide={{ duration: 160 }}>
+								<input
+									bind:this={bulkEpicNewInputEl}
+									bind:value={bulkEpicNewTitle}
+									class="bulk-epic-create-input"
+									placeholder="Epic title…"
+									disabled={bulkEpicCreating}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' && bulkEpicNewTitle.trim()) { e.preventDefault(); void bulkCreateEpic(); }
+										if (e.key === 'Escape') { e.preventDefault(); bulkEpicShowCreate = false; bulkEpicNewTitle = ''; bulkEpicCreateError = null; }
+									}}
+								/>
+								{#if bulkEpicCreateError}
+									<span class="bulk-epic-create-error">{bulkEpicCreateError}</span>
+								{/if}
+								<div class="bulk-epic-create-actions">
+									<button
+										class="bulk-epic-create-cancel"
+										onclick={() => { bulkEpicShowCreate = false; bulkEpicNewTitle = ''; bulkEpicCreateError = null; }}
+										disabled={bulkEpicCreating}
+									>Cancel</button>
+									<button
+										class="bulk-epic-create-submit"
+										onclick={() => void bulkCreateEpic()}
+										disabled={bulkEpicCreating || !bulkEpicNewTitle.trim()}
+									>
+										{#if bulkEpicCreating}
+											<svg class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4" /></svg>
+										{:else}
+											Create & Link
+										{/if}
+									</button>
+								</div>
+							</div>
+						{:else}
+							<button
+								class="bulk-epic-new-btn"
+								onclick={() => { bulkEpicShowCreate = true; setTimeout(() => bulkEpicNewInputEl?.focus(), 50); }}
+								disabled={bulkWorking || bulkEpicCreating}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+								</svg>
+								New Epic
+							</button>
 						{/if}
 					</div>
 				</div>
@@ -3155,6 +3243,106 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+
+	.bulk-epic-create-section {
+		border-top: 1px solid oklch(0.26 0.02 250);
+		padding: 0.5rem 0.5rem 0.25rem;
+	}
+
+	.bulk-epic-new-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		background: transparent;
+		border: 1px dashed oklch(0.35 0.04 250);
+		border-radius: 0.375rem;
+		color: oklch(0.65 0.08 240);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition: border-color 0.12s, color 0.12s, background 0.12s;
+	}
+
+	.bulk-epic-new-btn:hover:not(:disabled) {
+		border-color: oklch(0.55 0.12 240);
+		color: oklch(0.80 0.12 240);
+		background: oklch(0.70 0.18 240 / 0.06);
+	}
+
+	.bulk-epic-new-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	.bulk-epic-create-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.bulk-epic-create-input {
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.35 0.04 250);
+		border-radius: 0.375rem;
+		color: oklch(0.92 0.02 250);
+		font-size: 0.8125rem;
+		outline: none;
+		transition: border-color 0.12s;
+	}
+
+	.bulk-epic-create-input:focus {
+		border-color: oklch(0.60 0.15 240);
+	}
+
+	.bulk-epic-create-input:disabled { opacity: 0.5; }
+
+	.bulk-epic-create-error {
+		font-size: 0.75rem;
+		color: oklch(0.70 0.18 25);
+	}
+
+	.bulk-epic-create-actions {
+		display: flex;
+		gap: 0.375rem;
+		justify-content: flex-end;
+	}
+
+	.bulk-epic-create-cancel {
+		padding: 0.25rem 0.625rem;
+		background: transparent;
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.3125rem;
+		color: oklch(0.65 0.03 250);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.bulk-epic-create-cancel:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.82 0.03 250);
+	}
+
+	.bulk-epic-create-submit {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.625rem;
+		background: oklch(0.55 0.15 240 / 0.2);
+		border: 1px solid oklch(0.55 0.15 240 / 0.5);
+		border-radius: 0.3125rem;
+		color: oklch(0.82 0.12 240);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: background 0.12s, border-color 0.12s;
+	}
+
+	.bulk-epic-create-submit:hover:not(:disabled) {
+		background: oklch(0.60 0.18 240 / 0.3);
+		border-color: oklch(0.65 0.18 240 / 0.7);
+	}
+
+	.bulk-epic-create-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 	.task-id {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;

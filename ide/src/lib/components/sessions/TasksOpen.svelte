@@ -68,6 +68,7 @@
 		due_date?: string | null;
 		depends_on?: Dependency[];
 		agent_program?: string | null;
+		comment_count?: number;
 	}
 
 	type DueDateFilterType = 'today' | 'tomorrow' | 'week' | 'overdue' | 'unscheduled' | 'all';
@@ -2057,6 +2058,14 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-age" style="color: {taskAge.color};">{taskAge.label}</span>
 								{/if}
+								{#if task.comment_count > 0}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-count-badge">💬 {task.comment_count}</span>
+								{/if}
+								{#if taskImages[task.id]?.length > 0}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-count-badge">📎 {taskImages[task.id].length}</span>
+								{/if}
 								{#if task.labels && task.labels.length > 0}
 									<span class="mobile-task-separator">·</span>
 									{#each task.labels.slice(0, 2) as label}
@@ -3889,6 +3898,12 @@
 	.mobile-task-age {
 		font-weight: 600;
 		font-size: 0.5625rem;
+	}
+
+	.mobile-task-count-badge {
+		font-weight: 600;
+		font-size: 0.5625rem;
+		color: oklch(0.60 0.02 250);
 	}
 
 	.mobile-task-label {

@@ -882,6 +882,7 @@
 						labels: taskSource.labels,
 						created_at: taskSource.created_at,
 						agent_program: taskSource.agent_program,
+						comment_count: taskSource.comment_count || 0,
 					});
 				} else {
 					// No task — override idle state to 'planning'
@@ -2275,6 +2276,7 @@
 													{agentProjects}
 													{projectColors}
 													{taskIntegrations}
+													{taskImages}
 													{browserSessions}
 													{agentOutputs}
 													onKillSession={killSession}
@@ -2297,6 +2299,7 @@
 										{agentProjects}
 										{projectColors}
 										{taskIntegrations}
+										{taskImages}
 										{browserSessions}
 										{agentOutputs}
 										onKillSession={killSession}

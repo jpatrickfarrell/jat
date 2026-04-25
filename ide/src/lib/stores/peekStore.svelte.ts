@@ -2,13 +2,18 @@
  * Peek drawer state.
  *
  * Peek is a lightweight 40vw right drawer that previews the currently focused
- * listNav item. Routes opt in by attaching the `use:peek` action to their list
- * container; Space toggles, a second Space or Esc closes, and j/k continues to
- * navigate underneath the drawer — the content swaps in place without
- * re-rendering the list.
+ * listNav item. The system is global by default: a single `<PeekDrawer />`
+ * mounted in the root layout listens for Space at the window-capture phase,
+ * finds the focused `[data-nav-id]` element (`.jk-focused`), and toggles peek
+ * for that id. j/k continues to navigate underneath; content swaps in place.
  *
- * Distinct from the existing TaskDetailDrawer: that opens on Enter for a full
- * detail view. Peek is a faster, more ephemeral preview.
+ * Routes can opt OUT by setting `data-peek="false"` on a list container
+ * (e.g. /servers, where Space means play/pause). Opt out is the only thing
+ * routes need to think about — there is no `use:peek` action.
+ *
+ * Mental model: Space = glance, Enter = commit. Enter while peek is open
+ * promotes — closes peek and lets listNav's onSelect fire to open the full
+ * detail view.
  */
 
 import { tick } from 'svelte';
@@ -50,8 +55,9 @@ export function togglePeek(navId: string): void {
 }
 
 /**
- * Force peek to a new id without toggling — used by `use:peek` when j/k moves
- * focus while peek is already open, so the drawer follows the focus.
+ * Force peek to a new id without toggling — used by the global PeekDrawer
+ * MutationObserver when j/k moves focus while peek is already open, so the
+ * drawer follows the focus.
  */
 export function setPeek(navId: string): void {
 	if (!navId || peekNavId === navId) return;

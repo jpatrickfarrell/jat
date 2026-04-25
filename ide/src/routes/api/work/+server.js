@@ -746,7 +746,8 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 						labels: t.labels || [],
 						created_at: t.created_at,
 						agent_program: t.agent_program,
-						model: t.model
+						model: t.model,
+						comment_count: t.comment_count || 0
 					});
 				}
 			});
@@ -786,7 +787,8 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 						closedAt: t.updated_at,
 						created_at: t.created_at,
 						agent_program: t.agent_program,
-						model: t.model
+						model: t.model,
+						comment_count: t.comment_count || 0
 					});
 				}
 			});

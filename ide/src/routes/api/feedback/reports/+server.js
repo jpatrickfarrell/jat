@@ -1,11 +1,11 @@
 /**
  * Feedback Reports List API
  *
- * GET /api/feedback/reports - List all feedback widget + voice reports
+ * GET /api/feedback/reports - List feedback widget + voice reports
  *
- * Queries tasks.db directly (no ingest.db join). Returns reports with enriched
- * data: page_url (parsed from task description), screenshot_urls (from
- * task-images.json), console_logs/network_requests (from metadata JSON), etc.
+ * Tries the project's configured backend first (Postgres for graduated projects
+ * like JAT), falling back to the legacy SQLite tasks.db path. Filters by the
+ * 'widget', 'bug-report', or 'voice' labels, or a [Feedback]/[Voice] title prefix.
  *
  * CORS enabled for cross-origin widget usage.
  */
@@ -78,12 +78,139 @@ function getScreenshotUrls(projectPath, taskId) {
 	}
 }
 
+function isWidgetTask(task) {
+	const labels = task.labels || [];
+	const title = task.title || '';
+	return (
+		labels.includes('widget') ||
+		labels.includes('bug-report') ||
+		labels.includes('voice') ||
+		title.startsWith('[Feedback]') ||
+		title.startsWith('[Voice]')
+	);
+}
+
+/** Map a Postgres-backend task (mapRow format) to the widget ReportSummary shape. */
+function mapPgTask(task, projectPath) {
+	const title = (task.title || '').replace(/^\[Feedback\]\s*|\[Voice\]\s*/g, '');
+	const pageUrl = parsePageUrl(task.description);
+	const screenshotUrls = getScreenshotUrls(projectPath, task.id);
+
+	let description = task.description || '';
+	const metaStart = description.indexOf('\n\n**Page:**');
+	if (metaStart > 0) description = description.substring(0, metaStart).trim();
+
+	const labels = task.labels || [];
+	const source = labels.includes('voice') || (task.title || '').startsWith('[Voice]')
+		? 'jat'   // voice tasks come from JAT
+		: 'feedback';
+
+	return {
+		id: task.db_id || task.id,  // use UUID for /api/tasks/:id/comments lookups
+		title,
+		description,
+		type: task.issue_type || 'bug',
+		priority: task.priority != null ? String(task.priority) : '2',
+		status: mapTaskStatusToReportStatus(task.status, task.close_reason),
+		dev_notes: task.notes || null,
+		revision_count: 0,
+		responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
+		page_url: pageUrl,
+		screenshot_urls: screenshotUrls,
+		thread: null,
+		recording_url: parseRecordingUrl(task.description),
+		console_logs: null,
+		network_requests: null,
+		created_at: task.created_at,
+		source,
+		issue_type: task.issue_type || 'bug',
+		assignee: task.assignee || null,
+		labels: task.labels || null,
+	};
+}
+
+/** Map a SQLite row to the widget ReportSummary shape (existing logic). */
+function mapSqliteTask(task, projectPath) {
+	let metadata = null;
+	if (task.metadata) {
+		try { metadata = JSON.parse(task.metadata); } catch { /* ignore */ }
+	}
+
+	const title = (task.title || '').replace(/^\[Feedback\]\s*/, '');
+	const pageUrl = parsePageUrl(task.description);
+	const screenshotUrls = getScreenshotUrls(projectPath, task.id);
+
+	let description = task.description || '';
+	const metaStart = description.indexOf('\n\n**Page:**');
+	if (metaStart > 0) description = description.substring(0, metaStart).trim();
+
+	let thread = null;
+	let revisionCount = 0;
+	try {
+		const rawThread = getThread(task.id);
+		if (rawThread && rawThread.length > 0) {
+			thread = rawThread.map((entry) => {
+				if (entry.screenshots && entry.screenshots.length > 0) {
+					return {
+						...entry,
+						screenshots: entry.screenshots.map((s) => ({
+							...s,
+							url: s.path ? `/api/work/image/${basename(s.path)}` : undefined
+						}))
+					};
+				}
+				return entry;
+			});
+			revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
+		}
+	} catch { /* non-fatal */ }
+
+	return {
+		id: task.id,
+		title,
+		description,
+		type: task.issue_type || 'bug',
+		priority: task.priority != null ? String(task.priority) : '2',
+		status: mapTaskStatusToReportStatus(task.status, task.close_reason),
+		dev_notes: task.notes || null,
+		revision_count: revisionCount,
+		responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
+		page_url: pageUrl,
+		screenshot_urls: screenshotUrls,
+		thread,
+		recording_url: parseRecordingUrl(task.description),
+		console_logs: metadata?.console_logs ?? null,
+		network_requests: metadata?.network_requests ?? null,
+		created_at: task.created_at,
+	};
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
 	try {
 		const projectPath = process.cwd().replace(/\/ide$/, '');
-		const tasksDbPath = join(projectPath, '.jat', 'tasks.db');
 
+		// --- Postgres path (graduated projects) ---
+		try {
+			const { resolveBackendForProject } = await import('../../../../../../lib/projects-config.js');
+			const cfg = resolveBackendForProject('jat');
+			if (cfg.kind === 'postgres') {
+				const { getBackendForProject } = await import('../../../../../../lib/tasks-backend.js');
+				const pgBackend = await getBackendForProject('jat');
+				const allTasks = await pgBackend.list({ projectName: 'jat' });
+				const reports = allTasks
+					.filter(isWidgetTask)
+					.map((t) => mapPgTask(t, projectPath))
+					.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+					.slice(0, 100);
+				return json({ reports }, { headers: CORS_HEADERS });
+			}
+		} catch {
+			// Not a Postgres project — fall through to SQLite
+		}
+
+		// --- SQLite path (non-graduated projects) ---
+		const tasksDbPath = join(projectPath, '.jat', 'tasks.db');
 		if (!existsSync(tasksDbPath)) {
 			return json({ reports: [] }, { headers: CORS_HEADERS });
 		}
@@ -102,72 +229,9 @@ export async function GET() {
 		).all();
 		db.close();
 
-		const reports = rows.map((task) => {
-			let metadata = null;
-			if (task.metadata) {
-				try {
-					metadata = JSON.parse(task.metadata);
-				} catch {
-					metadata = null;
-				}
-			}
-
-			const title = (task.title || '').replace(/^\[Feedback\]\s*/, '');
-			const pageUrl = parsePageUrl(task.description);
-			const screenshotUrls = getScreenshotUrls(projectPath, task.id);
-
-			// User description (before **Page:** metadata)
-			let description = task.description || '';
-			const metaStart = description.indexOf('\n\n**Page:**');
-			if (metaStart > 0) {
-				description = description.substring(0, metaStart).trim();
-			}
-
-			// Thread (sidecar JSON) — feedback-widget tasks only
-			let thread = null;
-			let revisionCount = 0;
-			try {
-				const rawThread = getThread(task.id);
-				if (rawThread && rawThread.length > 0) {
-					thread = rawThread.map((entry) => {
-						if (entry.screenshots && entry.screenshots.length > 0) {
-							return {
-								...entry,
-								screenshots: entry.screenshots.map((s) => ({
-									...s,
-									url: s.path ? `/api/work/image/${basename(s.path)}` : undefined
-								}))
-							};
-						}
-						return entry;
-					});
-					revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
-				}
-			} catch {
-				// non-fatal
-			}
-
-			return {
-				id: task.id,
-				title,
-				description,
-				type: task.issue_type || 'bug',
-				priority: task.priority != null ? String(task.priority) : '2',
-				status: mapTaskStatusToReportStatus(task.status, task.close_reason),
-				dev_notes: task.notes || null,
-				revision_count: revisionCount,
-				responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
-				page_url: pageUrl,
-				screenshot_urls: screenshotUrls,
-				thread,
-				recording_url: parseRecordingUrl(task.description),
-				console_logs: metadata?.console_logs ?? null,
-				network_requests: metadata?.network_requests ?? null,
-				created_at: task.created_at
-			};
-		});
-
+		const reports = rows.map((task) => mapSqliteTask(task, projectPath));
 		return json({ reports }, { headers: CORS_HEADERS });
+
 	} catch (err) {
 		console.error('[feedback/reports] Error:', err);
 		return json(

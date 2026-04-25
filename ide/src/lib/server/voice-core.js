@@ -6,7 +6,7 @@
  * and /voice-diarize routes.
  */
 import { appendFileSync, mkdirSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { join, dirname, basename } from 'path';
 import { homedir, tmpdir } from 'os';
 
@@ -41,8 +41,11 @@ export function vlog(msg) {
 
 /**
  * Load project names and descriptions from ~/.config/jat/projects.json.
- * Returns an array of { name, description } for projects that have descriptions.
- * @returns {Array<{name: string, description: string}>}
+ * Returns an array of { name, description, members? } for projects that have descriptions.
+ * The optional `members` field is an array of { name, email } passed through verbatim
+ * when present in the project config — used by organizeTranscript() to inject team-member
+ * context into the prompt.
+ * @returns {Array<{name: string, description: string, members?: Array<{name: string, email: string}>}>}
  */
 export function loadProjects() {
 	try {
@@ -51,10 +54,122 @@ export function loadProjects() {
 		const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 		return Object.entries(config.projects || {})
 			.filter(([, p]) => p.description && !p.hidden)
-			.map(([name, p]) => ({ name, description: p.description }));
+			.map(([name, p]) => {
+				const out = { name, description: p.description };
+				if (Array.isArray(p.members) && p.members.length > 0) {
+					out.members = p.members.filter(m => m && typeof m === 'object' && m.name);
+				}
+				return out;
+			});
 	} catch {
 		return [];
 	}
+}
+
+/**
+ * Run a `jt` subcommand and parse its JSON output.
+ * Returns null on failure (timeout, non-zero exit, invalid JSON, jt not on PATH) —
+ * callers should treat null as "no data" and degrade gracefully.
+ * @param {string[]} args
+ * @param {{ timeout?: number }} [opts]
+ * @returns {Promise<any|null>}
+ */
+function execJtJson(args, opts = {}) {
+	const timeout = opts.timeout ?? 10_000;
+	return new Promise((resolve) => {
+		execFile('jt', args, {
+			timeout,
+			encoding: 'utf-8',
+			maxBuffer: 50 * 1024 * 1024
+		}, (err, stdout) => {
+			if (err) {
+				vlog(`jt ${args.join(' ')} failed: ${err.message}`);
+				resolve(null);
+				return;
+			}
+			try {
+				resolve(JSON.parse(stdout));
+			} catch (parseErr) {
+				vlog(`jt ${args.join(' ')} returned invalid JSON: ${parseErr.message}`);
+				resolve(null);
+			}
+		});
+	});
+}
+
+/**
+ * Load JAT task context (open epics, in-progress tasks, recent completions) so
+ * the organize prompt can link new voice-extracted tasks back to existing work.
+ *
+ * Each underlying `jt list` call runs in parallel with a 10s timeout. On any
+ * failure the affected bucket falls back to empty — this is best-effort context
+ * and must never block voice processing.
+ *
+ * Caps and truncations:
+ *   - epics: 10 per project
+ *   - in-progress: 20 per project
+ *   - recent completions: 20 per project, only those updated within the last 7 days
+ *   - all titles + descriptions truncated to 100 chars
+ *
+ * @param {Array<{name: string}>} [projects] — used only to ensure listed projects
+ *   appear as keys in the result even when they have no current activity
+ * @returns {Promise<Object<string, {epics: Array, inProgress: Array, recentCompletions: Array}>>}
+ */
+export async function loadJatContext(projects = []) {
+	const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+	const [epicsRaw, inProgressRaw, closedRaw] = await Promise.all([
+		execJtJson(['list', '--status', 'open', '--type', 'epic', '--json'], { timeout: 10_000 }),
+		execJtJson(['list', '--status', 'in_progress', '--json'], { timeout: 10_000 }),
+		execJtJson(['list', '--status', 'closed', '--json'], { timeout: 10_000 })
+	]);
+
+	const trunc = (s, n = 100) => {
+		const str = typeof s === 'string' ? s : '';
+		return str.length > n ? str.slice(0, n - 1) + '…' : str;
+	};
+
+	const groupAndCap = (items, cap, predicate = () => true) => {
+		const buckets = {};
+		if (!Array.isArray(items)) return buckets;
+		for (const item of items) {
+			if (!item || !predicate(item)) continue;
+			const project = item.project || 'unknown';
+			if (!buckets[project]) buckets[project] = [];
+			if (buckets[project].length >= cap) continue;
+			buckets[project].push({
+				id: item.id,
+				title: trunc(item.title),
+				description: trunc(item.description)
+			});
+		}
+		return buckets;
+	};
+
+	const epicsByProject = groupAndCap(epicsRaw, 10);
+	const inProgressByProject = groupAndCap(inProgressRaw, 20);
+	const recentByProject = groupAndCap(closedRaw, 20, (item) => {
+		if (!item.updated_at) return false;
+		const t = Date.parse(item.updated_at);
+		return Number.isFinite(t) && t >= since;
+	});
+
+	const projectNames = new Set([
+		...projects.map(p => p && p.name).filter(Boolean),
+		...Object.keys(epicsByProject),
+		...Object.keys(inProgressByProject),
+		...Object.keys(recentByProject)
+	]);
+
+	const result = {};
+	for (const name of projectNames) {
+		result[name] = {
+			epics: epicsByProject[name] || [],
+			inProgress: inProgressByProject[name] || [],
+			recentCompletions: recentByProject[name] || []
+		};
+	}
+	return result;
 }
 
 /**
@@ -295,7 +410,7 @@ function repairTruncatedJson(str, log) {
 	return null;
 }
 
-export async function organizeTranscript(transcript, projects = [], mode = 'organize') {
+export async function organizeTranscript(transcript, projects = [], mode = 'organize', jatContext = {}) {
 	if (mode !== 'organize' && mode !== 'kb' && mode !== 'summary') {
 		throw new Error(`Unsupported organizeTranscript mode: ${mode}`);
 	}
@@ -315,6 +430,60 @@ ${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
 
 If an entry doesn't clearly belong to any project, omit the "project" field.`
 		: '';
+
+	// JAT context — only injected in 'organize' mode, where epic linking and member
+	// attribution influence the generated tasks. KB and summary modes don't produce
+	// tasks, so injecting this would just bloat the prompt for no win.
+	let jatContextSection = '';
+	let jatContextCounts = { epics: 0, inProgress: 0, recentCompletions: 0, members: 0 };
+	if (mode === 'organize') {
+		const projectMembersByName = new Map(
+			projects.filter(p => Array.isArray(p.members) && p.members.length > 0).map(p => [p.name, p.members])
+		);
+		const allProjectNames = new Set([
+			...Object.keys(jatContext || {}),
+			...projectMembersByName.keys()
+		]);
+
+		const lines = [];
+		for (const name of allProjectNames) {
+			const ctx = (jatContext && jatContext[name]) || {};
+			const epics = Array.isArray(ctx.epics) ? ctx.epics : [];
+			const inProgress = Array.isArray(ctx.inProgress) ? ctx.inProgress : [];
+			const recent = Array.isArray(ctx.recentCompletions) ? ctx.recentCompletions : [];
+			const members = projectMembersByName.get(name) || [];
+
+			if (epics.length === 0 && inProgress.length === 0 && recent.length === 0 && members.length === 0) {
+				continue;
+			}
+
+			lines.push(`Project "${name}":`);
+			if (epics.length > 0) {
+				lines.push('  Open epics:');
+				for (const e of epics) lines.push(`    - ${e.id}: ${e.title}`);
+				jatContextCounts.epics += epics.length;
+			}
+			if (inProgress.length > 0) {
+				lines.push(`  In progress: ${inProgress.map(t => t.title).filter(Boolean).join('; ')}`);
+				jatContextCounts.inProgress += inProgress.length;
+			}
+			if (recent.length > 0) {
+				lines.push(`  Recently completed (last 7d): ${recent.map(t => t.title).filter(Boolean).join('; ')}`);
+				jatContextCounts.recentCompletions += recent.length;
+			}
+			if (members.length > 0) {
+				lines.push(`  Team members: ${members.map(m => m.email ? `${m.name} (${m.email})` : m.name).join(', ')}`);
+				jatContextCounts.members += members.length;
+			}
+		}
+
+		if (lines.length > 0) {
+			jatContextSection = `JAT Context (use this to link tasks to existing work):
+${lines.join('\n')}
+
+If a task clearly belongs to a listed epic, add "epic_id": "<id>" to that task object.`;
+		}
+	}
 
 	const summaryPrompt = `You are a note organizer. Given a voice note transcript, produce exactly two things:
 
@@ -397,10 +566,19 @@ Task types: task, feature, bug, chore
 Priority: 0=critical 1=high 2=medium 3=low 4=lowest
 Use priority cues ("urgent", "first thing", "must", "deadline" → lower number).
 Group related items into one task rather than splitting trivially.
-${projectSection}
+${jatContextSection ? `${jatContextSection}\n\n` : ''}${projectSection}
 
 Transcript:
 ${transcript}`;
+
+	if (mode === 'organize') {
+		const totalCtx = jatContextCounts.epics + jatContextCounts.inProgress + jatContextCounts.recentCompletions + jatContextCounts.members;
+		if (totalCtx > 0) {
+			vlog(`injecting ${jatContextCounts.epics} epics, ${jatContextCounts.inProgress} in-progress, ${jatContextCounts.recentCompletions} recent completions, ${jatContextCounts.members} members into organize prompt`);
+		} else {
+			vlog('no JAT context to inject (empty epics/in-progress/recent/members)');
+		}
+	}
 
 	const response = await fetch('http://localhost:11434/api/generate', {
 		method: 'POST',

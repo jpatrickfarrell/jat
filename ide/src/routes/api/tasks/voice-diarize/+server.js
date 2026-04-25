@@ -27,6 +27,7 @@ import {
 	TEMP_DIR,
 	vlog,
 	loadProjects,
+	loadJatContext,
 	transcribe,
 	organizeTranscript,
 	appendToVoiceTimeline,
@@ -157,7 +158,8 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 		// Step 3: Organize transcript into structured tasks via ollama
 		try {
 			const projects = loadProjects();
-			const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
+			const jatContext = await loadJatContext(projects);
+			const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects, 'organize', jatContext);
 			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId);
 			vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 		} catch (organizeErr) {
@@ -200,7 +202,9 @@ export async function POST({ request }) {
 
 			const projects = loadProjects();
 			const fallbackTitle = body.title?.trim() || `Voice note ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`;
-			organizeTranscript(text, projects).then(({ tasks, summary, title, knowledgeBase }) => {
+			loadJatContext(projects)
+				.then(jatContext => organizeTranscript(text, projects, 'organize', jatContext))
+				.then(({ tasks, summary, title, knowledgeBase }) => {
 				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
 				vlog(`[voice-diarize] Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {

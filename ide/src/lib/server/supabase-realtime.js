@@ -10,7 +10,7 @@
  *                     → download audio → transcribe → organizeTranscript()
  *                     → if tasks[]: INSERT N child rows + PATCH placeholder to status='voice_split'
  *                     → else: PATCH placeholder {title, description, status:'open'}
- * 3. UPDATE SYNC    — status changes and dev_notes updates → JAT task
+ * 3. UPDATE SYNC    — status changes → JAT task
  * 4. BOOT CATCH-UP  — on start: process missed records and stuck voice records (>30s)
  * 5. STALE CLEANUP  — voice records stuck >5min → PATCH status='failed'
  *
@@ -423,12 +423,6 @@ async function handleUpdate(source, row, oldRow, serviceKey) {
 			args.push('--status', jatStatus);
 			changes.push(`status=${jatStatus}`);
 		}
-	}
-
-	// Sync dev_notes → task notes
-	if (oldRow && row.dev_notes !== oldRow.dev_notes && row.dev_notes) {
-		args.push('--notes', String(row.dev_notes));
-		changes.push('dev_notes');
 	}
 
 	if (changes.length === 0) return;

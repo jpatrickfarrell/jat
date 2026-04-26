@@ -8,7 +8,7 @@ argument-hint: [agent-name task-id]
 
 Unlike `/jat:start` which runs a full task workflow, `/jat:chat` is optimized for conversational back-and-forth:
 1. Read the message
-2. Reply via `jat-signal reply`
+2. Post a reply comment on the task
 3. Pause and wait for follow-up
 
 ## Usage
@@ -24,7 +24,7 @@ Unlike `/jat:start` which runs a full task workflow, `/jat:chat` is optimized fo
 1. **Establish identity** - Use pre-registered agent (same as /jat:start)
 2. **Read the task** - Get the message from task description
 3. **Emit starting + working signals** - So IDE tracks the session
-4. **Reply via `jat-signal reply`** - Send response back to originating channel
+4. **Post reply comment** - Write a task comment (external=true) as the response
 5. **Pause** - Call pause API so session can resume on next reply
 
 **Skip entirely:** Memory search, prior task review, conflict detection, review signals.
@@ -132,7 +132,6 @@ Read the task description carefully. It contains:
 - The original message (in the title and first line of description)
 - Sender info (`From: @username`)
 - Origin channel info (`Origin: telegram channel ...`)
-- A reply template showing how to use `jat-signal reply`
 - Any follow-up replies appended as `**Reply from @username** (timestamp):`
 
 **Process the message and formulate your response.** This could be:
@@ -140,22 +139,25 @@ Read the task description carefully. It contains:
 - Acknowledging a request
 - Asking for clarification
 
-**Send the reply:**
+**Post the reply as a task comment:**
 ```bash
-jat-signal reply '{
-  "taskId": "task-id",
-  "message": "Your response here",
-  "replyType": "answer"
-}'
+IDE_URL="http://127.0.0.1:3333"
+TASK_ID="the-task-id"
+AGENT_NAME="YourAgentName"
+
+curl -s -X POST "${IDE_URL}/api/tasks/${TASK_ID}/comments" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"text\": \"Your response here\",
+    \"author\": \"${AGENT_NAME}\",
+    \"author_type\": \"agent\",
+    \"comment_type\": \"note\"
+  }"
 ```
 
-**Reply types (use exactly ONE per response):**
-- `ack` - Acknowledgment (received, will look into it)
-- `answer` - Direct answer to a question
-- `progress` - Status update on ongoing work
-- `completion` - Final response, task is done (then run `/jat:complete` instead of pausing)
+The comment API automatically sets `external: true` for agent-authored comments (jat-47wul.2 policy), making it visible in the widget panel and IDE thread.
 
-**IMPORTANT:** Send only ONE `jat-signal reply` per response. Do NOT send multiple signals with different replyTypes for the same message.
+**IMPORTANT:** Post only ONE comment per response. Do NOT post multiple comments for the same message.
 
 ### STEP 7: Pause Session
 

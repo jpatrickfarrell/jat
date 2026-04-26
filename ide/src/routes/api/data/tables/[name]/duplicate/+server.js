@@ -3,7 +3,12 @@
  * POST /api/data/tables/[name]/duplicate  - Duplicate a table (schema + data + metadata)
  */
 import { json } from '@sveltejs/kit';
-import { duplicateDataTable, isSystemTable } from '$lib/server/jat-data.js';
+import {
+	duplicateDataTable,
+	isSystemTable,
+	isPostgresProject,
+	pgDuplicateDataTable,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -30,6 +35,11 @@ export async function POST({ params, request }) {
 	const targetName = newName?.trim() || `${sourceName}_copy`;
 
 	try {
+		if (isPostgresProject(project)) {
+			await pgDuplicateDataTable(project, sourceName, targetName);
+			return json({ success: true, sourceName, newName: targetName });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });

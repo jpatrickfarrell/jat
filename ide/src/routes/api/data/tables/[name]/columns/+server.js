@@ -3,7 +3,11 @@
  * POST /api/data/tables/[name]/columns - Add, delete, duplicate, or rename columns
  */
 import { json } from '@sveltejs/kit';
-import { addColumn, deleteColumn, duplicateColumn, renameColumn, isSystemTable } from '$lib/server/jat-data.js';
+import {
+	addColumn, deleteColumn, duplicateColumn, renameColumn, isSystemTable,
+	isPostgresProject,
+	pgAddColumn, pgDeleteColumn, pgDuplicateColumn, pgRenameColumn,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -24,9 +28,16 @@ export async function POST({ params, request }) {
 			return json({ error: 'Missing required field: action' }, { status: 400 });
 		}
 
-		const { path, exists } = await getProjectPath(project);
-		if (!exists) {
-			return json({ error: `Project not found: ${project}` }, { status: 404 });
+		const isPg = isPostgresProject(project);
+
+		// SQLite path needs a resolved project path; postgres uses the project name.
+		let path = null;
+		if (!isPg) {
+			const r = await getProjectPath(project);
+			if (!r.exists) {
+				return json({ error: `Project not found: ${project}` }, { status: 404 });
+			}
+			path = r.path;
 		}
 
 		switch (action) {
@@ -35,7 +46,11 @@ export async function POST({ params, request }) {
 				if (!column) {
 					return json({ error: 'Missing required field: column' }, { status: 400 });
 				}
-				addColumn(path, tableName, column, sqliteType || 'TEXT', semanticType, config || {});
+				if (isPg) {
+					await pgAddColumn(project, tableName, column, sqliteType || 'TEXT', semanticType, config || {});
+				} else {
+					addColumn(path, tableName, column, sqliteType || 'TEXT', semanticType, config || {});
+				}
 				return json({ success: true, action: 'add', column });
 			}
 
@@ -44,7 +59,11 @@ export async function POST({ params, request }) {
 				if (!column) {
 					return json({ error: 'Missing required field: column' }, { status: 400 });
 				}
-				deleteColumn(path, tableName, column);
+				if (isPg) {
+					await pgDeleteColumn(project, tableName, column);
+				} else {
+					deleteColumn(path, tableName, column);
+				}
 				return json({ success: true, action: 'delete', column });
 			}
 
@@ -56,7 +75,11 @@ export async function POST({ params, request }) {
 				if (!newName) {
 					return json({ error: 'Missing required field: newName' }, { status: 400 });
 				}
-				duplicateColumn(path, tableName, sourceColumn, newName);
+				if (isPg) {
+					await pgDuplicateColumn(project, tableName, sourceColumn, newName);
+				} else {
+					duplicateColumn(path, tableName, sourceColumn, newName);
+				}
 				return json({ success: true, action: 'duplicate', sourceColumn, newName });
 			}
 
@@ -68,7 +91,11 @@ export async function POST({ params, request }) {
 				if (!newName) {
 					return json({ error: 'Missing required field: newName' }, { status: 400 });
 				}
-				renameColumn(path, tableName, column, newName);
+				if (isPg) {
+					await pgRenameColumn(project, tableName, column, newName);
+				} else {
+					renameColumn(path, tableName, column, newName);
+				}
 				return json({ success: true, action: 'rename', column, newName });
 			}
 

@@ -1,10 +1,19 @@
 /**
- * Column Metadata API
- * PUT    /api/data/tables/[name]/columns/[column]  - Set/update semantic type + config
- * DELETE /api/data/tables/[name]/columns/[column]  - Remove metadata (revert to raw type)
+ * Column Metadata API (single column)
+ *
+ * Legacy endpoint for the /data UI's column-settings panel. Mirrors the
+ * /column-meta endpoint but keyed by URL params; both are kept so the
+ * existing front-end (saveColumnSettings → PUT here) and CLI/agents
+ * (POST /column-meta) can coexist.
+ *
+ *   PUT    /api/data/tables/[name]/columns/[column]   - Set/update semantic type + config
+ *   DELETE /api/data/tables/[name]/columns/[column]   - Remove metadata (revert to raw type)
  */
 import { json } from '@sveltejs/kit';
-import { setColumnMetadata, deleteColumnMetadata } from '$lib/server/jat-data.js';
+import {
+	setColumnMetadata, deleteColumnMetadata,
+	isPostgresProject, pgSetColumnMetadata, pgDeleteColumnMetadata,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -22,15 +31,19 @@ export async function PUT({ params, request }) {
 			return json({ error: 'Missing required field: semanticType' }, { status: 400 });
 		}
 
+		const opts = { displayName, description };
+
+		if (isPostgresProject(project)) {
+			await pgSetColumnMetadata(project, tableName, columnName, semanticType, config || {}, opts);
+			return json({ success: true });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		setColumnMetadata(path, tableName, columnName, semanticType, config || {}, {
-			displayName,
-			description,
-		});
+		setColumnMetadata(path, tableName, columnName, semanticType, config || {}, opts);
 		return json({ success: true });
 	} catch (error) {
 		return json({ error: error.message }, { status: 400 });
@@ -48,6 +61,11 @@ export async function DELETE({ params, url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			await pgDeleteColumnMetadata(project, tableName, columnName);
+			return json({ success: true });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });

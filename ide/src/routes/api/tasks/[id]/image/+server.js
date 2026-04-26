@@ -153,15 +153,71 @@ export async function GET({ params }) {
 
 	try {
 		const images = await loadTaskImages();
-		const taskImages = images[taskId] || [];
+		const localImages = images[taskId] || [];
+
+		// For postgres-backed projects, also pull screenshot_paths from Supabase.
+		// These are storage paths (e.g. "tasks/uuid/file.png" or "reports/ts-hash.jpg")
+		// served from the public "screenshots" bucket.
+		const remoteImages = await fetchSupabaseAttachments(taskId);
+
+		// Deduplicate: don't show a remote image that was already synced locally.
+		// Local entries store the storagePath in their id (see syncAttachmentToSupabase).
+		// Simple dedup: if a local image's path contains the storage path, skip the remote.
+		const localPaths = new Set(localImages.map(/** @param {{ path: string }} img */ img => img.path));
+		const deduped = remoteImages.filter(
+			/** @param {{ path: string }} img */ img => !localPaths.has(img.path)
+		);
 
 		return json({
 			taskId,
-			images: taskImages
+			images: [...localImages, ...deduped]
 		});
 	} catch (err) {
 		console.error('Error getting task images:', err);
 		return json({ error: 'Failed to get task images' }, { status: 500 });
+	}
+}
+
+/**
+ * Fetch screenshot_paths from Supabase for postgres-backed projects and
+ * convert each storage path to a public URL so the client can display it.
+ *
+ * @param {string} taskId
+ * @returns {Promise<Array<{id: string, path: string, uploadedAt: string}>>}
+ */
+async function fetchSupabaseAttachments(taskId) {
+	const projectName = getProjectFromTaskId(taskId);
+	if (!projectName) return [];
+
+	const supabase = getProjectSupabaseConfig(projectName);
+	if (!supabase) return [];
+
+	try {
+		const res = await fetch(
+			`${supabase.supabaseUrl}/rest/v1/project_tasks?select=screenshot_paths,updated_at&jat_id=eq.${encodeURIComponent(taskId)}&limit=1`,
+			{
+				headers: {
+					Authorization: `Bearer ${supabase.serviceRoleKey}`,
+					apikey: supabase.serviceRoleKey
+				}
+			}
+		);
+		if (!res.ok) return [];
+
+		const rows = await res.json();
+		if (!rows?.length || !Array.isArray(rows[0]?.screenshot_paths)) return [];
+
+		const { screenshot_paths, updated_at } = rows[0];
+		const uploadedAt = updated_at ? new Date(updated_at).toISOString() : new Date().toISOString();
+
+		return screenshot_paths.map((/** @type {string} */ storagePath, /** @type {number} */ i) => ({
+			id: `remote-${taskId}-${i}-${storagePath.replace(/[^a-z0-9]/gi, '_')}`,
+			// Full public URL — TaskDetailDrawer renders paths starting with 'http' directly.
+			path: `${supabase.supabaseUrl}/storage/v1/object/public/screenshots/${storagePath}`,
+			uploadedAt
+		}));
+	} catch {
+		return [];
 	}
 }
 

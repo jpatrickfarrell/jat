@@ -1082,6 +1082,7 @@
 	// Fetch text previews for text/code/data attachments
 	async function fetchTextPreviews(atts: TaskAttachment[]) {
 		for (const att of atts) {
+			if (att.path.startsWith('http')) continue; // remote URLs served directly, no proxy needed
 			const info = getFileTypeInfoFromPath(att.path);
 			if (info.category === 'text' || info.category === 'code' || info.category === 'data') {
 				if (textPreviews.has(att.id)) continue;
@@ -4175,16 +4176,18 @@
 								<div class="grid grid-cols-2 gap-3 p-3 rounded overflow-visible bg-base-200">
 									{#each attachments as attachment (attachment.id)}
 										{@const typeInfo = getFileTypeInfoFromPath(attachment.path)}
+										{@const isRemote = attachment.path.startsWith('http')}
+										{@const imageUrl = isRemote ? attachment.path : `/api/work/image${attachment.path}`}
 										<div class="relative group">
 											<a
-												href={`/api/work/image${attachment.path}`}
+												href={imageUrl}
 												target="_blank"
 												rel="noopener noreferrer"
 												class="block"
 											>
 												{#if typeInfo.category === 'image'}
 													<img
-														src={`/api/work/image${attachment.path}`}
+														src={imageUrl}
 														alt="Task attachment"
 														class="w-full h-90 object-cover rounded border border-base-300 cursor-pointer hover:border-primary transition-colors"
 													/>
@@ -4213,7 +4216,8 @@
 													{/if}
 												{/if}
 											</a>
-											<!-- Delete button -->
+											<!-- Delete button (local attachments only — remote Supabase attachments must be deleted via Meadow) -->
+											{#if !isRemote}
 											<button
 												class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-error text-error-content"
 												onclick={(e) => {
@@ -4227,6 +4231,7 @@
 													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
 												</svg>
 											</button>
+											{/if}
 											{#if typeInfo.category === 'image'}
 												<div
 													class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b bg-base-100/90 text-base-content/60"

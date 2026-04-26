@@ -66,6 +66,21 @@
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
 
+	// IDE operator identity — resolved once on mount, used as comment author.
+	// Falls back to 'user' only if identity endpoint is unreachable.
+	let authorName = $state('user');
+	let authorEmail = $state<string | null>(null);
+
+	$effect(() => {
+		fetch('/api/config/user')
+			.then(r => r.ok ? r.json() : null)
+			.then(data => {
+				if (data?.name) authorName = data.name;
+				if (data?.email) authorEmail = data.email;
+			})
+			.catch(() => {});
+	});
+
 	// Composer visibility toggle: false = external (default, visible to reporter),
 	// true = internal (dev-only). Resets to external after every successful submit —
 	// internal is always an explicit opt-in per draft so you can't accidentally
@@ -134,7 +149,8 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					text,
-					author: 'user',
+					author: authorName,
+					author_email: authorEmail,
 					author_type: 'user',
 					comment_type,
 					external: !sendInternal,

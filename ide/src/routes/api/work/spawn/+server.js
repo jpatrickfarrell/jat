@@ -615,8 +615,10 @@ function selectAgentAndModel({ agentId, model, task }) {
 		};
 	}
 
-	// Get model (explicit override or configured fallback)
-	const fallbackModelName = model || config.defaults.fallbackModel;
+	// Get model: explicit override → agent's own defaultModel → global fallbackModel
+	// Prefer the agent's configured defaultModel so that editing claude-code's default
+	// in the AgentProgramsEditor actually affects spawning, not just explicit selection.
+	const fallbackModelName = model || fallbackAgent.defaultModel || config.defaults.fallbackModel;
 	const fallbackModel = getAgentModel(fallbackAgent, fallbackModelName);
 	if (!fallbackModel) {
 		return {
@@ -629,7 +631,7 @@ function selectAgentAndModel({ agentId, model, task }) {
 		agent: fallbackAgent,
 		model: fallbackModel,
 		matchedRule: null,
-		reason: 'Using fallback agent (no routing rules matched)'
+		reason: `Using fallback agent with model ${fallbackModel.shortName} (no routing rules matched)`
 	};
 }
 

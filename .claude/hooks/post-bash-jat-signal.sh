@@ -218,6 +218,25 @@ if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
                     PARSED_DATA=$(echo "$PARSED_DATA" | jq -c --arg title "$LOOKED_UP_TITLE" '. + {taskTitle: $title}' 2>/dev/null || echo "$PARSED_DATA")
                 fi
             fi
+            # Stamp model shortname on the task so the IDE can display it for CLI-started sessions.
+            # Resolve full model ID → shortName from agents.json model table (dynamic, not hardcoded).
+            if [[ -n "$START_TASK_ID" ]]; then
+                START_MODEL_FULL=$(echo "$PARSED_DATA" | jq -r '.model // ""' 2>/dev/null || echo "")
+                START_MODEL_SHORT=""
+                AGENTS_CONFIG="$HOME/.config/jat/agents.json"
+                if [[ -n "$START_MODEL_FULL" && -f "$AGENTS_CONFIG" ]]; then
+                    START_MODEL_SHORT=$(jq -r --arg id "$START_MODEL_FULL" \
+                        '[.programs[] | .models[]? | select(.id == $id) | .shortName] | first // ""' \
+                        "$AGENTS_CONFIG" 2>/dev/null || echo "")
+                fi
+                if [[ -n "$START_MODEL_SHORT" ]]; then
+                    # Best-effort fire-and-forget: stamp model on the task via IDE API
+                    curl -s -X PUT "http://localhost:3333/api/tasks/${START_TASK_ID}" \
+                        -H "Content-Type: application/json" \
+                        -d "{\"model\": \"${START_MODEL_SHORT}\"}" \
+                        >/dev/null 2>&1 &
+                fi
+            fi
             ;;
         # idle, compacting are more flexible
     esac

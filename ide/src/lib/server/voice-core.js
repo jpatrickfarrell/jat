@@ -5,7 +5,7 @@
  * the upcoming /voice-transcript, /voice-summary, /voice-kb, /voice-launch,
  * and /voice-diarize routes.
  */
-import { appendFileSync, mkdirSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
 import { exec, execFile } from 'child_process';
 import { join, dirname, basename } from 'path';
 import { homedir, tmpdir } from 'os';
@@ -708,6 +708,228 @@ ${transcript}`;
 }
 
 /**
+ * Slugify a string for use in a filename.
+ * Lowercase, non-alphanumeric → hyphens, collapsed, trimmed, capped at 40 chars.
+ * @param {string} s
+ * @returns {string}
+ */
+function slugifyForFilename(s) {
+	const slug = (s || '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 40)
+		.replace(/^-+|-+$/g, '');
+	return slug || 'untitled';
+}
+
+/**
+ * Strip markdown punctuation/formatting from a string for the frontmatter description.
+ * @param {string} s
+ * @returns {string}
+ */
+function stripMarkdown(s) {
+	return (s || '')
+		.replace(/```[\s\S]*?```/g, '')
+		.replace(/`[^`]*`/g, '')
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+		.replace(/[#*_>~`]+/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/**
+ * Load { name → absolute path } for every project in ~/.config/jat/projects.json.
+ * Expands leading ~ to the home directory. Returns empty map on any failure.
+ * @returns {Object<string, string>}
+ */
+function loadProjectPaths() {
+	try {
+		const configPath = join(homedir(), '.config', 'jat', 'projects.json');
+		if (!existsSync(configPath)) return {};
+		const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+		const out = {};
+		for (const [name, p] of Object.entries(config.projects || {})) {
+			if (p && typeof p.path === 'string' && p.path) {
+				out[name] = p.path.startsWith('~/')
+					? join(homedir(), p.path.slice(2))
+					: p.path;
+			}
+		}
+		return out;
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Write per-project memory files into .jat/memory/ for every voice session that
+ * produced tasks or knowledge base entries. Each project gets its own file
+ * scoped to that project's entries; unattributed entries are appended to the
+ * first project's file under a `_general` section, or land in a standalone
+ * `_general` file if the entire note is unattributed.
+ *
+ * Files are written to the JAT root (`process.cwd().replace(/\/ide$/, '')`).
+ * For each non-JAT project, if `~/.config/jat/projects.json` has a path for
+ * that project AND `<path>/.jat/memory/` already exists, the file is also
+ * written there so per-project agents can search it via jat-search.
+ *
+ * @param {{tasks?: Array, summary?: string, title?: string, knowledgeBase?: Array, speakers?: Object|null}} organizeResult
+ * @param {Date} [date] — recording date (falls back to now)
+ */
+export function writeVoiceMemoryFiles(organizeResult, date = new Date()) {
+	const {
+		tasks = [],
+		summary = '',
+		title = '',
+		knowledgeBase = [],
+		speakers = null
+	} = organizeResult || {};
+
+	const projectGroups = {};
+	const ensureGroup = (name) => {
+		if (!projectGroups[name]) projectGroups[name] = { tasks: [], kb: [] };
+		return projectGroups[name];
+	};
+
+	const unattributedTasks = [];
+	const unattributedKb = [];
+
+	for (const task of Array.isArray(tasks) ? tasks : []) {
+		if (task && typeof task.project === 'string' && task.project.trim()) {
+			ensureGroup(task.project).tasks.push(task);
+		} else if (task) {
+			unattributedTasks.push(task);
+		}
+	}
+	for (const entry of Array.isArray(knowledgeBase) ? knowledgeBase : []) {
+		if (entry && typeof entry.project === 'string' && entry.project.trim()) {
+			ensureGroup(entry.project).kb.push(entry);
+		} else if (entry) {
+			unattributedKb.push(entry);
+		}
+	}
+
+	const projectKeys = Object.keys(projectGroups);
+	const hasUnattributed = unattributedTasks.length > 0 || unattributedKb.length > 0;
+
+	if (projectKeys.length === 0 && !hasUnattributed) {
+		vlog('writeVoiceMemoryFiles: nothing to write (no tasks, no KB)');
+		return;
+	}
+
+	if (projectKeys.length === 0 && hasUnattributed) {
+		ensureGroup('_general').tasks = unattributedTasks;
+		projectGroups['_general'].kb = unattributedKb;
+	} else if (hasUnattributed) {
+		const firstKey = projectKeys[0];
+		projectGroups[firstKey].generalTasks = unattributedTasks;
+		projectGroups[firstKey].generalKb = unattributedKb;
+	}
+
+	const yyyy = date.getFullYear();
+	const mm = String(date.getMonth() + 1).padStart(2, '0');
+	const dd = String(date.getDate()).padStart(2, '0');
+	const dateStr = `${yyyy}-${mm}-${dd}`;
+
+	const slug = slugifyForFilename(title);
+	const descStr = stripMarkdown(summary).slice(0, 160);
+	const safeTitle = title || 'Untitled';
+
+	let speakersLine = '';
+	if (speakers && typeof speakers === 'object' && !Array.isArray(speakers)) {
+		const entries = Object.entries(speakers);
+		if (entries.length > 0) {
+			const formatted = entries
+				.map(([label, name]) =>
+					name && typeof name === 'string' && name.trim() ? name : `Unknown (${label})`
+				)
+				.join(', ');
+			speakersLine = `**Speakers:** ${formatted}\n`;
+		}
+	}
+
+	const allProjectsLine = `**Projects:** ${Object.keys(projectGroups).join(', ')}`;
+	const projectPaths = loadProjectPaths();
+	const jatRoot = process.cwd().replace(/\/ide$/, '');
+
+	let written = 0;
+	let failed = 0;
+
+	for (const [project, data] of Object.entries(projectGroups)) {
+		const filename = `voice-${dateStr}-${project}-${slug}.md`;
+
+		let body = '---\n';
+		body += `name: Voice note: ${safeTitle}\n`;
+		body += `description: ${descStr}\n`;
+		body += 'type: project\n';
+		body += '---\n';
+		body += `**Date:** ${dateStr}\n`;
+		body += speakersLine;
+		body += `${allProjectsLine}\n\n`;
+		body += `## Summary\n${summary}\n\n`;
+
+		if (data.kb && data.kb.length > 0) {
+			body += '## Knowledge Base\n';
+			for (const entry of data.kb) {
+				body += `### ${entry.title || 'Untitled entry'}\n${entry.content || ''}\n\n`;
+			}
+		}
+
+		if (data.tasks && data.tasks.length > 0) {
+			body += '## Tasks Created\n';
+			for (const task of data.tasks) {
+				body += `- ${task.title || 'Untitled task'} (pending)\n`;
+			}
+			body += '\n';
+		}
+
+		const generalTasks = data.generalTasks || [];
+		const generalKb = data.generalKb || [];
+		if (generalTasks.length > 0 || generalKb.length > 0) {
+			body += '## _general\n';
+			if (generalKb.length > 0) {
+				body += '### Knowledge Base\n';
+				for (const entry of generalKb) {
+					body += `#### ${entry.title || 'Untitled entry'}\n${entry.content || ''}\n\n`;
+				}
+			}
+			if (generalTasks.length > 0) {
+				body += '### Tasks Created\n';
+				for (const task of generalTasks) {
+					body += `- ${task.title || 'Untitled task'} (pending)\n`;
+				}
+				body += '\n';
+			}
+		}
+
+		const targets = [join(jatRoot, '.jat', 'memory')];
+		if (project !== 'jat' && project !== '_general' && projectPaths[project]) {
+			const projectMemoryDir = join(projectPaths[project], '.jat', 'memory');
+			if (existsSync(projectMemoryDir)) {
+				targets.push(projectMemoryDir);
+			}
+		}
+
+		for (const dir of targets) {
+			try {
+				mkdirSync(dir, { recursive: true });
+				const filePath = join(dir, filename);
+				writeFileSync(filePath, body);
+				vlog(`wrote voice memory: ${filePath}`);
+				written++;
+			} catch (e) {
+				vlog(`failed to write voice memory at ${dir}/${filename}: ${e.message}`);
+				failed++;
+			}
+		}
+	}
+
+	vlog(`writeVoiceMemoryFiles done: ${written} written, ${failed} failed across ${Object.keys(projectGroups).length} project file(s)`);
+}
+
+/**
  * Append organized tasks to the voice inbox timeline file.
  * EventStack polls /api/sessions/jat-voice/timeline which reads this file.
  * @param {Array} tasks
@@ -716,8 +938,10 @@ ${transcript}`;
  * @param {string} title
  * @param {Array} knowledgeBase
  * @param {Object|null} speakers — map of SPEAKER_XX labels to names (diarized only)
+ * @param {string|null} voiceId
+ * @param {Date|null} recordingDate — recording timestamp, used for memory file naming/header
  */
-export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = [], speakers = null, voiceId = null) {
+export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = [], speakers = null, voiceId = null, recordingDate = null) {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const timelineFile = getVoiceTimelineFile();
 	mkdirSync(dirname(timelineFile), { recursive: true });
@@ -733,6 +957,18 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 	appendFileSync(timelineFile, line);
 	// Also write to SSE timeline so VoiceInbox picks it up in real-time
 	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
+
+	// Per-project memory files (jat-jz8k8.3) — searchable .jat/memory/ files
+	// from voice notes. File-write failures must not prevent the timeline
+	// write above from being considered successful.
+	try {
+		const memoryDate = recordingDate instanceof Date && !isNaN(recordingDate.getTime())
+			? recordingDate
+			: new Date();
+		writeVoiceMemoryFiles({ tasks, summary, title, knowledgeBase, speakers }, memoryDate);
+	} catch (e) {
+		vlog(`writeVoiceMemoryFiles threw: ${e instanceof Error ? e.message : String(e)}`);
+	}
 }
 
 /**

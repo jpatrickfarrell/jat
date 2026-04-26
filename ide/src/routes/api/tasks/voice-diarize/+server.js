@@ -114,8 +114,11 @@ function whisperxTimeout(durationSec) {
  * @param {string} audioPath
  * @param {string} title
  * @param {number} priority
+ * @param {string} voiceId
+ * @param {number} [sizeBytes]
+ * @param {Date|null} [recordingDate] — recording timestamp threaded into voice memory files
  */
-function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 0) {
+function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 0, recordingDate = null) {
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
 
@@ -163,7 +166,7 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 			if (speakers && Object.keys(speakers).length > 0) {
 				vlog(`speakers map: ${JSON.stringify(speakers)}`);
 			}
-			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, speakers, voiceId);
+			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, speakers, voiceId, recordingDate);
 			vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 		} catch (organizeErr) {
 			vlog(`ERROR: organize failed, saving transcript to voice inbox: ${organizeErr.message}`);
@@ -178,7 +181,8 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 					title,
 					[],
 					null,
-					voiceId
+					voiceId,
+					recordingDate
 				);
 				vlog(`Fallback: transcript "${title}" saved to voice inbox (${text.length} chars)`);
 			} catch (e) {
@@ -282,7 +286,7 @@ export async function POST({ request }) {
 			appendProcessingToVoiceTimeline(voiceId, title, sizeBytes);
 
 			// Fire and forget — transcription + organize happens in background
-			transcribeAndOrganize(audioTempPath, title, priority, voiceId, sizeBytes);
+			transcribeAndOrganize(audioTempPath, title, priority, voiceId, sizeBytes, fileDate);
 
 			return json({
 				success: true,

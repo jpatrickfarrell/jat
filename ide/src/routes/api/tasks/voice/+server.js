@@ -174,9 +174,11 @@ function getAudioDate(filePath) {
  * @param {string} title
  * @param {number} priority
  * @param {string|null} requester
+ * @param {string|null} voiceId
+ * @param {Date|null} recordingDate — recording timestamp threaded into voice memory files
  * @returns {Promise<{ tasks: {title: string, description: string}[], title: string }>}
  */
-function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = null) {
+function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = null, recordingDate = null) {
 	return new Promise((resolve) => {
 		const id = randomBytes(4).toString('hex');
 		const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
@@ -223,7 +225,7 @@ function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = 
 				const projects = loadProjects();
 				const jatContext = await loadJatContext(projects);
 				const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects, 'organize', jatContext);
-				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId);
+				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId, recordingDate);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 				resolve({
 					tasks: tasks.length > 0
@@ -244,7 +246,8 @@ function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = 
 						title,
 						[],
 						null,
-						voiceId
+						voiceId,
+						recordingDate
 					);
 					vlog(`Fallback: transcript "${title}" saved to voice inbox (${text.length} chars)`);
 				} catch (e) {
@@ -389,7 +392,7 @@ export async function POST({ request }) {
 
 			// Fire and forget — transcription + organize happens in background
 			// Update voiceJobs with all tasks for widget review form
-			transcribeAndOrganize(audioTempPath, title, priority, postRequester, voiceId).then((result) => {
+			transcribeAndOrganize(audioTempPath, title, priority, postRequester, voiceId, fileDate).then((result) => {
 				voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
 			}).catch(() => {
 				voiceJobs.set(jobId, { status: 'open', tasks: [{ title, description: '' }], title });

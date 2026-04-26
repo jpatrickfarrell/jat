@@ -4,7 +4,10 @@
  *     &resolve=true  - Resolve relation columns to display values and evaluate formulas
  */
 import { json } from '@sveltejs/kit';
-import { getViewRows, getTableSchema, getColumnMetadata, resolveRelationColumns } from '$lib/server/jat-data.js';
+import {
+	getViewRows, getTableSchema, getColumnMetadata, resolveRelationColumns,
+	isPostgresProject, pgGetViewRows, pgGetTableSchema, pgGetColumnMetadata,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { evaluateFormula } from '$lib/utils/formulaEval';
 
@@ -19,15 +22,52 @@ export async function GET({ params, url }) {
 	}
 
 	try {
-		const { path, exists } = await getProjectPath(project);
-		if (!exists) {
-			return json({ error: `Project not found: ${project}` }, { status: 404 });
-		}
-
 		const limit = parseInt(url.searchParams.get('limit') || '100', 10);
 		const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 		const orderBy = url.searchParams.get('orderBy') || undefined;
 		const orderDir = url.searchParams.get('orderDir') || undefined;
+
+		if (isPostgresProject(project)) {
+			const result = await pgGetViewRows(project, viewId, { limit, offset, orderBy, orderDir });
+			const tableName = result.view?.table_name;
+
+			let schema = [];
+			let columnMeta = {};
+			let metaRows = [];
+			if (tableName) {
+				schema = await pgGetTableSchema(project, tableName);
+				metaRows = await pgGetColumnMetadata(project, tableName);
+				for (const m of metaRows) {
+					columnMeta[m.column_name] = {
+						semanticType: m.semantic_type,
+						config: m.config,
+						displayName: m.display_name,
+						description: m.description,
+					};
+				}
+			}
+
+			// Postgres path does not yet support relation resolution; the
+			// `resolve` flag still triggers in-row formula evaluation.
+			if (resolve && tableName && result.rows) {
+				for (const [colName, meta] of Object.entries(columnMeta)) {
+					if (meta.semanticType === 'formula' && meta.config?.expression) {
+						for (const row of result.rows) {
+							try {
+								row[colName] = evaluateFormula(meta.config.expression, row, result.rows);
+							} catch { row[colName] = null; }
+						}
+					}
+				}
+			}
+
+			return json({ ...result, schema, columnMeta });
+		}
+
+		const { path, exists } = await getProjectPath(project);
+		if (!exists) {
+			return json({ error: `Project not found: ${project}` }, { status: 404 });
+		}
 
 		const result = getViewRows(path, viewId, { limit, offset, orderBy, orderDir });
 

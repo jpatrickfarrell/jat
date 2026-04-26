@@ -5,3 +5,5 @@ export type {
 	IntentProvider,
 	SpeakProvider
 } from './types';
+
+export { voice, type VoiceStatus } from './voiceSubsystem.svelte';

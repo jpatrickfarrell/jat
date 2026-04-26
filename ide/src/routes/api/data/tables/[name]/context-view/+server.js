@@ -5,7 +5,10 @@
  * POST /api/data/tables/[name]/context-view/preview     - Preview context query results
  */
 import { json } from '@sveltejs/kit';
-import { getContextView, setContextView, previewContextQuery } from '$lib/server/jat-data.js';
+import {
+	getContextView, setContextView, previewContextQuery,
+	isPostgresProject, pgGetContextView, pgSetContextView, pgPreviewContextQuery,
+} from '$lib/server/jat-data.js';
 import { createBase, updateBase, deleteBase, getBases } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
@@ -19,6 +22,16 @@ export async function GET({ params, url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			const view = (await pgGetContextView(project, tableName)) ?? {
+				context_query: null, context_description: null,
+			};
+			// Postgres projects don't share the local bases.db; the IDE
+			// surfaces "linked base" via /api/bases for postgres projects
+			// separately, so return null here rather than guessing.
+			return json({ ...view, linkedBase: null });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -52,6 +65,16 @@ export async function PUT({ params, url, request }) {
 
 		if (!project) {
 			return json({ error: 'Missing required parameter: project' }, { status: 400 });
+		}
+
+		if (isPostgresProject(project)) {
+			const result = await pgSetContextView(project, tableName, {
+				context_query: body.context_query,
+				context_description: body.context_description,
+			});
+			// Linked-base management against the local bases.db doesn't
+			// apply to postgres projects; return the bare update result.
+			return json(result);
 		}
 
 		const { path, exists } = await getProjectPath(project);
@@ -119,6 +142,11 @@ export async function POST({ params, request }) {
 
 		if (!project) {
 			return json({ error: 'Missing required parameter: project' }, { status: 400 });
+		}
+
+		if (isPostgresProject(project)) {
+			const result = await pgPreviewContextQuery(project, body.sql);
+			return json(result);
 		}
 
 		const { path, exists } = await getProjectPath(project);

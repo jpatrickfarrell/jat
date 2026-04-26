@@ -105,7 +105,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	const integration = findCloudflareIntegration(projectName);
 	if (!integration) {
-		return json({ error: 'No Cloudflare Pages integration for this project' }, { status: 404 });
+		return json({ deployments: [], pagination: null, pagesProject: null, accountId: null });
 	}
 
 	const token = resolveToken(integration.secretName);
@@ -189,7 +189,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const integration = findCloudflareIntegration(project);
 	if (!integration) {
-		return json({ error: 'No Cloudflare Pages integration for this project' }, { status: 404 });
+		return json({ error: 'No Cloudflare Pages integration for this project' }, { status: 400 });
 	}
 
 	const token = resolveToken(integration.secretName);

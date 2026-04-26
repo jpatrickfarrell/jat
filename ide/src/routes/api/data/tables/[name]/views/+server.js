@@ -4,7 +4,10 @@
  * POST /api/data/tables/[name]/views             - Create new view
  */
 import { json } from '@sveltejs/kit';
-import { getViews, createView, initDataDb } from '$lib/server/jat-data.js';
+import {
+	getViews, createView, initDataDb,
+	isPostgresProject, pgGetViews, pgCreateView,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -17,6 +20,11 @@ export async function GET({ params, url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			const views = await pgGetViews(project, tableName);
+			return json({ views });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -39,6 +47,11 @@ export async function POST({ params, request }) {
 
 		if (!project) {
 			return json({ error: 'Missing required parameter: project' }, { status: 400 });
+		}
+
+		if (isPostgresProject(project)) {
+			const view = await pgCreateView(project, tableName, data);
+			return json({ view }, { status: 201 });
 		}
 
 		const { path, exists } = await getProjectPath(project);

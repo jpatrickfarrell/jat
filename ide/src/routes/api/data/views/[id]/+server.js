@@ -5,7 +5,10 @@
  * DELETE /api/data/views/[id]?project=X  - Delete view
  */
 import { json } from '@sveltejs/kit';
-import { getView, updateView, deleteView } from '$lib/server/jat-data.js';
+import {
+	getView, updateView, deleteView,
+	isPostgresProject, pgGetView, pgUpdateView, pgDeleteView,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -18,6 +21,14 @@ export async function GET({ params, url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			const view = await pgGetView(project, viewId);
+			if (!view) {
+				return json({ error: `View not found: ${viewId}` }, { status: 404 });
+			}
+			return json({ view });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -46,6 +57,11 @@ export async function PUT({ params, request }) {
 			return json({ error: 'Missing required parameter: project' }, { status: 400 });
 		}
 
+		if (isPostgresProject(project)) {
+			const view = await pgUpdateView(project, viewId, data);
+			return json({ view });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -68,6 +84,11 @@ export async function DELETE({ params, url }) {
 	}
 
 	try {
+		if (isPostgresProject(project)) {
+			const result = await pgDeleteView(project, viewId);
+			return json(result);
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });

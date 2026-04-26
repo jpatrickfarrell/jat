@@ -18,7 +18,12 @@
 
 	import { untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
+<<<<<<< Updated upstream
 	import { getProjects, loadCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
+=======
+	import { untrack } from 'svelte';
+	import { getProjects } from '$lib/stores/configStore.svelte';
+>>>>>>> Stashed changes
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import DynamicConfigForm from '$lib/components/integrations/DynamicConfigForm.svelte';
 	import FilterBuilder from '$lib/components/integrations/FilterBuilder.svelte';
@@ -300,6 +305,7 @@
 		}
 	});
 
+<<<<<<< Updated upstream
 	// Fetch existing secrets when opening token step (step 1) for new integrations
 	$effect(() => {
 		if (open && step === 1 && !isEditing && (sourceType === 'slack' || sourceType === 'telegram' || sourceType === 'gmail')) {
@@ -324,26 +330,33 @@
 			}
 		}
 	});
+=======
+	// Note: plugin secret checking is triggered inside the init effect below
+	// (after plugin fields are initialized) to avoid reactive cycles.
+>>>>>>> Stashed changes
 
 	// Reset form when source type changes
 	$effect(() => {
 		if (open && sourceType) {
-			step = 0;
-			error = '';
-			saving = false;
-			secretStatus = 'checking';
-			secretMasked = '';
-			tokenInput = '';
-			showTokenInput = false;
-			testResult = null;
-			testingConnection = false;
-			detectedChats = [];
-			detectionError = '';
-			detectingChats = false;
-			detectedChannels = [];
-			channelDetectionError = '';
-			detectingChannels = false;
+			// Use untrack for all state writes to avoid cascading reactive updates
+			untrack(() => {
+				step = 0;
+				error = '';
+				saving = false;
+				secretStatus = 'checking';
+				secretMasked = '';
+				tokenInput = '';
+				showTokenInput = false;
+				testResult = null;
+				testingConnection = false;
+				detectedChats = [];
+				detectionError = '';
+				detectingChats = false;
+				detectedChannels = [];
+				channelDetectionError = '';
+				detectingChannels = false;
 
+<<<<<<< Updated upstream
 			// Build plugin state as plain objects first, then assign once.
 			// This avoids reading the reactive proxies (e.g. pluginSecretStatus[key] = ...)
 			// which would register them as dependencies and cause infinite re-triggering.
@@ -365,10 +378,32 @@
 						newPluginSecretStatus[field.key] = 'checking';
 					} else {
 						newPluginFields[field.key] = '';
+=======
+				// Reset plugin state
+				pluginFields = {};
+				pluginSecretStatus = {};
+				pluginSecretMasked = {};
+				pluginTokenInputs = {};
+				pluginShowTokenInput = {};
+
+				// Initialize plugin fields with defaults
+				if (isPluginType && pluginMetadata?.configFields) {
+					for (const field of pluginMetadata.configFields) {
+						if (field.type === 'secret') {
+							pluginFields[field.key] = field.default || field.key;
+							pluginSecretStatus[field.key] = 'checking';
+						} else if (field.default !== undefined) {
+							pluginFields[field.key] = field.default;
+						} else if (field.type === 'boolean') {
+							pluginFields[field.key] = false;
+						} else {
+							pluginFields[field.key] = '';
+						}
+>>>>>>> Stashed changes
 					}
 				}
-			}
 
+<<<<<<< Updated upstream
 			// Single assignments — effect only writes, never reads these proxies
 			pluginFields = newPluginFields;
 			pluginSecretStatus = newPluginSecretStatus;
@@ -380,6 +415,23 @@
 				populateFromEdit(editSource);
 			} else {
 				resetForm();
+=======
+				if (editSource) {
+					populateFromEdit(editSource);
+				} else {
+					resetForm();
+				}
+			});
+
+			// Check plugin secrets (outside untrack so async results update reactively)
+			if (isPluginType && pluginMetadata?.configFields) {
+				for (const field of pluginMetadata.configFields) {
+					if (field.type === 'secret') {
+						const secretVal = (field.default || field.key).trim();
+						if (secretVal) checkPluginSecret(field.key, secretVal);
+					}
+				}
+>>>>>>> Stashed changes
 			}
 		}
 	});
@@ -3003,36 +3055,17 @@
 				{/each}
 			</select>
 		{:else if field.type === 'secret'}
-			<!-- Secret name input -->
-			<input
-				type="text"
-				class="input input-bordered w-full font-mono text-sm"
-				placeholder={field.key}
-				value={pluginFields[field.key] ?? field.key}
-				oninput={(e) => {
-					pluginFields[field.key] = e.currentTarget.value;
-					pluginFields = { ...pluginFields };
-					// Re-check secret when name changes
-					const val = e.currentTarget.value.trim();
-					if (val) checkPluginSecret(field.key, val);
-				}}
-			/>
-			<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
-				Name used in <code>jat-secret</code> to retrieve the token
-			</p>
-
-			<!-- Secret status -->
 			{#if pluginSecretStatus[field.key] === 'checking'}
 				<div
-					class="flex items-center gap-2 px-3 py-2.5 rounded-lg mt-2"
+					class="flex items-center gap-2 px-3 py-2.5 rounded-lg"
 					style="background: oklch(0.20 0.02 250 / 0.5); border: 1px solid oklch(0.28 0.02 250);"
 				>
 					<span class="loading loading-spinner loading-xs" style="color: oklch(0.55 0.02 250);"></span>
-					<span class="font-mono text-[11px]" style="color: oklch(0.55 0.02 250);">Checking for secret...</span>
+					<span class="font-mono text-[11px]" style="color: oklch(0.55 0.02 250);">Checking for saved token...</span>
 				</div>
 			{:else if pluginSecretStatus[field.key] === 'found' && !pluginShowTokenInput[field.key]}
 				<div
-					class="px-3 py-2.5 rounded-lg mt-2"
+					class="px-3 py-2.5 rounded-lg"
 					style="background: oklch(0.20 0.06 145 / 0.3); border: 1px solid oklch(0.35 0.10 145);"
 				>
 					<div class="flex items-center justify-between">
@@ -3041,7 +3074,7 @@
 								<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
 							</svg>
 							<span class="font-mono text-[11px]" style="color: oklch(0.75 0.12 145);">
-								Secret found: <code style="color: oklch(0.65 0.02 250);">{pluginSecretMasked[field.key]}</code>
+								Token saved: <code style="color: oklch(0.65 0.02 250);">{pluginSecretMasked[field.key]}</code>
 							</span>
 						</div>
 						<button
@@ -3054,6 +3087,7 @@
 					</div>
 				</div>
 			{:else}
+<<<<<<< Updated upstream
 				<!-- Secret missing or user clicked Change -->
 				<div
 					class="px-3 py-2.5 rounded-lg space-y-3 mt-2"
@@ -3106,7 +3140,37 @@
 							{/if}
 						</button>
 					</div>
+=======
+				<!-- Token input (primary UI) -->
+				<div class="flex gap-2">
+					<input
+						type="password"
+						class="input input-bordered flex-1 font-mono text-sm"
+						placeholder={field.placeholder || 'Paste your API token here...'}
+						value={pluginTokenInputs[field.key] || ''}
+						oninput={(e) => { pluginTokenInputs[field.key] = e.currentTarget.value; pluginTokenInputs = { ...pluginTokenInputs }; }}
+					/>
+					<button
+						class="btn font-mono text-xs"
+						style="background: oklch(0.35 0.10 145); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.45 0.10 145);"
+						onclick={() => {
+							const secretName = (pluginFields[field.key] || field.default || field.key).trim();
+							const token = (pluginTokenInputs[field.key] || '').trim();
+							if (secretName && token) savePluginToken(field.key, secretName, token);
+						}}
+						disabled={pluginSecretStatus[field.key] === 'saving' || !(pluginTokenInputs[field.key] || '').trim()}
+					>
+						{#if pluginSecretStatus[field.key] === 'saving'}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							Save
+						{/if}
+					</button>
+>>>>>>> Stashed changes
 				</div>
+				<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
+					Stored securely as <code style="color: oklch(0.50 0.02 250);">{pluginFields[field.key] || field.default || field.key}</code> in jat-secret
+				</p>
 			{/if}
 		{/if}
 
@@ -3114,6 +3178,25 @@
 			<p class="font-mono text-[10px] mt-1.5" style="color: oklch(0.45 0.02 250);">
 				{field.helpText}
 			</p>
+		{/if}
+
+		<!-- Setup guide for secret fields -->
+		{#if field.type === 'secret' && field.setupGuide?.length}
+			<details
+				class="rounded-lg mt-2"
+				style="background: oklch(0.20 0.04 200 / 0.3); border: 1px solid oklch(0.30 0.04 200);"
+			>
+				<summary class="cursor-pointer px-3 py-2.5 font-mono text-[11px] font-semibold select-none" style="color: oklch(0.70 0.10 200);">
+					{field.setupGuideTitle || `How to get ${field.label || 'the token'}`}
+				</summary>
+				<div class="px-3 pb-3 space-y-2">
+					<ol class="font-mono text-[10px] space-y-1.5 list-decimal list-inside" style="color: oklch(0.60 0.02 250);">
+						{#each field.setupGuide as guideStep}
+							<li>{@html guideStep}</li>
+						{/each}
+					</ol>
+				</div>
+			</details>
 		{/if}
 	</div>
 {/snippet}

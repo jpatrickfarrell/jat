@@ -209,6 +209,32 @@ else
 fi
 
 echo ""
+echo -e "${BLUE}Setting up jat-complete-reply...${NC}"
+echo ""
+
+# Symlink jat-complete-reply (Step 3.8 customer-facing reply poster)
+REPLY_SOURCE="$PROJECT_ROOT/tools/scripts/jat-complete-reply"
+REPLY_TARGET="$HOME/.local/bin/jat-complete-reply"
+
+if [ -f "$REPLY_SOURCE" ]; then
+    if [ -L "$REPLY_TARGET" ]; then
+        CURRENT_TARGET=$(readlink "$REPLY_TARGET")
+        if [ "$CURRENT_TARGET" = "$REPLY_SOURCE" ]; then
+            echo -e "  ${GREEN}✓${NC} jat-complete-reply (already linked)"
+        else
+            echo -e "  ${YELLOW}↻${NC} jat-complete-reply (updating link)"
+            rm "$REPLY_TARGET"
+            ln -sf "$REPLY_SOURCE" "$REPLY_TARGET"
+        fi
+    else
+        echo -e "  ${GREEN}+${NC} jat-complete-reply (linked)"
+        ln -sf "$REPLY_SOURCE" "$REPLY_TARGET"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC} jat-complete-reply not found at $REPLY_SOURCE"
+fi
+
+echo ""
 echo -e "${BLUE}Setting up get-current-session-id...${NC}"
 echo ""
 

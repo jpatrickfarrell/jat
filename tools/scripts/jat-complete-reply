@@ -1,0 +1,224 @@
+#!/bin/bash
+#
+# jat-complete-reply - Post a customer-facing reply comment on the task
+#
+# Invoked by `jat-step replying` (Step 3.8 of /jat:complete) BEFORE the task
+# is closed. Generates a completion bundle, extracts the LLM-generated
+# `devResponse` field (a friendly plain-language summary written for the
+# original reporter), and posts it as an agent-authored task comment.
+#
+# Why a separate step (vs the integration callback in Step 6):
+#   The epic jat-47wul unifies feedback channels on task comments as the
+#   single source of truth. Comments render in the IDE thread AND in the
+#   feedback widget back to the original reporter. The old jat-signal reply
+#   pipeline is being retired (jat-47wul.6).
+#
+# Skip conditions (all silent — never block close):
+#   - Bundle generation fails (no API key, network error, etc.)
+#   - Bundle has no `devResponse` (LLM determined task isn't user-originated)
+#   - IDE is unreachable (POST to /api/tasks/:id/comments fails)
+#   - jt is not available
+#
+# Usage:
+#   jat-complete-reply --task <id> --agent <name> [--kill] [--bundle-cache <path>]
+#
+# Side effects:
+#   - Writes the full bundle JSON to <bundle-cache> (default
+#     /tmp/jat-bundle-<task-id>.json) so `jat-step complete` can reuse it
+#     and avoid a second LLM call.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+DIM='\033[2m'
+NC='\033[0m'
+
+log() { echo -e "$@" >&2; }
+log_dim() { echo -e "${DIM}$@${NC}" >&2; }
+log_warn() { echo -e "${YELLOW}$@${NC}" >&2; }
+log_error() { echo -e "${RED}Error: $@${NC}" >&2; }
+log_success() { echo -e "${GREEN}$@${NC}" >&2; }
+
+show_usage() {
+    cat >&2 <<'EOF'
+jat-complete-reply - Generate completion bundle and post devResponse as task comment
+
+Usage:
+  jat-complete-reply --task <id> --agent <name> [--kill] [--bundle-cache <path>]
+
+Options:
+  --task <id>            Task ID (required)
+  --agent <name>         Agent name (required)
+  --kill                 Forward --kill to jat-complete-bundle
+  --bundle-cache <path>  Where to cache the generated bundle JSON
+                         (default: /tmp/jat-bundle-<task-id>.json)
+  --help                 Show this help
+
+Behavior:
+  1. Calls jat-complete-bundle to generate the completion bundle.
+  2. Caches the full bundle JSON for reuse by `jat-step complete`.
+  3. If the bundle has a `devResponse` field, posts it as an agent-authored
+     comment on the task via POST /api/tasks/:id/comments.
+  4. Skips silently when the bundle has no devResponse, when the IDE is
+     unreachable, or when bundle generation fails. Reply posting is
+     non-blocking — the task close should always proceed.
+EOF
+    exit 0
+}
+
+TASK_ID=""
+AGENT_NAME=""
+FORCE_KILL=false
+BUNDLE_CACHE=""
+IDE_URL="${JAT_IDE_URL:-http://127.0.0.1:3333}"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --task)         TASK_ID="$2"; shift 2;;
+        --agent)        AGENT_NAME="$2"; shift 2;;
+        --kill)         FORCE_KILL=true; shift;;
+        --bundle-cache) BUNDLE_CACHE="$2"; shift 2;;
+        --help|-h)      show_usage;;
+        *)              log_error "Unknown option: $1"; show_usage;;
+    esac
+done
+
+if [[ -z "$TASK_ID" ]]; then
+    log_error "Task ID is required (--task <id>)"
+    exit 1
+fi
+
+if [[ -z "$AGENT_NAME" ]]; then
+    log_error "Agent name is required (--agent <name>)"
+    exit 1
+fi
+
+if [[ -z "$BUNDLE_CACHE" ]]; then
+    BUNDLE_CACHE="/tmp/jat-bundle-${TASK_ID}.json"
+fi
+
+# ============================================================================
+# 1. Generate (or read cached) completion bundle
+# ============================================================================
+
+BUNDLE_JSON=""
+if [[ -f "$BUNDLE_CACHE" ]] && jq empty "$BUNDLE_CACHE" 2>/dev/null; then
+    log_dim "Reusing cached completion bundle: $BUNDLE_CACHE"
+    BUNDLE_JSON=$(cat "$BUNDLE_CACHE")
+else
+    log_dim "Generating completion bundle for reply..."
+    KILL_FLAG=""
+    if [[ "$FORCE_KILL" == true ]]; then KILL_FLAG="--kill"; fi
+    if BUNDLE_JSON=$(jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" $KILL_FLAG 2>/dev/null) \
+        && [[ -n "$BUNDLE_JSON" ]] && echo "$BUNDLE_JSON" | jq empty 2>/dev/null; then
+        # Cache for jat-step complete to reuse
+        echo "$BUNDLE_JSON" > "$BUNDLE_CACHE"
+    else
+        log_warn "Bundle generation failed — skipping reply (non-blocking)"
+        exit 0
+    fi
+fi
+
+# ============================================================================
+# 2. Extract devResponse — gating signal for whether to post a reply
+# ============================================================================
+
+DEV_RESPONSE=$(echo "$BUNDLE_JSON" | jq -r '.devResponse // empty' 2>/dev/null)
+
+if [[ -z "$DEV_RESPONSE" ]] || [[ "$DEV_RESPONSE" == "null" ]]; then
+    log_dim "No devResponse in bundle (task isn't user-originated) — skipping reply"
+    exit 0
+fi
+
+# ============================================================================
+# 3. Resolve reporter from task identity (for greeting)
+# ============================================================================
+
+TASK_JSON=$(jt show "$TASK_ID" --json 2>/dev/null || echo "[]")
+if [[ "$TASK_JSON" == "[]" ]]; then
+    log_dim "Task not found via jt — skipping reply"
+    exit 0
+fi
+
+# Routing priority: approver → requester → creator (matches jt close)
+REPORTER_NAME=$(echo "$TASK_JSON" | jq -r '
+    .[0] | (.approver.name // .requester.name // .creator.name // empty)
+' 2>/dev/null)
+
+REPORTER_EMAIL=$(echo "$TASK_JSON" | jq -r '
+    .[0] | (.approver.email // .requester.email // .creator.email // empty)
+' 2>/dev/null)
+
+if [[ -z "$REPORTER_EMAIL" ]] || [[ "$REPORTER_EMAIL" == "null" ]]; then
+    log_dim "No reporter email on task — skipping reply (no recipient context)"
+    exit 0
+fi
+
+# ============================================================================
+# 4. Build comment body
+# ============================================================================
+
+# Prepend a greeting if we have a name and the LLM didn't already include one.
+COMMENT_TEXT="$DEV_RESPONSE"
+if [[ -n "$REPORTER_NAME" ]] && [[ "$REPORTER_NAME" != "null" ]]; then
+    FIRST_NAME=$(echo "$REPORTER_NAME" | awk '{print $1}')
+    if ! echo "$COMMENT_TEXT" | head -1 | grep -qiE "^(hi|hello|hey)\b"; then
+        COMMENT_TEXT="Hi ${FIRST_NAME},"$'\n\n'"${COMMENT_TEXT}"
+    fi
+fi
+
+# Resolve the agent's session id (best-effort) for comment metadata.
+SESSION_ID=""
+TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+if [[ -n "$TMUX_SESSION" ]]; then
+    AGENT_FILE=".claude/sessions/.tmux-agent-${TMUX_SESSION}"
+    if [[ -f "$AGENT_FILE" ]]; then
+        # Try mapping back to a Claude session ID via session file naming.
+        for f in .claude/sessions/agent-*.txt; do
+            [[ -f "$f" ]] || continue
+            if [[ "$(cat "$f" 2>/dev/null)" == "$AGENT_NAME" ]]; then
+                SESSION_ID=$(basename "$f" .txt | sed 's/^agent-//')
+                break
+            fi
+        done
+    fi
+fi
+
+COMMENT_BODY=$(jq -n -c \
+    --arg text "$COMMENT_TEXT" \
+    --arg author "$AGENT_NAME" \
+    --arg sessionId "$SESSION_ID" \
+    --arg taskId "$TASK_ID" \
+    '{
+        text: $text,
+        author: $author,
+        author_type: "agent",
+        comment_type: "note",
+        external: true,
+        session_id: ($sessionId | select(length > 0)),
+        metadata: {
+            source: "jat-complete-reply",
+            taskId: $taskId
+        }
+    }')
+
+# ============================================================================
+# 5. POST the comment to the IDE
+# ============================================================================
+
+log_dim "Posting reply comment to ${IDE_URL}/api/tasks/${TASK_ID}/comments..."
+HTTP_RESPONSE=$(curl -sf -X POST "${IDE_URL}/api/tasks/${TASK_ID}/comments" \
+    -H "Content-Type: application/json" \
+    -d "$COMMENT_BODY" 2>&1) || {
+    log_warn "Reply POST failed (IDE unreachable or rejected) — skipping (non-blocking)"
+    exit 0
+}
+
+COMMENT_ID=$(echo "$HTTP_RESPONSE" | jq -r '.comment.id // empty' 2>/dev/null)
+if [[ -n "$COMMENT_ID" ]]; then
+    log_success "Reply posted to ${TASK_ID} (comment ${COMMENT_ID})"
+else
+    log_warn "Reply POST returned unexpected response — continuing (non-blocking)"
+fi

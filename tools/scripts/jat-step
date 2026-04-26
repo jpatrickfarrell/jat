@@ -8,6 +8,7 @@
 # Steps:
 #   verifying    - Emit signal only (agent does verification)
 #   committing   - Emit signal + git add/commit
+#   replying     - Emit signal + post customer-facing reply comment (Step 3.8)
 #   closing      - Emit signal + jt close
 #   callback     - Emit signal + fire integration callback (if configured)
 #   sync-status  - Fire integration status_changed callback (no completing signal)
@@ -50,6 +51,7 @@ Usage:
 Steps:
   verifying    - Emit signal only (agent does verification)
   committing   - Emit signal + git add/commit
+  replying     - Emit signal + post customer-facing reply comment (Step 3.8)
   closing      - Emit signal + jt close
   callback     - Emit signal + fire integration callback (if configured)
   sync-status  - Fire integration status_changed callback (no completing signal)
@@ -76,27 +78,30 @@ get_step_config() {
     local step="$1"
     case "$step" in
         verifying)
-            echo '0|[]|["verifying","committing","closing","callback","releasing"]|Running tests and verification'
+            echo '0|[]|["verifying","committing","replying","closing","callback","releasing"]|Running tests and verification'
             ;;
         committing)
-            echo '25|["verifying"]|["committing","closing","callback","releasing"]|Committing changes'
+            echo '25|["verifying"]|["committing","replying","closing","callback","releasing"]|Committing changes'
+            ;;
+        replying)
+            echo '40|["verifying","committing"]|["replying","closing","callback","releasing"]|Posting reply to reporter'
             ;;
         closing)
-            echo '50|["verifying","committing"]|["closing","callback","releasing"]|Closing task in JAT'
+            echo '50|["verifying","committing","replying"]|["closing","callback","releasing"]|Closing task in JAT'
             ;;
         callback)
-            echo '55|["verifying","committing","closing"]|["callback","releasing"]|Firing integration callback'
+            echo '55|["verifying","committing","replying","closing"]|["callback","releasing"]|Firing integration callback'
             ;;
         releasing)
-            echo '75|["verifying","committing","closing","callback"]|["releasing"]|Capturing session log'
+            echo '75|["verifying","committing","replying","closing","callback"]|["releasing"]|Capturing session log'
             ;;
         complete)
             # complete step doesn't emit completing signal - it emits the complete signal
-            echo '100|["verifying","committing","closing","callback","releasing"]|[]|Generating completion bundle'
+            echo '100|["verifying","committing","replying","closing","callback","releasing"]|[]|Generating completion bundle'
             ;;
         *)
             log_error "Unknown step: $step"
-            log "Valid steps: verifying, committing, closing, callback, releasing (session log), complete"
+            log "Valid steps: verifying, committing, replying, closing, callback, releasing (session log), complete"
             exit 1
             ;;
     esac
@@ -240,6 +245,20 @@ EOF
         else
             log_dim "No changes to commit"
         fi
+        ;;
+
+    replying)
+        emit_completing_signal "$STEP" "$TASK_ID" "$TASK_TITLE"
+
+        # Post a customer-facing reply comment BEFORE closing the task.
+        # Comments are the single source of truth per epic jat-47wul — this
+        # replaces the old jat-signal reply pipeline.
+        # jat-complete-reply is non-blocking by design: missing API key,
+        # internal-only tasks, IDE unreachable, or no devResponse all
+        # silently exit 0 so close still proceeds.
+        KILL_FLAG_FORWARD=""
+        if [[ "$FORCE_KILL" == true ]]; then KILL_FLAG_FORWARD="--kill"; fi
+        jat-complete-reply --task "$TASK_ID" --agent "$AGENT_NAME" $KILL_FLAG_FORWARD || true
         ;;
 
     closing)
@@ -389,10 +408,22 @@ EOF
         # emit the signal AND extract devResponse in-process — reading from
         # the timeline file doesn't work because the PostToolUse hook that
         # writes to the timeline fires AFTER this bash command exits.
-        log_dim "Generating completion bundle via LLM..."
-        KILL_FLAG=""
-        if [[ "$FORCE_KILL" == true ]]; then KILL_FLAG="--kill"; fi
-        BUNDLE_JSON=$(jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" $KILL_FLAG) || true
+        #
+        # Reuse the bundle cached by `jat-step replying` (Step 3.8) when
+        # available, so we don't pay for a second LLM call. The reply step
+        # writes /tmp/jat-bundle-<task>.json after generating the bundle.
+        BUNDLE_CACHE="/tmp/jat-bundle-${TASK_ID}.json"
+        BUNDLE_JSON=""
+        if [[ -f "$BUNDLE_CACHE" ]] && jq empty "$BUNDLE_CACHE" 2>/dev/null; then
+            log_dim "Reusing cached completion bundle from $BUNDLE_CACHE"
+            BUNDLE_JSON=$(cat "$BUNDLE_CACHE")
+            rm -f "$BUNDLE_CACHE"
+        else
+            log_dim "Generating completion bundle via LLM..."
+            KILL_FLAG=""
+            if [[ "$FORCE_KILL" == true ]]; then KILL_FLAG="--kill"; fi
+            BUNDLE_JSON=$(jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" $KILL_FLAG) || true
+        fi
         if [[ -n "$BUNDLE_JSON" ]] && echo "$BUNDLE_JSON" | jq empty 2>/dev/null; then
             jat-signal complete "$BUNDLE_JSON"
             log_success "Completion bundle emitted"

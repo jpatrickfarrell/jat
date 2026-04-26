@@ -22,8 +22,9 @@ Complete current task with full verification protocol. Session ends after comple
 1. **Verify task** (tests, lint, security)
 2. **Commit changes** with proper message
 3. **Write memory entry** - Save context for future agents
-4. **Mark task complete** (`jt close`)
-5. **Emit completion signal** to IDE
+4. **Reply to reporter** *(if applicable)* - Post a friendly customer-facing comment when the task has a requester/approver
+5. **Mark task complete** (`jt close`)
+6. **Emit completion signal** to IDE
 
 ## Prerequisites
 
@@ -151,6 +152,26 @@ jat-memory index --project "$(pwd)"
 ```
 
 If indexing fails, log the error but continue. Memory is non-blocking.
+
+### STEP 3.8: Reply to Reporter (Customer-Facing Comment)
+
+**Posts a customer-facing reply comment BEFORE close** for tasks that originated from user feedback. Comments are the canonical channel per epic jat-47wul — they render in the IDE thread AND in the feedback widget back to the reporter (jat-47wul.4). The server forces `external: true` for `author_type: agent` per jat-47wul.2, so agent comments are always customer-visible.
+
+```bash
+KILL_FLAG=""
+if [[ "$IS_KILL" == true ]]; then KILL_FLAG="--kill"; fi
+jat-step replying --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME" $KILL_FLAG
+```
+
+`jat-step replying` generates a completion bundle, extracts the LLM-authored `devResponse` field, resolves the reporter from task identity (approver → requester → creator), and POSTs the reply via `/api/tasks/:id/comments`. The bundle is cached at `/tmp/jat-bundle-<task>.json` so STEP 6 reuses it without paying for a second LLM call.
+
+**The step is non-blocking.** It silently exits 0 when:
+- `ANTHROPIC_API_KEY` is unset or bundle generation fails
+- The bundle has no `devResponse` (LLM determined task isn't user-originated)
+- Task has no reporter email (approver/requester/creator all null)
+- IDE is unreachable at `localhost:3333`
+
+For internal chores, refactors, and dev-spawned tasks with no external reporter, no comment is posted and the close proceeds normally.
 
 ### STEP 4: Mark Task Complete
 

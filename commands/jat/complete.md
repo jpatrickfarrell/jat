@@ -17,10 +17,11 @@ Complete current task properly with full verification. Session ends after comple
    - Verify task (tests, lint, security, browser checks)
    - Commit changes with proper message
 2. **Write Memory Entry** - Save context for future agents
-3. **Task Management**:
+3. **Reply to Reporter** *(if applicable)* - Post a friendly customer-facing comment for tasks with a requester/approver (skipped silently for internal/tech-debt tasks)
+4. **Task Management**:
    - Mark task as complete (`jt close`)
    - Release file reservations
-4. **End Session** - Session is complete, user spawns new agent for next task
+5. **End Session** - Session is complete, user spawns new agent for next task
 
 **When to use:**
 - After you display "🔍 READY FOR REVIEW" and user approves
@@ -577,6 +578,77 @@ This incrementally indexes the new file. If no memory index exists yet, it creat
 
 ---
 
+### STEP 3.8: Reply to Reporter (Customer-Facing Comment)
+
+**Posts a friendly customer-facing reply on the task BEFORE close.** The reply lands as a **task comment** — the canonical channel per epic jat-47wul. It is visible in the IDE comment thread and, for feedback-widget-originated tasks, in the customer-facing widget panel (jat-47wul.4). The server-side policy from jat-47wul.2 silently forces `external: true` for agent-authored comments — your reasoning IS the customer-facing work product.
+
+**The step is non-blocking.** Every skip condition exits cleanly so the close always proceeds.
+
+#### 3.8A: Run the automated reply step (default path)
+
+```bash
+# Forward --kill if /jat:complete --kill was invoked, so the cached
+# completion bundle has completionMode=auto_proceed matching Step 6.
+KILL_FLAG=""
+if [[ "$is_kill" == true ]]; then KILL_FLAG="--kill"; fi
+
+jat-step replying --task "$task_id" --title "$task_title" --agent "$agent_name" $KILL_FLAG
+```
+
+**What this does:**
+
+1. Calls `jat-complete-bundle` to generate the completion bundle (LLM-authored, ~1s on Haiku) and **caches** the full bundle JSON to `/tmp/jat-bundle-<task-id>.json`. Step 6 reuses this cache instead of paying for a second LLM call.
+2. Reads the `devResponse` field from the bundle. The bundle prompt populates this **only when the task originated from user feedback** — for internal chores, refactors, and pure tech-debt, the field is omitted and the step exits silently.
+3. Resolves the reporter via `approver → requester → creator` (matches `jt close` routing). Prepends a `Hi <FirstName>,` greeting if the LLM didn't already include one.
+4. POSTs the comment via `POST /api/tasks/<task-id>/comments` with `author_type: 'agent'`, `comment_type: 'note'`, `external: true`.
+
+**Skip conditions** (all silent, exit code 0 — close still proceeds):
+
+| Condition | Why skipped |
+|-----------|-------------|
+| `ANTHROPIC_API_KEY` not set / network error | Reply needs the LLM to write friendly prose |
+| Bundle has no `devResponse` field | LLM determined task isn't user-originated |
+| Task has no reporter email (`approver` / `requester` / `creator` all null) | Nobody to greet/thank |
+| IDE unreachable at `localhost:3333` | POST to `/api/tasks/:id/comments` fails |
+
+#### 3.8B: Manual override (compose your own reply)
+
+If you have stronger context than the bundle's LLM — the user pivoted mid-session, the close is a "wontfix" / "duplicate" that deserves a hand-written explanation, or you already answered the user interactively and a comment would be noise — skip the automated step and either compose the reply yourself or skip entirely.
+
+**Tone & content guide for hand-written replies:**
+
+| DO | DON'T |
+|----|-------|
+| Greet by first name if known: "Hi Sarah," | Mention file paths, function names, or commit hashes |
+| Thank them for the report (when feedback-originated) | Quote diffs or logs |
+| Describe the change in user terms ("We fixed the export button stalling on rapid clicks") | Use jargon ("debounced", "race condition") |
+| Keep it 2–4 short paragraphs | Apologize defensively or over-explain |
+| Close with an invite: "Let us know if you spot anything else." | Sign with the agent's name (IDE renders the avatar) |
+
+**POST your custom reply directly:**
+
+```bash
+IDE_URL="${JAT_IDE_URL:-http://127.0.0.1:3333}"
+
+# REPLY_TEXT is the message you composed yourself
+curl -sf -X POST "${IDE_URL}/api/tasks/${task_id}/comments" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -cn --arg text "$REPLY_TEXT" --arg author "$agent_name" \
+        '{text: $text, author: $author, author_type: "agent", comment_type: "note"}')" \
+  >/dev/null \
+  && echo "✓ Posted custom reply" \
+  || echo "Warning: failed to post reply (IDE may not be running) — continuing" >&2
+```
+
+**Skip 3.8 entirely** when:
+- Task was closed without code changes (investigation only) AND the answer was already given to the user interactively — a comment would be redundant noise.
+- The reporter IS the agent's own dev (`approver.email` matches the dev who spawned the agent) AND no external feedback origin — the dev sees the diff directly.
+- The task's `close_reason` is "duplicate", "wontfix", or "invalid" — those warrant a deliberate human-written reply, not an automated one.
+
+When in doubt, lean toward posting. A short friendly reply is better than silence.
+
+---
+
 ### STEP 4: Mark Task Complete
 
 ```bash
@@ -834,6 +906,7 @@ Or run /jat:verify to see detailed error report
 | 2.6 | Update Changelog | *(if notable - most tasks skip)* |
 | 3 | Commit Changes | `jat-step committing` (25%) |
 | **3.5** | **Write Memory Entry** | **Write tool + `jat-memory index`** |
+| **3.8** | **Reply to Reporter** *(skip if no reporter or no `devResponse`)* | **`jat-step replying`** (40%) — auto-posts customer-facing comment |
 | 4 | Mark Task Complete | `jat-step closing` (50%) |
 | 4.5 | Auto-Close Eligible Epics | `jt epic close-eligible` |
 | 5 | Release Reservations | `jat-step releasing` (75%) |

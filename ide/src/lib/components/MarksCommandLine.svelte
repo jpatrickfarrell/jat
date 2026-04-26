@@ -81,9 +81,11 @@
 
 	function onKeydown(e: KeyboardEvent) {
 		// Only the global trigger here; in-prompt keys are handled by the
-		// <input> element's own onkeydown.
+		// <input> element's own onkeydown. Note: `:` is Shift+; on US
+		// keyboards, so we cannot bail on shiftKey — only modifier keys
+		// that change the meaning (Ctrl/Meta/Alt) disqualify the press.
 		if (open) return;
-		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (e.key !== ':') return;
 		if (isEditingTarget(e.target)) return;
 		e.preventDefault();

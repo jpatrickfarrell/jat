@@ -329,6 +329,9 @@
 		<button class="voice-inflight-dismiss" onclick={() => dismissFailed(item.voice_id)} title="Dismiss">✕</button>
 	</div>
 	{/each}
+	{#if processingItems.length > 0}
+	<div class="voice-inflight-tip">Tip: Say "I'm [name]" at the start of a recording to attribute tasks to speakers</div>
+	{/if}
 </div>
 {/if}
 
@@ -379,6 +382,14 @@
 
 .voice-inflight-card.failed {
 	background: oklch(0.60 0.14 25 / 0.08);
+}
+
+.voice-inflight-tip {
+	padding: 0.4rem 0.75rem;
+	font-size: 0.7rem;
+	color: oklch(0.65 0.02 250 / 0.7);
+	font-style: italic;
+	border-bottom: 1px solid oklch(0.22 0.02 250 / 0.4);
 }
 
 .voice-inflight-spinner {

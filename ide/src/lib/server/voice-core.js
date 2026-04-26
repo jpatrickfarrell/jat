@@ -437,8 +437,21 @@ export async function organizeTranscript(transcript, projects = [], mode = 'orga
 
 	const diarized = isDiarizedTranscript(transcript);
 	const speakerLabels = diarized ? extractSpeakerLabels(transcript) : [];
+
+	const knownMembers = diarized
+		? Array.from(new Map(
+			(projects || [])
+				.flatMap(p => Array.isArray(p?.members) ? p.members : [])
+				.filter(m => m && typeof m.name === 'string' && m.name.trim())
+				.map(m => [`${m.name.toLowerCase()}|${(m.email || '').toLowerCase()}`, m])
+		).values())
+		: [];
+	const knownMembersLine = knownMembers.length > 0
+		? ` Known team members across projects: ${knownMembers.map(m => m.email ? `${m.name} (${m.email})` : m.name).join(', ')}.`
+		: '';
+
 	const speakerInstructions = diarized
-		? `\n\nSpeaker diarization: This transcript is labeled with SPEAKER_XX tags (${speakerLabels.join(', ')}). If any speaker introduces themselves by name (e.g. "Hi I'm John", "This is Sarah", "my name is..."), map their SPEAKER_XX label to that name in the "speakers" object. Leave the value null for any speaker whose name cannot be determined from the transcript.`
+		? `\n\nSpeaker diarization: This transcript is labeled with SPEAKER_XX tags (${speakerLabels.join(', ')}).${knownMembersLine} Look for patterns "I'm [name]", "This is [name]", "my name is [name]" as primary signals for matching speaker labels to known members. Output the matched name string as the value in the "speakers" object (use the canonical member name when a match is found), or null if no match can be determined from the transcript.`
 		: '';
 	const speakersSchemaLine = diarized
 		? `,\n  "speakers": { ${speakerLabels.map(l => `"${l}": null`).join(', ')} }`

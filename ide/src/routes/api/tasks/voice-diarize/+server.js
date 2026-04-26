@@ -159,8 +159,11 @@ function transcribeAndOrganize(audioPath, title, priority, voiceId, sizeBytes = 
 		try {
 			const projects = loadProjects();
 			const jatContext = await loadJatContext(projects);
-			const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects, 'organize', jatContext);
-			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, null, voiceId);
+			const { tasks, summary, title: organizedTitle, knowledgeBase, speakers } = await organizeTranscript(text, projects, 'organize', jatContext);
+			if (speakers && Object.keys(speakers).length > 0) {
+				vlog(`speakers map: ${JSON.stringify(speakers)}`);
+			}
+			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase, speakers, voiceId);
 			vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 		} catch (organizeErr) {
 			vlog(`ERROR: organize failed, saving transcript to voice inbox: ${organizeErr.message}`);

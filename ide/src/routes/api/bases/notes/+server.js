@@ -68,25 +68,30 @@ async function ensureNotesBase(projectPath, project, pgUrl) {
 	const id = notesBaseId(project);
 
 	if (pgUrl) {
-		let base = await pgBases.getBase(pgUrl, id);
-		if (base) return base;
+		try {
+			let base = await pgBases.getBase(pgUrl, id);
+			if (base) return base;
 
-		const existingNotes = getExistingNotes(project);
-		const blocks = existingNotes
-			? [{ type: 'text', id: randomBytes(4).toString('hex'), content: existingNotes }]
-			: [];
+			const existingNotes = getExistingNotes(project);
+			const blocks = existingNotes
+				? [{ type: 'text', id: randomBytes(4).toString('hex'), content: existingNotes }]
+				: [];
 
-		base = await pgBases.createBase(pgUrl, {
-			id,
-			name: 'Project Notes',
-			project,
-			blocks,
-			description: 'Scratchpad notes for this project — editable from the Tasks page',
-			always_inject: false,
-			token_estimate: existingNotes ? Math.ceil(existingNotes.length / 4) : 0,
-			source_config: { _projectNotes: true },
-		});
-		return base;
+			base = await pgBases.createBase(pgUrl, {
+				id,
+				name: 'Project Notes',
+				project,
+				blocks,
+				description: 'Scratchpad notes for this project — editable from the Tasks page',
+				always_inject: false,
+				token_estimate: existingNotes ? Math.ceil(existingNotes.length / 4) : 0,
+				source_config: { _projectNotes: true },
+			});
+			return base;
+		} catch (err) {
+			// If the bases table doesn't exist in Postgres yet, fall back to SQLite
+			if (err.code !== '42P01' && !err.message?.includes('does not exist')) throw err;
+		}
 	}
 
 	initBasesDb(projectPath);

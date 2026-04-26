@@ -15,6 +15,22 @@
  *   Ctrl+D / Ctrl+U  move roughly half a viewport's worth of items
  *   zz           scroll the focused item to the centre of its viewport
  *
+ * Selection layer (opt-in via `selectable: true`):
+ *
+ *   V              toggle visual mode (anchor at current focus, selects it)
+ *   j / k          while visual mode is on, also extends the range from anchor
+ *   x              toggle selection of the focused item (no movement)
+ *   Shift+J / K    toggle current + move down/up + toggle new focus (range-build)
+ *   *              toggle select-all of the currently visible items
+ *   Escape         backs out one layer at a time:
+ *                    pending motion → visual mode → selection → focus / onEscape
+ *
+ *   Selected items get the `selected-class` (default `jk-selected`) so pages
+ *   can style them. The controller exposes selectedIds()/clearSelection()/
+ *   selectAll()/toggleSelection()/isSelecting() and fires onSelectionChange
+ *   whenever the set mutates. A floating `BulkActionBar` is the canonical
+ *   chip for surfacing the count + per-route bulk actions.
+ *
  * Usage — action form (simplest):
  *
  *   <div use:listNav={{
@@ -31,6 +47,8 @@
  *   const nav = createListNav({
  *     getItems: () => Array.from(container.querySelectorAll('[data-nav-id]')),
  *     onSelect: (el) => openDetail(el.dataset.navId!),
+ *     selectable: true,
+ *     onSelectionChange: (ids) => { selectedIds = ids; },
  *   });
  *
  *   function onKeydown(e: KeyboardEvent) {
@@ -64,6 +82,23 @@ export interface ListNavOptions {
 	enabled?: boolean;
 	/** Action-only. When true, listen on window; when false, on the node. Default: true. */
 	global?: boolean;
+
+	// --- Selection layer (opt-in) -------------------------------------------------
+
+	/**
+	 * Enable the selection layer (V / Shift+J / Shift+K / x / *). Default: false.
+	 * When false, those keys pass through unhandled so pages can keep them.
+	 */
+	selectable?: boolean;
+	/** Class applied to selected items. Default: `jk-selected`. */
+	selectedClass?: string;
+	/** Fires whenever the selection set mutates. Receives a fresh Set snapshot. */
+	onSelectionChange?: (ids: Set<string>) => void;
+	/**
+	 * Resolve an item's stable id. Default: `el.dataset.navId`. Override if
+	 * your items use a different attribute (e.g. `data-rule-nav-id`).
+	 */
+	getItemId?: (el: HTMLElement) => string | null | undefined;
 }
 
 export interface KeyboardShortcut {
@@ -81,6 +116,21 @@ export interface ListNavController {
 	clear(): void;
 	/** Re-apply the focused class after items change (e.g. after a filter). */
 	refresh(): void;
+
+	// --- Selection layer ---------------------------------------------------------
+
+	/** Read-only snapshot of selected item ids. */
+	selectedIds(): Set<string>;
+	/** Toggle selection. With no arg, toggles the focused item. */
+	toggleSelection(navId?: string): void;
+	/** Replace the selection with the given ids (or clear if empty). */
+	setSelection(ids: Iterable<string>): void;
+	/** Drop the selection and exit visual mode. */
+	clearSelection(): void;
+	/** Toggle select-all of the currently visible items. */
+	selectAll(): void;
+	/** True while visual-mode (V) is active. */
+	isSelecting(): boolean;
 }
 
 /** How long a half-typed motion (count prefix, pending `g`, pending `z`) waits
@@ -174,6 +224,14 @@ function makeController(optsRef: OptionsRef): ListNavController {
 	let pendingZ = false;
 	let bufferTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Selection state. `selected` holds stable ids (from getItemId / data-nav-id)
+	// rather than indices, since list filters can shift indices but ids persist.
+	// `visualMode` flips on/off via V; while on, j/k extends the range from
+	// `visualAnchor` (the index where V was first pressed) to current focus.
+	const selected = new Set<string>();
+	let visualMode = false;
+	let visualAnchor = -1;
+
 	function clearBufferTimer() {
 		if (bufferTimer !== null) {
 			clearTimeout(bufferTimer);
@@ -199,6 +257,31 @@ function makeController(optsRef: OptionsRef): ListNavController {
 		return optsRef.current.focusedClass ?? 'jk-focused';
 	}
 
+	function selectedClass(): string {
+		return optsRef.current.selectedClass ?? 'jk-selected';
+	}
+
+	function getId(el: HTMLElement | null): string | null {
+		if (!el) return null;
+		const resolver = optsRef.current.getItemId;
+		const raw = resolver ? resolver(el) : el.dataset.navId;
+		return raw == null ? null : String(raw);
+	}
+
+	function applySelectionClasses(items: HTMLElement[]) {
+		const cls = selectedClass();
+		for (const el of items) {
+			const id = getId(el);
+			if (id !== null && selected.has(id)) el.classList.add(cls);
+			else el.classList.remove(cls);
+		}
+	}
+
+	function emitSelectionChange() {
+		applySelectionClasses(resolveItems(optsRef));
+		optsRef.current.onSelectionChange?.(new Set(selected));
+	}
+
 	function apply(items: HTMLElement[], idx: number) {
 		const cls = focusedClass();
 		const next = items[idx] ?? null;
@@ -210,6 +293,29 @@ function makeController(optsRef: OptionsRef): ListNavController {
 		lastEl = next;
 		focused = next ? idx : -1;
 		optsRef.current.onFocusChange?.(next, focused);
+	}
+
+	/**
+	 * Re-derive the selected set from the inclusive range [anchor..focus] while
+	 * visual mode is active. Items outside the range that were selected before
+	 * V was pressed are preserved (additive — Vim's `V` extends, doesn't reset).
+	 */
+	function extendVisualRange(items: HTMLElement[]) {
+		if (!visualMode || visualAnchor < 0 || focused < 0) return;
+		const lo = Math.min(visualAnchor, focused);
+		const hi = Math.max(visualAnchor, focused);
+		// Add every id in [lo..hi]. Items outside the range are left alone so
+		// existing pre-V selections survive moving the anchor to a new region.
+		let mutated = false;
+		for (let i = lo; i <= hi; i++) {
+			const id = getId(items[i] ?? null);
+			if (id !== null && !selected.has(id)) {
+				selected.add(id);
+				mutated = true;
+			}
+		}
+		if (mutated) emitSelectionChange();
+		else applySelectionClasses(items);
 	}
 
 	function focus(idx: number) {
@@ -248,6 +354,22 @@ function makeController(optsRef: OptionsRef): ListNavController {
 		} else if (focused >= 0 && focused < items.length) {
 			apply(items, focused);
 		}
+		// Re-paint selection classes — items may have been re-rendered, so the
+		// CSS class needs to be re-applied to the new DOM nodes whose ids match.
+		applySelectionClasses(items);
+	}
+
+	function toggleSelectionByIndex(items: HTMLElement[], idx: number) {
+		const id = getId(items[idx] ?? null);
+		if (id === null) return;
+		if (selected.has(id)) selected.delete(id);
+		else selected.add(id);
+		emitSelectionChange();
+	}
+
+	function exitVisualMode() {
+		visualMode = false;
+		visualAnchor = -1;
 	}
 
 	function handleKeydown(e: KeyboardEvent): boolean {
@@ -257,6 +379,85 @@ function makeController(optsRef: OptionsRef): ListNavController {
 
 		const items = resolveItems(optsRef);
 		const wrap = opts.wraparound ?? true;
+		const selectable = opts.selectable === true;
+
+		// --- Selection layer (opt-in) ----------------------------------------
+		// These keys are only owned by the controller when `selectable` is true,
+		// so existing pages without a selection model keep their bindings.
+		if (selectable && !hasModifier(e)) {
+			// V — toggle visual mode. First press anchors at current focus and
+			// selects the focused item; second press exits visual mode while
+			// keeping the existing selection (Vim parity for re-entry).
+			if (e.key === 'V') {
+				if (items.length === 0) return false;
+				e.preventDefault();
+				if (visualMode) {
+					exitVisualMode();
+				} else {
+					if (focused < 0) apply(items, 0);
+					visualMode = true;
+					visualAnchor = focused;
+					toggleSelectionByIndex(items, focused);
+					// If the toggle deselected the anchor, re-add it — entering
+					// visual mode should always include the anchor.
+					const anchorId = getId(items[focused] ?? null);
+					if (anchorId !== null && !selected.has(anchorId)) {
+						selected.add(anchorId);
+						emitSelectionChange();
+					}
+				}
+				clearPending();
+				return true;
+			}
+
+			// x — toggle selection of the focused item (no movement, no visual).
+			if (e.key === 'x' && !e.shiftKey) {
+				if (focused < 0 || items.length === 0) return false;
+				e.preventDefault();
+				toggleSelectionByIndex(items, focused);
+				clearPending();
+				return true;
+			}
+
+			// * — toggle select-all of currently visible items.
+			if (e.key === '*') {
+				if (items.length === 0) return false;
+				e.preventDefault();
+				const allIds: string[] = [];
+				for (const el of items) {
+					const id = getId(el);
+					if (id !== null) allIds.push(id);
+				}
+				const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
+				if (allSelected) {
+					for (const id of allIds) selected.delete(id);
+				} else {
+					for (const id of allIds) selected.add(id);
+				}
+				emitSelectionChange();
+				clearPending();
+				return true;
+			}
+
+			// Shift+J / Shift+K — toggle current + move down/up + add new focus.
+			// Preserves the existing /triage idiom (range-build without entering
+			// visual mode). Always wraps within bounds (no wraparound for safety).
+			if (e.key === 'J' || e.key === 'K') {
+				if (items.length === 0) return false;
+				e.preventDefault();
+				const dir = e.key === 'J' ? 1 : -1;
+				const before = focused < 0 ? (dir > 0 ? 0 : items.length - 1) : focused;
+				const beforeId = getId(items[before] ?? null);
+				if (beforeId !== null) selected.add(beforeId);
+				const afterIdx = Math.max(0, Math.min(items.length - 1, before + dir));
+				apply(items, afterIdx);
+				const afterId = getId(items[afterIdx] ?? null);
+				if (afterId !== null) selected.add(afterId);
+				emitSelectionChange();
+				clearPending();
+				return true;
+			}
+		}
 
 		// Ctrl+D / Ctrl+U — half-page motion. Intercepted before the generic
 		// Ctrl/Meta/Alt bailout so vim half-page works; every other modifier
@@ -355,6 +556,7 @@ function makeController(optsRef: OptionsRef): ListNavController {
 				const target = focused < 0 ? step - 1 : focused + step;
 				apply(items, wrapIndex(target, items.length, wrap));
 				clearPending();
+				if (selectable && visualMode) extendVisualRange(items);
 				return true;
 			}
 			case 'k':
@@ -365,6 +567,7 @@ function makeController(optsRef: OptionsRef): ListNavController {
 				const target = focused < 0 ? items.length - step : focused - step;
 				apply(items, wrapIndex(target, items.length, wrap));
 				clearPending();
+				if (selectable && visualMode) extendVisualRange(items);
 				return true;
 			}
 			case 'Enter':
@@ -383,6 +586,20 @@ function makeController(optsRef: OptionsRef): ListNavController {
 				if (pendingCount !== null || pendingG || pendingZ) {
 					e.preventDefault();
 					clearPending();
+					return true;
+				}
+				// Selection cascade: visual mode → selection → focus / onEscape.
+				// Each Esc backs out one layer so users can stop extending without
+				// losing what they've already selected, then Esc again to clear.
+				if (selectable && visualMode) {
+					e.preventDefault();
+					exitVisualMode();
+					return true;
+				}
+				if (selectable && selected.size > 0) {
+					e.preventDefault();
+					selected.clear();
+					emitSelectionChange();
 					return true;
 				}
 				if (focused < 0 && !opts.onEscape) return false;
@@ -406,7 +623,40 @@ function makeController(optsRef: OptionsRef): ListNavController {
 		focusFirst,
 		focusLast,
 		clear,
-		refresh
+		refresh,
+
+		selectedIds: () => new Set(selected),
+		toggleSelection: (navId?: string) => {
+			const items = resolveItems(optsRef);
+			if (navId === undefined) {
+				if (focused < 0) return;
+				toggleSelectionByIndex(items, focused);
+				return;
+			}
+			if (selected.has(navId)) selected.delete(navId);
+			else selected.add(navId);
+			emitSelectionChange();
+		},
+		setSelection: (ids: Iterable<string>) => {
+			selected.clear();
+			for (const id of ids) selected.add(id);
+			emitSelectionChange();
+		},
+		clearSelection: () => {
+			if (selected.size === 0 && !visualMode) return;
+			selected.clear();
+			exitVisualMode();
+			emitSelectionChange();
+		},
+		selectAll: () => {
+			const items = resolveItems(optsRef);
+			for (const el of items) {
+				const id = getId(el);
+				if (id !== null) selected.add(id);
+			}
+			emitSelectionChange();
+		},
+		isSelecting: () => visualMode
 	};
 }
 

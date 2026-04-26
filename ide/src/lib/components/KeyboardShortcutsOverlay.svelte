@@ -14,6 +14,7 @@
 	 *   ]} />
 	 */
 	import type { KeyboardShortcut } from '$lib/actions/listNav';
+	import { marksSnapshot } from '$lib/stores/marks.svelte';
 
 	export interface SectionEntry {
 		key: string;
@@ -32,7 +33,8 @@
 		sections,
 		title = 'Keyboard Shortcuts',
 		open = $bindable(false),
-		showListMotions = true
+		showListMotions = true,
+		showMarks = true
 	}: {
 		shortcuts?: KeyboardShortcut[];
 		/**
@@ -49,7 +51,28 @@
 		 * it. Pass `false` to hide them (e.g. on routes with no j/k list).
 		 */
 		showListMotions?: boolean;
+		/**
+		 * Render the "Marks & Jumps (Vim)" section. Marks are global —
+		 * `m<letter>` sets, `'<letter>` jumps, Ctrl+O/I traverse history.
+		 */
+		showMarks?: boolean;
 	} = $props();
+
+	const MARKS_SHORTCUTS: KeyboardShortcut[] = [
+		{ key: 'm{a-z}', description: 'Drop a mark on the focused item' },
+		{ key: "'{a-z}", description: 'Jump to a mark (cross-route)' },
+		{ key: 'Ctrl+O', description: 'Jump back through recent positions' },
+		{ key: 'Ctrl+I', description: 'Jump forward through recent positions' },
+		{ key: ':delm {a-z}', description: 'Delete a single mark' },
+		{ key: ':delmm', description: 'Delete all marks' }
+	];
+
+	// Reactive snapshot of currently set marks. Reads from the marks store
+	// rune so the list updates live as marks are added or deleted.
+	const activeMarks = $derived.by(() => {
+		const map = marksSnapshot();
+		return Object.values(map).sort((a, b) => a.letter.localeCompare(b.letter));
+	});
 
 	/**
 	 * Universal list motions, layered on top of j/k/Enter/Esc by `listNav`.
@@ -154,6 +177,29 @@
 							<span class="kso-description">{description}</span>
 						</div>
 					{/each}
+				{/if}
+				{#if showMarks}
+					<div class="kso-section-title">Marks & jumps (Vim)</div>
+					{#each MARKS_SHORTCUTS as { key, description }, i (key + '::' + i)}
+						<div class="kso-row">
+							<kbd class="kso-key">{key}</kbd>
+							<span class="kso-description">{description}</span>
+						</div>
+					{/each}
+					{#if activeMarks.length > 0}
+						<div class="kso-marks-list">
+							<div class="kso-marks-label">Active marks</div>
+							{#each activeMarks as mark (mark.letter)}
+								<div class="kso-mark-row">
+									<kbd class="kso-key kso-mark-letter">{mark.letter}</kbd>
+									<span class="kso-mark-target">
+										<span class="kso-mark-label">{mark.label || mark.navId || '—'}</span>
+										<span class="kso-mark-route">({mark.route})</span>
+									</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 				<div class="kso-row kso-row-meta">
 					<kbd class="kso-key">?</kbd>
@@ -290,6 +336,62 @@
 		font-size: 0.85rem;
 		color: oklch(0.78 0.02 250);
 		line-height: 1.35;
+	}
+
+	.kso-marks-list {
+		margin-top: 0.4rem;
+		padding: 0.5rem 0.6rem;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.kso-marks-label {
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: oklch(0.62 0.05 240);
+		margin-bottom: 0.15rem;
+	}
+
+	.kso-mark-row {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		padding: 0.15rem 0;
+	}
+
+	.kso-mark-letter {
+		min-width: 2rem;
+		color: oklch(0.85 0.12 200);
+		border-color: oklch(0.45 0.10 200);
+		background: oklch(0.30 0.04 220);
+	}
+
+	.kso-mark-target {
+		font-size: 0.8rem;
+		color: oklch(0.85 0.02 250);
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.kso-mark-label {
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 16rem;
+	}
+
+	.kso-mark-route {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.72rem;
+		color: oklch(0.60 0.04 250);
 	}
 
 	@keyframes kso-fade {

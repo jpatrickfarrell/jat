@@ -9,6 +9,7 @@ import { appendFileSync, mkdirSync, readFileSync, existsSync, mkdtempSync, rmSyn
 import { exec, execFile } from 'child_process';
 import { join, dirname, basename } from 'path';
 import { homedir, tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 
 export const TEMP_DIR = '/tmp/jat-voice';
 export const VOICE_LOG_FILE = '/tmp/jat-voice.log';
@@ -245,25 +246,44 @@ async function transcribeDiarized(wavPath, { timeout, maxBuffer }) {
 
 	const outputDir = mkdtempSync(join(tmpdir(), 'jat-whisperx-'));
 	try {
+		// GPU diarization via whisperx-diarize.py (jat-c71qe.4).
+		//
+		// We don't use the whisperx CLI: `whisperx --device cuda` cannot run on
+		// AMD ROCm because ctranslate2 4.7.1 has no HIP backend (NVIDIA-only).
+		// The wrapper splits devices: ctranslate2 transcribe on CPU, alignment
+		// and pyannote diarization on GPU via ROCm torch. Diarization was the
+		// 15–30 min bottleneck on CPU and runs in ~10s/min-of-audio on GPU.
+		//
+		// Rollback to CPU-only diarization (if ROCm/pyannote breaks): edit
+		// whisperx-diarize.py and change device="cuda" to device="cpu" in the
+		// load_align_model and DiarizationPipeline calls; restart the IDE.
+		const venvPython = join(homedir(), '.local', 'share', 'whisperx-env', 'bin', 'python3');
+		const scriptPath = join(dirname(fileURLToPath(import.meta.url)), 'whisperx-diarize.py');
 		await new Promise((resolve, reject) => {
-			const cmd = [
-				`whisperx "${wavPath}"`,
-				`--model large-v3-turbo`,
-				`--diarize`,
-				`--hf_token "${hfToken}"`,
-				`--device cpu`,
-				`--compute_type int8`,
-				`--output_format json`,
-				`--output_dir "${outputDir}"`
-			].join(' ');
-			vlog(`running whisperx (diarize): ${wavPath}`);
-			exec(cmd, { timeout, encoding: 'utf-8', maxBuffer }, (err, _stdout, stderr) => {
-				if (err) {
-					reject(new Error(`whisperx failed: ${err.message}\n${stderr || ''}`.trim()));
-					return;
+			vlog(`running whisperx (diarize, gpu): ${wavPath}`);
+			execFile(
+				venvPython,
+				[scriptPath, wavPath, outputDir],
+				{
+					timeout,
+					encoding: 'utf-8',
+					maxBuffer,
+					env: { ...process.env, HF_TOKEN: hfToken }
+				},
+				(err, _stdout, stderr) => {
+					if (err) {
+						reject(new Error(`whisperx failed: ${err.message}\n${stderr || ''}`.trim()));
+						return;
+					}
+					if (stderr) {
+						for (const line of stderr.split('\n')) {
+							const trimmed = line.trim();
+							if (trimmed) vlog(`[whisperx] ${trimmed}`);
+						}
+					}
+					resolve(null);
 				}
-				resolve(null);
-			});
+			);
 		});
 
 		// whisperx writes <stem>.json into --output_dir (stem = basename minus .wav).

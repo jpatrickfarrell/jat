@@ -254,3 +254,266 @@ describe('createListNav — vim motions', () => {
 		expect(nav.focusedIndex()).toBe(-1);
 	});
 });
+
+describe('createListNav — selection layer', () => {
+	it('selection keys no-op when selectable is unset (back-compat)', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items });
+		nav.focus(0);
+
+		// V, x, *, Shift+J should all pass through (return false) without
+		// touching the selection — pages without `selectable: true` keep their
+		// own bindings for those keys.
+		expect(nav.handleKeydown(press('V', { shiftKey: true }))).toBe(false);
+		expect(nav.handleKeydown(press('x'))).toBe(false);
+		expect(nav.handleKeydown(press('*', { shiftKey: true }))).toBe(false);
+		expect(nav.handleKeydown(press('J', { shiftKey: true }))).toBe(false);
+		expect(nav.selectedIds().size).toBe(0);
+	});
+
+	it('V enters visual mode and selects the focused anchor', () => {
+		const { items } = makeList(5);
+		const onSelectionChange = vi.fn();
+		const nav = createListNav({ getItems: () => items, selectable: true, onSelectionChange });
+		nav.focus(2);
+
+		expect(nav.handleKeydown(press('V', { shiftKey: true }))).toBe(true);
+		expect(nav.isSelecting()).toBe(true);
+		expect(Array.from(nav.selectedIds())).toEqual(['2']);
+		expect(items[2].classList.contains('jk-selected')).toBe(true);
+		expect(onSelectionChange).toHaveBeenCalledWith(new Set(['2']));
+	});
+
+	it('V from an unfocused state anchors at the first item', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		expect(nav.focusedIndex()).toBe(0);
+		expect(Array.from(nav.selectedIds())).toEqual(['0']);
+	});
+
+	it('j/k extends the visual range from the anchor', () => {
+		const { items } = makeList(10);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(3);
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		nav.handleKeydown(press('j'));
+		nav.handleKeydown(press('j'));
+		// Range is [3..5] inclusive.
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['3', '4', '5']);
+	});
+
+	it('visual range extends backwards when k crosses the anchor', () => {
+		const { items } = makeList(10);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(5);
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		nav.handleKeydown(press('k'));
+		nav.handleKeydown(press('k'));
+		// Range is [3..5] inclusive (anchor=5, focus=3).
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['3', '4', '5']);
+	});
+
+	it('second V exits visual mode but keeps the selection', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(1);
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		nav.handleKeydown(press('j'));
+		expect(nav.isSelecting()).toBe(true);
+		expect(nav.selectedIds().size).toBe(2);
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		expect(nav.isSelecting()).toBe(false);
+		expect(nav.selectedIds().size).toBe(2);
+	});
+
+	it('x toggles selection of the focused item without moving', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(2);
+
+		nav.handleKeydown(press('x'));
+		expect(nav.focusedIndex()).toBe(2);
+		expect(Array.from(nav.selectedIds())).toEqual(['2']);
+
+		nav.handleKeydown(press('x'));
+		expect(nav.selectedIds().size).toBe(0);
+	});
+
+	it('* toggles select-all of visible items', () => {
+		const { items } = makeList(4);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+
+		nav.handleKeydown(press('*', { shiftKey: true }));
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['0', '1', '2', '3']);
+
+		nav.handleKeydown(press('*', { shiftKey: true }));
+		expect(nav.selectedIds().size).toBe(0);
+	});
+
+	it('Shift+J selects current + new focus and moves down', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(1);
+
+		nav.handleKeydown(press('J', { shiftKey: true }));
+		expect(nav.focusedIndex()).toBe(2);
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['1', '2']);
+	});
+
+	it('Shift+K selects current + new focus and moves up', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(3);
+
+		nav.handleKeydown(press('K', { shiftKey: true }));
+		expect(nav.focusedIndex()).toBe(2);
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['2', '3']);
+	});
+
+	it('Shift+J at the last item stays put (no wraparound for selection)', () => {
+		const { items } = makeList(3);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focusLast();
+
+		nav.handleKeydown(press('J', { shiftKey: true }));
+		expect(nav.focusedIndex()).toBe(2);
+		// Only the last item is added to the selection — we don't accidentally
+		// wrap around and grab item 0.
+		expect(Array.from(nav.selectedIds())).toEqual(['2']);
+	});
+
+	it('Escape backs out one layer at a time', () => {
+		const { items } = makeList(5);
+		const onEscape = vi.fn();
+		const nav = createListNav({ getItems: () => items, selectable: true, onEscape });
+		nav.focus(1);
+
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		nav.handleKeydown(press('j'));
+		expect(nav.isSelecting()).toBe(true);
+		expect(nav.selectedIds().size).toBe(2);
+
+		// Layer 1: visual mode → exit visual, keep selection
+		nav.handleKeydown(press('Escape'));
+		expect(nav.isSelecting()).toBe(false);
+		expect(nav.selectedIds().size).toBe(2);
+
+		// Layer 2: selection → clear selection
+		nav.handleKeydown(press('Escape'));
+		expect(nav.selectedIds().size).toBe(0);
+
+		// Layer 3: nothing left → fires onEscape
+		nav.handleKeydown(press('Escape'));
+		expect(onEscape).toHaveBeenCalledTimes(1);
+	});
+
+	it('clearSelection wipes both selection and visual mode', () => {
+		const { items } = makeList(5);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(0);
+		nav.handleKeydown(press('V', { shiftKey: true }));
+		nav.handleKeydown(press('j'));
+
+		nav.clearSelection();
+		expect(nav.selectedIds().size).toBe(0);
+		expect(nav.isSelecting()).toBe(false);
+		expect(items[0].classList.contains('jk-selected')).toBe(false);
+	});
+
+	it('toggleSelection() with no arg toggles the focused item', () => {
+		const { items } = makeList(3);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(1);
+
+		nav.toggleSelection();
+		expect(Array.from(nav.selectedIds())).toEqual(['1']);
+		nav.toggleSelection();
+		expect(nav.selectedIds().size).toBe(0);
+	});
+
+	it('toggleSelection(id) operates on a specific id regardless of focus', () => {
+		const { items } = makeList(3);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(0);
+
+		nav.toggleSelection('2');
+		expect(nav.focusedIndex()).toBe(0);
+		expect(Array.from(nav.selectedIds())).toEqual(['2']);
+	});
+
+	it('setSelection replaces the entire set', () => {
+		const { items } = makeList(5);
+		const onSelectionChange = vi.fn();
+		const nav = createListNav({ getItems: () => items, selectable: true, onSelectionChange });
+		nav.focus(0);
+
+		nav.setSelection(['1', '3']);
+		expect(Array.from(nav.selectedIds()).sort()).toEqual(['1', '3']);
+		expect(items[1].classList.contains('jk-selected')).toBe(true);
+		expect(items[3].classList.contains('jk-selected')).toBe(true);
+		expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['1', '3']));
+	});
+
+	it('refresh re-paints selection class on re-rendered DOM nodes', () => {
+		const list = makeList(3);
+		const nav = createListNav({ getItems: () => list.items, selectable: true });
+		nav.focus(0);
+		nav.handleKeydown(press('x'));
+		expect(list.items[0].classList.contains('jk-selected')).toBe(true);
+
+		// Simulate a list re-render: same ids, new DOM elements.
+		const newItems: HTMLElement[] = [];
+		document.body.innerHTML = '';
+		const container = document.createElement('div');
+		for (let i = 0; i < 3; i++) {
+			const el = document.createElement('div');
+			el.setAttribute('data-nav-id', String(i));
+			container.appendChild(el);
+			newItems.push(el);
+		}
+		document.body.appendChild(container);
+		list.items = newItems;
+
+		nav.refresh();
+		expect(newItems[0].classList.contains('jk-selected')).toBe(true);
+	});
+
+	it('selectedIds() returns a snapshot (mutating it does not leak)', () => {
+		const { items } = makeList(3);
+		const nav = createListNav({ getItems: () => items, selectable: true });
+		nav.focus(0);
+		nav.handleKeydown(press('x'));
+
+		const snap = nav.selectedIds();
+		snap.add('99');
+		expect(nav.selectedIds().has('99')).toBe(false);
+	});
+
+	it('custom getItemId resolves selection ids from a non-default attribute', () => {
+		document.body.innerHTML = '';
+		const container = document.createElement('div');
+		const items: HTMLElement[] = [];
+		for (let i = 0; i < 3; i++) {
+			const el = document.createElement('div');
+			el.setAttribute('data-rule-nav-id', `rule-${i}`);
+			container.appendChild(el);
+			items.push(el);
+		}
+		document.body.appendChild(container);
+
+		const nav = createListNav({
+			getItems: () => items,
+			selectable: true,
+			getItemId: (el) => el.getAttribute('data-rule-nav-id')
+		});
+		nav.focus(0);
+		nav.handleKeydown(press('x'));
+		expect(Array.from(nav.selectedIds())).toEqual(['rule-0']);
+	});
+});

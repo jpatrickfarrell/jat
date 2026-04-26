@@ -140,12 +140,16 @@
 	// Epics for assignment
 	let epics = $state<Task[]>([]);
 
-	// Bulk-selection state (populated by listNav's selection layer)
+	// Bulk-selection state. Mirrored out of listNav's selection layer via the
+	// onSelectionChange callback so the existing template bindings (chip count,
+	// per-row highlight, bulk-action gating) stay in $state form.
 	let selectedIds = $state<Set<string>>(new Set());
 	let bulkAssignOpen = $state(false);
 	let bulkWorking = $state(false);
 
-	// listNav composable for j/k navigation with wraparound + V/Shift+J range-select
+	// listNav composable for j/k navigation + V/Shift+J range-select. The
+	// selection layer (V, x, *, Shift+J/K, Esc cascade) is owned by listNav;
+	// the page only wires onSelectionChange and the per-route bulk actions.
 	const nav = createListNav({
 		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
 		onSelect: (_el, idx) => {
@@ -156,6 +160,8 @@
 			if (idx >= 0) selectedIdx = idx;
 		},
 		wraparound: true,
+		selectable: true,
+		onSelectionChange: (ids) => { selectedIds = ids; },
 	});
 
 	onMount(() => {
@@ -452,7 +458,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Closed ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
-			selectedIds = new Set();
+			nav.clearSelection();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -473,7 +479,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Deleted ${success}/${ids.length} tasks`, type: success === ids.length ? 'success' : 'info' });
-			selectedIds = new Set();
+			nav.clearSelection();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -497,7 +503,7 @@
 				} catch { /* continue */ }
 			}
 			addToast({ message: `Updated ${success}/${ids.length} tasks → ${status}`, type: success === ids.length ? 'success' : 'info' });
-			selectedIds = new Set();
+			nav.clearSelection();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -522,7 +528,7 @@
 			}
 			addToast({ message: `Assigned ${success}/${ids.length} tasks to epic`, type: success === ids.length ? 'success' : 'info' });
 			bulkAssignOpen = false;
-			selectedIds = new Set();
+			nav.clearSelection();
 			await load();
 		} finally {
 			bulkWorking = false;
@@ -535,63 +541,18 @@
 		// Don't capture when typing in inputs
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
-		if (!editing) {
-			// x — toggle select focused task
-			if (e.key === 'x') {
-				const task = filteredTasks[selectedIdx];
-				if (task) {
-					e.preventDefault();
-					const next = new Set(selectedIds);
-					if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
-					selectedIds = next;
-					return;
-				}
-			}
-
-			// Shift+J — select current + move down
-			if (e.key === 'J') {
-				e.preventDefault();
-				const before = selectedIdx;
-				const afterIdx = Math.min(before + 1, filteredTasks.length - 1);
-				nav.focus(afterIdx);
-				const next = new Set(selectedIds);
-				if (filteredTasks[before]) next.add(filteredTasks[before].id);
-				if (filteredTasks[afterIdx]) next.add(filteredTasks[afterIdx].id);
-				selectedIds = next;
-				return;
-			}
-
-			// Shift+K — select current + move up
-			if (e.key === 'K') {
-				e.preventDefault();
-				const before = selectedIdx;
-				const afterIdx = Math.max(before - 1, 0);
-				nav.focus(afterIdx);
-				const next = new Set(selectedIds);
-				if (filteredTasks[before]) next.add(filteredTasks[before].id);
-				if (filteredTasks[afterIdx]) next.add(filteredTasks[afterIdx].id);
-				selectedIds = next;
-				return;
-			}
-
-			// * — toggle select all visible
-			if (e.key === '*') {
-				e.preventDefault();
-				const allSelected = filteredTasks.length > 0 && filteredTasks.every(t => selectedIds.has(t.id));
-				selectedIds = allSelected ? new Set() : new Set(filteredTasks.map(t => t.id));
-				return;
-			}
-
-			// Escape clears selection before clearing nav focus
-			if (e.key === 'Escape' && selectedIds.size > 0) {
-				e.preventDefault();
-				selectedIds = new Set();
-				if (bulkAssignOpen) bulkAssignOpen = false;
-				return;
-			}
+		// Close the assign-picker first when Esc fires with one open — listNav's
+		// selection cascade can't see the modal-style picker, and we want it to
+		// peel off ahead of the selection layer.
+		if (!editing && e.key === 'Escape' && bulkAssignOpen) {
+			e.preventDefault();
+			bulkAssignOpen = false;
+			return;
 		}
 
-		// Let listNav handle j/k/ArrowDown/ArrowUp/Enter/Space/Escape when not editing
+		// Let listNav handle j/k/V/x/*/Shift+J/Shift+K/Enter/Space/Escape and
+		// the vim-motion layer when not editing. The selection layer mirrors
+		// nav.selectedIds() into our `selectedIds` $state via onSelectionChange.
 		if (!editing && nav.handleKeydown(e)) return;
 
 		// Bulk-action keys fire only when a selection exists
@@ -1021,6 +982,7 @@
 		{ key: 'j / ↓', description: 'Next item (wraps)' },
 		{ key: 'k / ↑', description: 'Previous item (wraps)' },
 		{ key: 'Enter', description: 'Open detail drawer' },
+		{ key: 'V', description: 'Visual mode — anchor + extend with j/k' },
 		{ key: 'x', description: 'Toggle select focused task' },
 		{ key: 'Shift+J / Shift+K', description: 'Select + move down / up' },
 		{ key: '*', description: 'Select / deselect all visible' },
@@ -1045,7 +1007,7 @@
 		{ key: 'a', label: 'Assign to Epic', onAction: () => { if (epics.length > 0) bulkAssignOpen = true; }, disabled: bulkWorking || epics.length === 0 },
 		{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking }
 	]}
-	onClear={() => selectedIds = new Set()}
+	onClear={() => nav.clearSelection()}
 />
 
 {#if bulkAssignOpen}

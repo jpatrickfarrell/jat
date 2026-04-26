@@ -304,6 +304,7 @@
 			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ taskId: task.id }),
 			});
 
 			if (!response.ok) {

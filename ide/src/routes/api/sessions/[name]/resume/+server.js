@@ -151,6 +151,85 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 }
 
 /**
+ * Find session info by task ID by scanning signal and timeline files in /tmp.
+ *
+ * Checks two sources (newest-first in each):
+ * 1. UUID-keyed signal files: /tmp/jat-signal-{uuid}.json  — written by PostToolUse hook
+ * 2. Timeline JSONL files: /tmp/jat-timeline-{session}.jsonl — survive longer, have task_id
+ *
+ * This handles cases where the task assignee is a generic placeholder like "JAT Agent"
+ * rather than the real named agent (e.g. "VividDusk") that ran the session.
+ *
+ * @param {string} taskId - Task ID to search for (e.g., "meadow-w3up6.1")
+ * @returns {{ sessionId: string, tmuxSession: string, agentName: string } | null}
+ */
+function findSessionByTaskId(taskId) {
+	// 1. Scan UUID-keyed signal files (fast, contain task_id directly)
+	try {
+		const signalFiles = readdirSync('/tmp')
+			.filter(f => f.startsWith('jat-signal-') && !f.includes('-tmux-') && f.endsWith('.json'))
+			.map(f => {
+				const path = join('/tmp', f);
+				return { path, mtime: statSync(path).mtime.getTime() };
+			})
+			.sort((a, b) => b.mtime - a.mtime)
+			.map(f => f.path);
+
+		for (const filePath of signalFiles) {
+			try {
+				const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+				if (data.task_id === taskId && data.session_id && data.tmux_session) {
+					const agentName = data.data?.agentName || data.tmux_session.replace(/^jat-/, '');
+					console.log(`[resume] Found session for task ${taskId} via signal file: ${basename(filePath)}`);
+					return { sessionId: data.session_id, tmuxSession: data.tmux_session, agentName };
+				}
+			} catch {
+				// Skip unreadable/malformed files
+			}
+		}
+	} catch (e) {
+		console.error('[resume] Failed to scan /tmp signal files:', e);
+	}
+
+	// 2. Scan timeline JSONL files — these persist longer and also carry task_id
+	try {
+		const timelineFiles = readdirSync('/tmp')
+			.filter(f => f.startsWith('jat-timeline-') && f.endsWith('.jsonl'))
+			.map(f => {
+				const path = join('/tmp', f);
+				return { path, mtime: statSync(path).mtime.getTime() };
+			})
+			.sort((a, b) => b.mtime - a.mtime)
+			.map(f => f.path);
+
+		for (const filePath of timelineFiles) {
+			try {
+				const lines = readFileSync(filePath, 'utf-8').trim().split('\n');
+				// Search newest to oldest (last line first)
+				for (let i = lines.length - 1; i >= 0; i--) {
+					try {
+						const event = JSON.parse(lines[i]);
+						if (event.task_id === taskId && event.session_id && event.tmux_session) {
+							const agentName = event.data?.agentName || event.tmux_session.replace(/^jat-/, '');
+							console.log(`[resume] Found session for task ${taskId} via timeline: ${basename(filePath)}`);
+							return { sessionId: event.session_id, tmuxSession: event.tmux_session, agentName };
+						}
+					} catch {
+						// Skip malformed lines
+					}
+				}
+			} catch {
+				// Skip unreadable files
+			}
+		}
+	} catch (e) {
+		console.error('[resume] Failed to scan /tmp timeline files:', e);
+	}
+
+	return null;
+}
+
+/**
  * Find session_id from signal files or persistent agent session files
  * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
  * @param {string | null} projectPath - project path to search for persistent session files
@@ -347,17 +426,22 @@ async function getProjectPath(agentName) {
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
 	try {
-		const { agentName, sessionName } = resolveSessionName(params.name);
+		const { agentName: initialAgentName, sessionName: initialSessionName } = resolveSessionName(params.name);
 
-		if (!agentName) {
+		if (!initialAgentName) {
 			return json({
 				error: 'Missing agent name',
 				message: 'Agent name is required'
 			}, { status: 400 });
 		}
 
-		// Parse request body for optional session_id and model
-		/** @type {{project?: string, session_id?: string | null, model?: string | null}} */
+		// These may be overridden by task-ID signal file lookup when the task assignee
+		// is a generic placeholder (e.g. "JAT Agent") rather than the real agent name.
+		let agentNameResolved = initialAgentName;
+		let sessionNameResolved = initialSessionName;
+
+		// Parse request body for optional session_id, model, and taskId
+		/** @type {{project?: string, session_id?: string | null, model?: string | null, taskId?: string | null}} */
 		let body = {};
 		try {
 			body = await request.json();
@@ -368,29 +452,43 @@ export async function POST({ params, request }) {
 		// Get project path - use provided path if available, otherwise look it up
 		let projectPath = body.project ? resolveProjectPath(body.project) : null;
 		if (!projectPath) {
-			projectPath = await getProjectPath(agentName);
+			projectPath = await getProjectPath(initialAgentName);
 		}
 		if (!projectPath || !existsSync(projectPath)) {
 			return json({
 				error: 'Project path not found',
-				message: `Could not find project path for agent '${agentName}'.`,
-				agentName,
-				sessionName
+				message: `Could not find project path for agent '${initialAgentName}'.`,
+				agentName: initialAgentName,
+				sessionName: initialSessionName
 			}, { status: 404 });
 		}
 
 		// Use provided session_id or look it up from signal files AND persistent agent files
 		let sessionId = body.session_id;
 		if (!sessionId) {
-			sessionId = findSessionId(sessionName, projectPath);
+			sessionId = findSessionId(sessionNameResolved, projectPath);
+		}
+
+		// Last resort: scan UUID-keyed signal files by task ID.
+		// This handles cases where the assignee is a generic placeholder like "JAT Agent"
+		// rather than the actual named agent (e.g. "VividDawn") that ran the session.
+		if (!sessionId && body.taskId) {
+			const signalResult = findSessionByTaskId(body.taskId);
+			if (signalResult) {
+				sessionId = signalResult.sessionId;
+				// Override session identity with the real agent from the signal file
+				const resolved = resolveSessionName(signalResult.tmuxSession);
+				agentNameResolved = resolved.agentName;
+				sessionNameResolved = resolved.sessionName;
+			}
 		}
 
 		if (!sessionId) {
 			return json({
 				error: 'Session ID not found',
-				message: `Could not find session ID for agent '${agentName}'. No matching session files found in /tmp or .claude/sessions/.`,
-				agentName,
-				sessionName,
+				message: `Could not find session ID for agent '${initialAgentName}'. No matching session files found in /tmp or .claude/sessions/.`,
+				agentName: initialAgentName,
+				sessionName: initialSessionName,
 				projectPath
 			}, { status: 404 });
 		}
@@ -435,11 +533,11 @@ export async function POST({ params, request }) {
 		}
 
 		// Write resume marker file so IDE can show "RESUMED" badge
-		const resumeMarker = `/tmp/jat-resumed-${sessionName}.json`;
+		const resumeMarker = `/tmp/jat-resumed-${sessionNameResolved}.json`;
 		const resumeData = JSON.stringify({
 			resumed: true,
 			originalSessionId: sessionId,
-			agentName,
+			agentName: agentNameResolved,
 			project: projectPath,
 			resumedAt: new Date().toISOString()
 		}, null, 2);
@@ -466,7 +564,7 @@ export async function POST({ params, request }) {
 							SELECT id, title FROM tasks
 							WHERE assignee = ? AND status = 'in_progress'
 							ORDER BY updated_at DESC LIMIT 1
-						`).get(agentName)
+						`).get(agentNameResolved)
 					);
 					taskDb.close();
 					if (activeTask) {
@@ -491,15 +589,15 @@ export async function POST({ params, request }) {
 			const signalType = taskId ? 'working' : 'idle';
 			const signalData = {
 				type: signalType,
-				agentName,
-				sessionId: sessionName,
+				agentName: agentNameResolved,
+				sessionId: sessionNameResolved,
 				project: projectName,
 				taskId,
 				taskTitle,
 				resumed: true,
 				timestamp: new Date().toISOString()
 			};
-			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+			const signalFile = `/tmp/jat-signal-tmux-${sessionNameResolved}.json`;
 			writeFileSync(signalFile, JSON.stringify(signalData, null, 2), 'utf-8');
 			console.log(`[resume] Wrote IDE-initiated signal: ${signalFile} (type: ${signalType})`);
 		} catch (e) {
@@ -512,8 +610,8 @@ export async function POST({ params, request }) {
 		// 2. Create new tmux session with claude -r running inside
 		// 3. Attach terminal to that session
 		const modelFlag = body.model ? ` --model ${body.model}` : '';
-		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "claude ${claudeFlags}${modelFlag} -r '${sessionId}'"`;
-		const tmuxAttachCmd = `tmux attach-session -t "${sessionName}"`;
+		const tmuxCreateCmd = `tmux kill-session -t "${sessionNameResolved}" 2>/dev/null; tmux new-session -d -s "${sessionNameResolved}" -c "${projectPath}" "claude ${claudeFlags}${modelFlag} -r '${sessionId}'"`;
+		const tmuxAttachCmd = `tmux attach-session -t "${sessionNameResolved}"`;
 
 		// First create the tmux session
 		try {
@@ -588,13 +686,13 @@ export async function POST({ params, request }) {
 
 		return json({
 			success: true,
-			agentName,
-			sessionName,
+			agentName: agentNameResolved,
+			sessionName: sessionNameResolved,
 			sessionId,
 			projectPath,
 			terminal,
 			model: body.model || null,
-			message: `Resuming session for ${agentName}${body.model ? ` with model ${body.model}` : ''} in new terminal`,
+			message: `Resuming session for ${agentNameResolved}${body.model ? ` with model ${body.model}` : ''} in new terminal`,
 			timestamp: new Date().toISOString()
 		});
 

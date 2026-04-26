@@ -62,7 +62,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		if (sources.includes('tasks')) {
 			promises.tasks = Promise.resolve(
 				searchTasks(q, { project: projectPath, limit, verbose: false })
-			).then((results) => {
+			).then(async (results) => {
 				// Apply additional filters if provided
 				let filtered = results;
 				if (status) {
@@ -79,10 +79,13 @@ export const GET: RequestHandler = async ({ url }) => {
 				// Direct task ID lookup: if q looks like a task id (e.g. "jat-zdw7r" or "zdw7r"),
 				// prepend the exact match so it surfaces first regardless of FTS scoring.
 				const idCandidate = q.replace(/^[a-z][a-z0-9_-]*-/, '').toLowerCase();
-				const exactById = (() => {
-					try { return getTaskById(q) || (idCandidate !== q ? getTaskById(idCandidate) : null); }
-					catch { return null; }
-				})();
+				let exactById = null;
+				try {
+					exactById = await getTaskById(q);
+					if (!exactById && idCandidate !== q) {
+						exactById = await getTaskById(idCandidate);
+					}
+				} catch { /* ignore */ }
 				if (exactById && !filtered.some((t: { id?: string }) => t.id === exactById.id)) {
 					filtered = [exactById, ...filtered].slice(0, limit);
 				}

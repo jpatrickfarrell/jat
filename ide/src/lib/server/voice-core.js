@@ -14,6 +14,40 @@ import { fileURLToPath } from 'url';
 export const TEMP_DIR = '/tmp/jat-voice';
 export const VOICE_LOG_FILE = '/tmp/jat-voice.log';
 
+// Resolves once at startup. The ntfy-url secret is read via `jat-secret`;
+// nullable result means "no ntfy-url configured" and sendVoiceNotification
+// degrades to a silent no-op.
+const ntfyUrlPromise = new Promise((resolve) => {
+	exec('jat-secret ntfy-url', (err, stdout) => {
+		if (err) { resolve(null); return; }
+		const url = (stdout || '').trim();
+		resolve(url || null);
+	});
+});
+
+/**
+ * Fire-and-forget push notification to the ntfy server.
+ * Stub implementation — jat-dhzx3 (event-driven notifications epic) will
+ * replace this with real event emission, but the call sites stay the same.
+ *
+ * Never awaits, never throws. If ntfy-url is not configured, returns silently.
+ *
+ * @param {{title: string, message: string, tags?: string[], priority?: number}} payload
+ */
+export function sendVoiceNotification(payload) {
+	ntfyUrlPromise.then((url) => {
+		if (!url) return;
+		const segments = url.replace(/\/+$/, '').split('/');
+		const topic = segments[segments.length - 1];
+		if (!topic) return;
+		fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ topic, ...payload })
+		}).catch((e) => vlog('[ntfy] push failed: ' + (e instanceof Error ? e.message : String(e))));
+	}).catch(() => {});
+}
+
 /**
  * Resolve the persistent voice timeline path for the current project.
  * Lives in `.jat/voice-timeline.jsonl` so notes survive /tmp being wiped on reboot.
@@ -969,6 +1003,12 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 	} catch (e) {
 		vlog(`writeVoiceMemoryFiles threw: ${e instanceof Error ? e.message : String(e)}`);
 	}
+	sendVoiceNotification({
+		title: 'Voice Inbox',
+		message: tasks.length + ' task(s) from \'' + title + '\' · tap to review',
+		tags: ['microphone'],
+		priority: 3
+	});
 }
 
 /**
@@ -1016,6 +1056,7 @@ export function appendFailedToVoiceTimeline(voiceId, title, errorMsg) {
 	const line = JSON.stringify(event) + '\n';
 	appendFileSync(timelineFile, line);
 	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
+	sendVoiceNotification({ title: 'Voice Inbox', message: 'Processing failed: \'' + title + '\' — check the voice log', tags: ['warning'], priority: 3 });
 }
 
 /**
@@ -1049,6 +1090,7 @@ export function appendTranscriptToVoiceTimeline(transcript, title = '', meta = {
 	appendFileSync(timelineFile, line);
 	// Also write to SSE timeline so VoiceInbox picks it up in real-time
 	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
+	sendVoiceNotification({ title: 'Voice Inbox', message: 'Transcript saved: \'' + title + '\'', tags: ['memo'], priority: 3 });
 }
 
 /**

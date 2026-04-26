@@ -32,12 +32,6 @@ import { getToastNeedsInput, getToastReview, getToastComplete, getMaxSessions } 
 import { AUTO_PAUSE_IDLE } from '$lib/config/constants';
 import { isAutoPauseEnabled, getAutoPauseTimeout, loadAutoPauseConfig } from './autoPauseConfig';
 
-// Maximum accumulated output per session (characters). Prevents unbounded memory
-// growth from delta appending — without this, output strings grow continuously
-// (~1G/30s with multiple active sessions). 200KB ≈ 3000 lines of terminal output.
-const MAX_OUTPUT_LENGTH = 200_000;
-const TRUNCATED_OUTPUT_LENGTH = 150_000;
-
 // Maximum accumulated output size per session (in characters)
 // Beyond this, older output is truncated to prevent unbounded memory growth.
 // 200KB per session is enough for ~3000 lines of terminal output.
@@ -523,16 +517,11 @@ function handleSessionOutput(data: SessionEvent): void {
 		// Otherwise, add newline separator and delta
 		newOutput = currentOutput ? `${currentOutput}\n${output}` : output;
 
-<<<<<<< Updated upstream
-		// Truncate accumulated output to prevent unbounded memory growth.
-		if (newOutput.length > MAX_OUTPUT_LENGTH) {
-=======
 		// MEMORY SAFETY: Truncate accumulated output to prevent unbounded growth.
 		// Without this, delta appending causes continuous memory growth (~1G/30s
 		// with multiple active sessions) as strings are never freed.
 		if (newOutput.length > MAX_OUTPUT_LENGTH) {
 			// Find a newline boundary near the truncation point to avoid cutting mid-line
->>>>>>> Stashed changes
 			const truncStart = newOutput.length - TRUNCATED_OUTPUT_LENGTH;
 			const newlinePos = newOutput.indexOf('\n', truncStart);
 			newOutput = newlinePos !== -1 ? newOutput.substring(newlinePos + 1) : newOutput.substring(truncStart);

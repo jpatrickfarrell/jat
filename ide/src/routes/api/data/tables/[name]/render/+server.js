@@ -7,7 +7,10 @@
  */
 import { json } from '@sveltejs/kit';
 import { renderDataTable } from '$lib/server/jat-bases.js';
-import { getTableRows, getColumnMetadata, resolveRelationColumns } from '$lib/server/jat-data.js';
+import {
+	getTableRows, getColumnMetadata, resolveRelationColumns,
+	isPostgresProject, pgGetTableRows, pgGetColumnMetadata, pgQueryDataTable,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { evaluateFormula } from '$lib/utils/formulaEval';
 
@@ -41,6 +44,57 @@ export async function POST({ params, request }) {
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
+		}
+
+		if (isPostgresProject(project)) {
+			// Custom contextQuery: route through the postgres v1 SQL translator
+			// (queryDataTable). Returns a clear error when the query falls outside
+			// the whitelisted shape (single-table SELECT/INSERT/UPDATE/DELETE).
+			if (contextQuery) {
+				try {
+					const rows = await pgQueryDataTable(project, contextQuery);
+					if (!rows || rows.length === 0) {
+						return json({ rendered: { table_name: tableName, content: '(no results)', token_estimate: 0 } });
+					}
+					const content = formatMarkdownTable(rows);
+					return json({ rendered: { table_name: tableName, content, token_estimate: Math.ceil(content.length / 4) } });
+				} catch (/** @type {any} */ err) {
+					return json({ rendered: { table_name: tableName, content: `(query error: ${err?.message || String(err)})`, token_estimate: 0 } });
+				}
+			}
+
+			// Default path: fetch rows + metadata, evaluate formulas. Relation
+			// resolution is sqlite-only in v1 (per meadow-l7dkl) — formulas still
+			// evaluate so computed columns render in the markdown.
+			const [{ rows }, metaRows] = await Promise.all([
+				pgGetTableRows(project, tableName, { limit: 100, offset: 0 }),
+				pgGetColumnMetadata(project, tableName),
+			]);
+
+			/** @type {Record<string, {semanticType: string, config: any}>} */
+			const columnMeta = {};
+			for (const m of metaRows) {
+				columnMeta[m.column_name] = { semanticType: m.semantic_type, config: m.config };
+			}
+
+			for (const [colName, meta] of Object.entries(columnMeta)) {
+				if (meta.semanticType === 'formula' && meta.config?.expression) {
+					for (const row of rows) {
+						try {
+							row[colName] = evaluateFormula(meta.config.expression, row, rows);
+						} catch { row[colName] = null; }
+					}
+				}
+			}
+
+			const content = formatMarkdownTable(rows);
+			return json({
+				rendered: {
+					table_name: tableName,
+					content,
+					token_estimate: Math.ceil(content.length / 4),
+				},
+			});
 		}
 
 		const { path, exists } = await getProjectPath(project);

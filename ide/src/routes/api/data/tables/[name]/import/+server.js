@@ -7,7 +7,10 @@
  *   { rows: [{col: val}, ...] }
  */
 import { json } from '@sveltejs/kit';
-import { initDataDb, insertRows, getTableSchema, isSystemTable } from '$lib/server/jat-data.js';
+import {
+	initDataDb, insertRows, getTableSchema, isSystemTable,
+	isPostgresProject, pgGetTableSchema, pgInsertRows,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { parseDelimited } from '$lib/server/tsvParser.js';
 import { broadcastDataChanged } from '$lib/server/websocket';
@@ -26,13 +29,6 @@ export async function POST({ params, request }) {
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
 		}
-
-		const { path, exists } = await getProjectPath(project);
-		if (!exists) {
-			return json({ error: `Project not found: ${project}` }, { status: 404 });
-		}
-
-		initDataDb(path);
 
 		let rows;
 		let headers;
@@ -53,6 +49,29 @@ export async function POST({ params, request }) {
 		if (rows.length === 0) {
 			return json({ error: 'No rows to import' }, { status: 400 });
 		}
+
+		if (isPostgresProject(project)) {
+			const schema = await pgGetTableSchema(project, tableName);
+			const tableColumns = schema.map((/** @type {any} */ c) => c.name);
+			const matched = headers.filter((/** @type {string} */ h) => tableColumns.includes(h));
+			const unmatched = headers.filter((/** @type {string} */ h) => !tableColumns.includes(h));
+
+			const result = await pgInsertRows(project, tableName, rows);
+			broadcastDataChanged(tableName, project, 'import');
+
+			return json({
+				success: true,
+				inserted: result.inserted,
+				columns: { matched, unmatched, tableColumns },
+			});
+		}
+
+		const { path, exists } = await getProjectPath(project);
+		if (!exists) {
+			return json({ error: `Project not found: ${project}` }, { status: 404 });
+		}
+
+		initDataDb(path);
 
 		// Get table schema for column matching info
 		const schema = getTableSchema(path, tableName);

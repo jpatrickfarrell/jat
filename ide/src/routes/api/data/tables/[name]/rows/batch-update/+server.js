@@ -7,7 +7,10 @@
  * Used by structural undo to restore column data after an undo-delete-column.
  */
 import { json } from '@sveltejs/kit';
-import { batchUpdateRows, isSystemTable } from '$lib/server/jat-data.js';
+import {
+	batchUpdateRows, isSystemTable,
+	isPostgresProject, pgBatchUpdateRows,
+} from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { broadcastDataChanged } from '$lib/server/websocket';
 
@@ -29,6 +32,12 @@ export async function POST({ params, request }) {
 		}
 		if (!Array.isArray(updates)) {
 			return json({ error: 'updates must be an array of {rowid, value}' }, { status: 400 });
+		}
+
+		if (isPostgresProject(project)) {
+			const result = await pgBatchUpdateRows(project, tableName, column, updates);
+			broadcastDataChanged(tableName, project, 'update');
+			return json({ success: true, updated: result.updated });
 		}
 
 		const { path, exists } = await getProjectPath(project);

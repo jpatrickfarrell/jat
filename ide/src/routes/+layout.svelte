@@ -25,7 +25,7 @@
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
 	import { initProjectColors } from '$lib/utils/projectColors';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime, playCopySound } from '$lib/utils/soundEffects';
-	import { successToast } from '$lib/stores/toasts.svelte';
+	import { addToast, successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { connect as connectWebSocket, disconnect as disconnectWebSocket, subscribe as wsSubscribe, unsubscribe as wsUnsubscribe, setMessageRelay, setSubscriptionRouter, injectMessage, setFollowerConnected, subscribeDirect, unsubscribeDirect, type Channel } from '$lib/stores/websocket.svelte';
@@ -428,6 +428,25 @@
 		initPreferences(); // Initialize unified preferences store
 		syncSidebarFromPreferences(); // Restore sidebar collapsed state from localStorage
 		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
+		// Voice subsystem upgrade toast (PRD §7.5.2). Pre-set the seen flag at show
+		// time — the PRD requires it on dismiss whether manual or auto, and the toast
+		// is shown at most once per browser, so setting it up front is equivalent.
+		try {
+			if (
+				localStorage.getItem('voice-hotkey') !== null &&
+				localStorage.getItem('voice-upgrade-toast-seen') === null
+			) {
+				localStorage.setItem('voice-upgrade-toast-seen', '1');
+				addToast({
+					type: 'info',
+					message: 'Voice features moved to a configurable subsystem. Enable at Settings → Voice.',
+					duration: 10000,
+					route: '/config/voice',
+				});
+			}
+		} catch {
+			// localStorage unavailable (private mode); skip silently.
+		}
 		loadMarksFromStorage(); // Vim-style marks persist across sessions
 		// Expose global-shortcut handlers to the voice matcher so utterances like
 		// "new task" invoke the same function as Alt+N (no synthetic KeyboardEvent).

@@ -110,3 +110,26 @@ export const voxtypeProvider: TranscribeProvider = {
 		}
 	}
 };
+
+// Server-side transcription from an existing WAV file path. Used by the
+// voice-inbox pipeline (voice-core.js) where audio is already converted to WAV
+// on disk. This is the file-path variant of voxtypeProvider.transcribe() which
+// takes a Blob from browser recordings. Returns the plain transcript string.
+export async function transcribeWavFile(
+	wavPath: string,
+	opts?: { timeout?: number; maxBuffer?: number }
+): Promise<string> {
+	const timeout = opts?.timeout ?? 3_600_000;
+	const maxBuffer = opts?.maxBuffer ?? 10 * 1024 * 1024;
+
+	const { stdout } = await execAsync(
+		`voxtype transcribe "${wavPath}" 2>/dev/null`,
+		{ timeout, maxBuffer }
+	);
+
+	const text = extractTranscript(stdout);
+	if (!text) {
+		throw new Error('voxtype transcription produced no output');
+	}
+	return text;
+}

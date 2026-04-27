@@ -28,7 +28,7 @@ import {
 	vlog,
 	loadProjects,
 	TEMP_DIR
-} from './voice-core.js';
+} from './voice-pipeline.js';
 
 const CREDS_PATH = join(homedir(), '.config/jat/credentials.json');
 const INTEGRATIONS_PATH = join(homedir(), '.config/jat/integrations.json');

@@ -9,7 +9,7 @@
 import { json } from '@sveltejs/kit';
 import { appendFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { getVoiceTimelineFile } from '$lib/server/voice-core.js';
+import { getVoiceTimelineFile } from '$lib/server/voice-pipeline.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',

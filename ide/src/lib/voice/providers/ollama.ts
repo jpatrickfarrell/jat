@@ -137,3 +137,61 @@ const ollamaProvider: IntentProvider = {
 };
 
 export default ollamaProvider;
+
+// Pipeline classify: designed for large transcript organize/summarize/kb calls.
+// Uses /api/chat with format='json' for grammar-constrained JSON output.
+// Unlike classify(), this function is NOT part of the IntentProvider interface —
+// it exists for the server-side voice-inbox ingest pipeline that calls ollama
+// with long prompts and needs longer timeouts than the 5s shortcut-detection default.
+//
+// The model must be provided by the caller (voice-core.js reads it from
+// ~/.config/jat/voice.json or the ORGANIZE_TASKS_MODEL env var).
+export async function classifyForPipeline(input: {
+	prompt: string;
+	model: string;
+	system?: string;
+	timeoutMs?: number;
+	maxRawBytes?: number;
+	numCtx?: number;
+}): Promise<string> {
+	const {
+		prompt,
+		model,
+		system = 'Reply with valid JSON only. Do not wrap in markdown code fences.',
+		timeoutMs = 300_000,
+		maxRawBytes = 500_000,
+		numCtx = 131_072
+	} = input;
+
+	let res: Response;
+	try {
+		res = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, timeoutMs, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model,
+				format: 'json',
+				stream: false,
+				options: { temperature: 0.3, num_predict: -1, num_ctx: numCtx },
+				messages: [
+					{ role: 'system', content: system },
+					{ role: 'user', content: prompt }
+				]
+			})
+		});
+	} catch (err) {
+		if (isAbortError(err)) {
+			throw new Error(`ollama pipeline classify timed out after ${timeoutMs}ms`);
+		}
+		const msg = err instanceof Error ? err.message : String(err);
+		throw new Error(`ollama pipeline classify failed: ${msg}`);
+	}
+
+	if (!res.ok) {
+		const detail = (await res.text().catch(() => '')).slice(0, 200);
+		throw new Error(`ollama HTTP ${res.status}: ${detail}`);
+	}
+
+	const body = (await res.json()) as { message?: { content?: string } };
+	return (body.message?.content ?? '').slice(0, maxRawBytes);
+}

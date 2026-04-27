@@ -31,7 +31,7 @@ import {
 	transcribe,
 	organizeTranscript,
 	appendToVoiceTimeline
-} from '$lib/server/voice-core.js';
+} from '$lib/server/voice-pipeline.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',

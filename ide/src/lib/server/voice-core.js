@@ -10,6 +10,8 @@ import { exec, execFile } from 'child_process';
 import { join, dirname, basename } from 'path';
 import { homedir, tmpdir } from 'os';
 import { fileURLToPath } from 'url';
+import { classifyForPipeline } from '$lib/voice/providers/ollama.js';
+import { transcribeWavFile } from '$lib/voice/providers/voxtype.js';
 
 export const TEMP_DIR = '/tmp/jat-voice';
 export const VOICE_LOG_FILE = '/tmp/jat-voice.log';
@@ -223,6 +225,22 @@ export async function loadJatContext(projects = []) {
  * @param {{ timeout?: number, maxBuffer?: number, diarize?: boolean }} [opts]
  * @returns {Promise<string>} cleaned transcript text (optionally speaker-labeled)
  */
+// Resolve the ollama model for transcript organization:
+// 1. voice.json providerOverrides.ollama.model (user-configured in voice subsystem)
+// 2. ORGANIZE_TASKS_MODEL env var (legacy override)
+// 3. hardcoded default
+function getOrganizeModel() {
+	try {
+		const cfgPath = join(homedir(), '.config', 'jat', 'voice.json');
+		if (existsSync(cfgPath)) {
+			const cfg = JSON.parse(readFileSync(cfgPath, 'utf-8'));
+			const model = cfg?.providerOverrides?.ollama?.model;
+			if (typeof model === 'string' && model.trim()) return model.trim();
+		}
+	} catch {}
+	return process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b';
+}
+
 export function transcribe(wavPath, opts = {}) {
 	const timeout = opts.timeout ?? 3_600_000; // 1 hour — long recordings need it
 	const maxBuffer = opts.maxBuffer ?? 10 * 1024 * 1024;
@@ -231,39 +249,12 @@ export function transcribe(wavPath, opts = {}) {
 		return transcribeDiarized(wavPath, { timeout, maxBuffer })
 			.catch((err) => {
 				vlog(`whisperx diarize failed, falling back to voxtype: ${err.message}`);
-				return transcribeFast(wavPath, { timeout, maxBuffer });
+				// Delegate to voxtype provider (jat-68j78.24 refactor)
+				return transcribeWavFile(wavPath, { timeout, maxBuffer });
 			});
 	}
-	return transcribeFast(wavPath, { timeout, maxBuffer });
-}
-
-function transcribeFast(wavPath, { timeout, maxBuffer }) {
-	return new Promise((resolve, reject) => {
-		exec(`voxtype transcribe "${wavPath}" 2>/dev/null`, {
-			timeout,
-			encoding: 'utf-8',
-			maxBuffer
-		}, (err, stdout) => {
-			if (err) {
-				reject(new Error(`voxtype transcription failed: ${err.message}`));
-				return;
-			}
-
-			// Strip ANSI codes and voxtype log lines that leak into stdout.
-			const lines = stdout.split('\n')
-				.map(l => l.replace(/\x1b\[[0-9;]*m/g, '').trim())
-				.filter(l => l && !l.startsWith('Loading audio') && !l.startsWith('Audio format:')
-					&& !l.startsWith('Processing ') && !l.match(/^\d{4}-\d{2}-\d{2}T/));
-
-			const text = lines.join('\n').trim();
-			if (!text) {
-				reject(new Error('Transcription produced no output'));
-				return;
-			}
-
-			resolve(text);
-		});
-	});
+	// Delegate to voxtype provider (jat-68j78.24 refactor)
+	return transcribeWavFile(wavPath, { timeout, maxBuffer });
 }
 
 /**
@@ -647,58 +638,13 @@ ${transcript}`;
 		}
 	}
 
-	const response = await fetch('http://localhost:11434/api/generate', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
-			prompt,
-			stream: true,
-			options: { temperature: 0.3, num_predict: -1, num_ctx: 131072 }
-		}),
-		signal: AbortSignal.timeout(300_000)
-	});
-
-	if (!response.ok) {
-		throw new Error(`ollama request failed: ${response.status}`);
-	}
-
-	// Stream response, logging progress every 200 tokens.
-	let fullResponse = '';
-	let tokenCount = 0;
-	let lastLogAt = 0;
-	let firstTokenAt = null;
+	// Delegate to ollama provider via classifyForPipeline (jat-68j78.24 refactor).
+	// Uses /api/chat with format='json' for grammar-constrained JSON output,
+	// replacing the streaming /api/generate call. Model is read from voice.json.
 	const ollamaStart = Date.now();
-	const reader = response.body.getReader();
-	const decoder = new TextDecoder();
-
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		for (const line of decoder.decode(value).split('\n')) {
-			if (!line.trim()) continue;
-			try {
-				const chunk = JSON.parse(line);
-				if (chunk.response) {
-					if (!firstTokenAt) {
-						firstTokenAt = Date.now();
-						vlog(`ollama prefill done in ${((firstTokenAt - ollamaStart) / 1000).toFixed(1)}s — generating...`);
-					}
-					fullResponse += chunk.response;
-					tokenCount++;
-					if (tokenCount - lastLogAt >= 200) {
-						vlog(`ollama generating... ${tokenCount} tokens`);
-						lastLogAt = tokenCount;
-					}
-				}
-			} catch {}
-		}
-	}
-
-	vlog(`ollama done: ${tokenCount} tokens generated in ${((Date.now() - (firstTokenAt || ollamaStart)) / 1000).toFixed(1)}s`);
-
-	// Strip markdown code fences if model wrapped the JSON (happens without format:'json')
-	const jsonStr = fullResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+	vlog(`ollama organize (${mode}) starting via subsystem provider...`);
+	const jsonStr = await classifyForPipeline({ prompt, model: getOrganizeModel() });
+	vlog(`ollama organize done in ${((Date.now() - ollamaStart) / 1000).toFixed(1)}s`);
 
 	let parsed;
 	try {
@@ -1120,25 +1066,13 @@ Transcript:
 ${text}`;
 
 	try {
-		const response = await fetch('http://localhost:11434/api/generate', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
-				prompt,
-				stream: false,
-				options: { temperature: 0.3, num_predict: 64, num_ctx: 131072 }
-			}),
-			signal: AbortSignal.timeout(60_000)
+		const raw = await classifyForPipeline({
+			prompt,
+			model: getOrganizeModel(),
+			timeoutMs: 60_000,
+			maxRawBytes: 2048
 		});
-
-		if (!response.ok) {
-			vlog(`[title] ollama request failed: ${response.status}`);
-			return '';
-		}
-
-		const body = await response.json();
-		const parsed = JSON.parse(body.response || '{}');
+		const parsed = JSON.parse(raw);
 		const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
 		return title;
 	} catch (e) {

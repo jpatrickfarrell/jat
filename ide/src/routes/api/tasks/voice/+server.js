@@ -32,7 +32,7 @@ import {
 	appendToVoiceTimeline,
 	appendProcessingToVoiceTimeline,
 	appendFailedToVoiceTimeline
-} from '$lib/server/voice-core.js';
+} from '$lib/server/voice-pipeline.js';
 import { buildTaskIdentity } from '$lib/server/task-identity.js';
 import { detectShortcutIntent, summarizeMatch } from '$lib/voice/intentDetect.js';
 

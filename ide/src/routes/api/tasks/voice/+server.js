@@ -346,7 +346,7 @@ export async function POST({ request }) {
 				.then(({ tasks, summary, title, knowledgeBase }) => {
 				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
 				vlog(`Organized ${tasks.length} task(s) from text into voice inbox`);
-			}).catch((err) => {
+			}).catch(async (err) => {
 				vlog(`ERROR: organize failed for text input: ${err.message}`);
 				// Fallback: single task
 				const now = new Date();

@@ -118,54 +118,53 @@
 	// ─── Terminal output ────────────────────────────────────────────────────────
 
 	/**
-	 * Strip the Claude Code TUI chrome from the bottom of captured terminal output.
-	 * The mobile drawer provides its own input + statusline, so we don't need:
-	 *   - The separator line(s) (all ─ box-drawing chars)
-	 *   - The JAT statusline (battery dots ▪▫, status badges · ●⚙○)
-	 *   - The Claude Code input prompt line (bare "> ")
+	 * Strip the Claude Code TUI chrome from terminal output.
+	 * The mobile drawer provides its own input + statusline, so we filter:
+	 *   - Separator lines (─ box-drawing chars)
+	 *   - The JAT statusline (battery dots ▪▫, status badges, last prompt 💬)
+	 *   - The Claude Code input prompt line (❯)
+	 *   - Permission bypass footer
+	 *   - Session rating prompts
 	 *
-	 * Strategy: scan up from the bottom, find the last separator line, verify
-	 * everything below it looks like chrome, then strip from there.
+	 * Uses per-line filtering (same patterns as the monitor page) so embedded
+	 * chrome from the scrollback buffer is also removed, not just the bottom.
 	 */
 	function stripTerminalChrome(raw: string): string {
 		if (!raw) return raw;
-		const lines = raw.split('\n');
-		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
-		const isSeparator = (s: string) => s.length >= 5 && /^[\u2500-\u257F─═]+$/.test(s);
 
-		// Strategy 1: find the ❯/> prompt near the bottom, cut at separator above it.
-		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
-			const clean = stripAnsi(lines[i]).trim();
-			if (/^[❯>]\s*$/.test(clean) || /^[❯>]\s/.test(clean)) {
-				for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-					const sep = stripAnsi(lines[j]).trim();
-					if (isSeparator(sep)) {
-						return lines.slice(0, j).join('\n');
-					}
-				}
-				break;
-			}
-		}
+		// Comprehensive ANSI strip for pattern matching only (output keeps ANSI codes)
+		const stripAnsiForTest = (s: string) => s
+			.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+			.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+			.replace(/\x1b[^[\]A-Za-z]/g, '')
+			.replace(/\x1b/g, '')
+			.replace(/\r/g, '');
 
-		// Strategy 2: strip trailing chrome lines until we hit real content.
-		let end = lines.length;
-		while (end > 0) {
-			const clean = stripAnsi(lines[end - 1]).trim();
-			if (
-				clean === '' ||
-				isSeparator(clean) ||
-				/^[❯>]\s*/.test(clean) ||
-				/^·\s/.test(clean) ||
-				/^\s*[●⚙○◉⏻]\s/.test(clean) ||
-				/[\u23F4-\u23F7]/.test(clean) ||
-				/[▪▫\u25AA\u25AB]/.test(clean)
-			) {
-				end--;
-			} else {
-				break;
-			}
-		}
-		return lines.slice(0, end).join('\n');
+		const isChromeLine = (s: string): boolean => {
+			// JAT statusline line 2: battery bar of ▪/▫ blocks
+			if (/[▪▫]{3}/.test(s)) return true;
+			// JAT statusline line 1: agent name + · + status badge (●/⚙/○/◉/⏻)
+			if (/·\s*[●⚙○◉⏻]/.test(s)) return true;
+			// JAT statusline line 1: agent name + priority badge [Px]
+			if (/·\s*\[P\d\]/.test(s)) return true;
+			// JAT statusline line 3: last prompt prefix
+			if (/^[^a-zA-Z]*💬/.test(s)) return true;
+			// Claude Code bottom bar: bypass permissions
+			if (/bypass permissions on/.test(s)) return true;
+			// Separator line: ─ box-drawing chars (or spaces), at least 10 chars
+			if (/^[\s─]{10,}$/.test(s)) return true;
+			// Shell prompt remnant
+			if (/^\s*❯\s*$/.test(s)) return true;
+			// Claude Code session rating prompt / options
+			if (/How is Claude doing this session/.test(s)) return true;
+			if (/\d:\s*(Bad|Fine|Good|Dismiss)/.test(s)) return true;
+			return false;
+		};
+
+		return raw.split('\n')
+			.filter(line => !isChromeLine(stripAnsiForTest(line)))
+			.join('\n')
+			.trimEnd();
 	}
 
 	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));

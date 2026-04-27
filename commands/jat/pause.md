@@ -14,7 +14,7 @@ Pause current session for later resume (e.g., waiting for user reply). Session i
 3. The task stays `in_progress` (not closed)
 
 **When to use:**
-- After sending a reply via `jat-signal reply` — pause so the session can resume when the user responds
+- After posting a reply comment — pause so the session can resume when the user responds
 - When waiting for external input that will arrive later
 - When you want to free resources but keep conversation context
 

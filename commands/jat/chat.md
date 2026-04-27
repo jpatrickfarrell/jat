@@ -185,12 +185,12 @@ When the user replies on the external channel, the ingest daemon will:
 
 **The injected message will look like:**
 ```
-The user replied on the originating channel (e.g. Telegram). You MUST send your response back using jat-signal reply (not just text output). Their message: {reply text}
+The user replied on the originating channel (e.g. Telegram). Post your response as a task comment. Their message: {reply text}
 ```
 
 **On receiving this message:**
 1. Process the follow-up
-2. Reply via `jat-signal reply` (CRITICAL - must use this, not just text output)
+2. Post a reply comment (CRITICAL - must post a comment, not just text output)
 3. Pause again
 
 This creates a conversational loop that continues until the task is closed.
@@ -200,9 +200,8 @@ This creates a conversational loop that continues until the task is closed.
 ## Completing a Chat Task
 
 If the conversation reaches a natural end (user says thanks, question answered, etc.):
-- Use `jat-signal reply` with `replyType: "completion"` for the final message (ONE signal only)
+- Post a final reply comment as usual
 - Then run `/jat:complete` instead of pausing
-- Do NOT send an `answer` signal AND a `completion` signal — pick one based on whether the conversation is ending
 
 ---
 

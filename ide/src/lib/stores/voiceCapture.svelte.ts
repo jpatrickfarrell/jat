@@ -7,11 +7,12 @@
  *   - Call cancelCapture() to abort without transcribing.
  *   - Read voiceState, transcript, and micPermission reactively.
  *
- * When a transcript returns from /api/voice/capture, the matcher
- * (`ide/src/lib/voice/utteranceMatcher.ts`) runs against the current route's
- * vocabulary. If confidence ≥ 0.7 the matched shortcut is dispatched via the
- * voice action registry (same code path as a keystroke); otherwise the raw
- * transcript surfaces so the user can see why.
+ * Transcription is delegated to the voice subsystem (`voice.transcribe(blob)`)
+ * which routes to the active STT provider (voxtype by default). The matcher
+ * (`ide/src/lib/voice/utteranceMatcher.ts`) then runs against the current
+ * route's vocabulary; matches above MATCH_CONFIDENCE_THRESHOLD dispatch via
+ * the voice action registry (same code path as a keystroke), otherwise the
+ * raw transcript surfaces so the user can see why.
  */
 import { browser } from '$app/environment';
 import {
@@ -22,6 +23,7 @@ import {
 import { getVocabularyForRoute } from '$lib/stores/voiceVocabulary.svelte';
 import { dispatchMatch } from '$lib/voice/dispatchMatch';
 import { recordMatch } from '$lib/voice/matchDebugBuffer';
+import { voice } from '$lib/voice/voiceSubsystem.svelte';
 
 export type VoiceState = 'idle' | 'listening' | 'transcribing' | 'matched' | 'no-match';
 export type MicPermission = 'unknown' | 'granted' | 'denied';
@@ -48,6 +50,7 @@ export function getLastMatch(): MatchResult | null { return lastMatch; }
 
 export async function startCapture(): Promise<void> {
 	if (!browser) return;
+	if (!voice.enabled) return;
 	if (voiceState === 'listening') return;
 
 	cancelled = false;
@@ -85,22 +88,8 @@ export async function startCapture(): Promise<void> {
 		chunks = [];
 
 		try {
-			const res = await fetch('/api/voice/capture', {
-				method: 'POST',
-				headers: { 'Content-Type': mimeType },
-				body: blob
-			});
-
-			if (!res.ok) {
-				const data = await res.json().catch(() => ({}));
-				errorMessage = data.error || `Transcription failed (${res.status})`;
-				voiceState = 'no-match';
-				scheduleReset();
-				return;
-			}
-
-			const data = await res.json();
-			const text = (data.transcript ?? '').trim();
+			const transcribeResult = await voice.transcribe(blob);
+			const text = (transcribeResult.transcript ?? '').trim();
 
 			if (!text) {
 				lastMatch = null;
@@ -113,24 +102,24 @@ export async function startCapture(): Promise<void> {
 
 			// Run the matcher against the current route's vocabulary.
 			const route = typeof window !== 'undefined' ? window.location.pathname : '';
-			const result = matchUtterance(text, getVocabularyForRoute(route));
-			lastMatch = result;
+			const matchResult = matchUtterance(text, getVocabularyForRoute(route));
+			lastMatch = matchResult;
 
-			if (result.entry && result.confidence >= MATCH_CONFIDENCE_THRESHOLD) {
+			if (matchResult.entry && matchResult.confidence >= MATCH_CONFIDENCE_THRESHOLD) {
 				// Dispatch the matched shortcut. Preferred path is the registered
 				// action handler (same code as a keystroke); fallback is a
 				// KeyboardEvent for nav/route-scoped shortcuts.
-				const dispatched = await dispatchMatch(result.entry);
-				recordMatch(result, route, dispatched);
+				const dispatched = await dispatchMatch(matchResult.entry);
+				recordMatch(matchResult, route, dispatched);
 				voiceState = 'matched';
 			} else {
-				recordMatch(result, route, 'none');
+				recordMatch(matchResult, route, 'none');
 				voiceState = 'no-match';
 			}
 
 			scheduleReset();
 		} catch (e: unknown) {
-			errorMessage = e instanceof Error ? e.message : 'Network error';
+			errorMessage = e instanceof Error ? e.message : 'Transcription failed';
 			voiceState = 'no-match';
 			scheduleReset();
 		}

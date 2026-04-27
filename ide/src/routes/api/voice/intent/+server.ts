@@ -4,9 +4,9 @@
  * POST /api/voice/intent
  * Body: application/json { system?, transcript, context?, schema, providerId?, model? }
  *
- * Phase 1: only ollama is wired (jat-68j78.5). Unknown providerId → 400.
- * Cloud audit logging lands once openai/anthropic providers ship (jat-68j78.14, .15);
- * ollama is local so the audit line is N/A here.
+ * Wires ollama (local, jat-68j78.5) and openai gpt-4o-mini (cloud, jat-68j78.14).
+ * Cloud providers self-record an audit line via recordCloudCall() per call;
+ * ollama is local so no audit entry is written. Unknown providerId → 400.
  *
  * Response is the provider's IntentResult<T> (see voice/types.ts) with the
  * documented schemaValid contract: parse/schema failure → 200 with
@@ -22,9 +22,11 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { IntentProvider } from '$lib/voice/types';
 import ollamaProvider from '$lib/voice/providers/ollama';
+import { openaiIntentProvider } from '$lib/voice/providers/openai';
 
 const PROVIDERS: Record<string, IntentProvider> = {
-	ollama: ollamaProvider
+	ollama: ollamaProvider,
+	openai: openaiIntentProvider
 };
 
 const VOICE_CONFIG_PATH = join(homedir(), '.config', 'jat', 'voice.json');

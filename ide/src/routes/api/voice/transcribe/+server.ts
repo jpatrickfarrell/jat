@@ -4,18 +4,23 @@
  * POST /api/voice/transcribe
  * Body: multipart/form-data { audio: Blob, providerId?: string, language?, diarize?, prompt? }
  *
- * Phase 1: only voxtype is wired. Unknown providerId → 400. Cloud audit logging
- * lands once cloud providers ship (PRD §7.1, §7.4); voxtype is local so the
- * audit line is N/A here.
+ * Wires voxtype (local, jat-68j78.4), openai whisper-1 (cloud, jat-68j78.14),
+ * and elevenlabs scribe_v1 (cloud, jat-68j78.16). Cloud providers self-record
+ * an audit line via recordCloudCall() per call; voxtype is local so no audit
+ * entry is written. Unknown providerId → 400.
  *
  * Spec: ide/docs/prd-voice-subsystem.md §5.1, §7.4 (POST /api/voice/transcribe).
  */
 import { json } from '@sveltejs/kit';
 import type { TranscribeProvider } from '$lib/voice/types';
 import { voxtypeProvider } from '$lib/voice/providers/voxtype';
+import { openaiSttProvider } from '$lib/voice/providers/openai';
+import { elevenlabsProvider } from '$lib/voice/providers/elevenlabs';
 
 const PROVIDERS: Record<string, TranscribeProvider> = {
-	voxtype: voxtypeProvider
+	voxtype: voxtypeProvider,
+	openai: openaiSttProvider,
+	elevenlabs: elevenlabsProvider
 };
 
 export async function POST({ request }: { request: Request }) {

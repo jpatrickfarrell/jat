@@ -42,10 +42,9 @@
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut, matchesShortcut, getGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
-	import PushToTalkOverlay from '$lib/components/voice/PushToTalkOverlay.svelte';
-	import VoiceIndicator from '$lib/components/voice/VoiceIndicator.svelte';
 	import MarksCommandLine from '$lib/components/MarksCommandLine.svelte';
-	import { startCapture, stopCapture, cancelCapture, getVoiceState } from '$lib/stores/voiceCapture.svelte';
+	import { voice } from '$lib/voice/voiceSubsystem.svelte';
+	import type { Component } from 'svelte';
 	import { registerVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import {
@@ -69,6 +68,16 @@
 	} from '$lib/utils/pushNotifications';
 
 	let { children } = $props();
+
+	// Voice subsystem lazy-loaded modules. Populated on demand when
+	// `voice.enabled === true` so disabled installs ship zero MediaRecorder
+	// listeners, no mic prompt, and no PushToTalkOverlay code in the bundle
+	// path actually executed at startup. PRD §7.5.
+	type VoiceCaptureModule = typeof import('$lib/stores/voiceCapture.svelte');
+	let voiceCaptureModule = $state<VoiceCaptureModule | null>(null);
+	let PushToTalkOverlayCmp = $state<Component | null>(null);
+	let VoiceIndicatorCmp = $state<Component | null>(null);
+	let voiceLoadInFlight = false;
 
 	// Shared project state for entire app (always a specific project, never "All Projects")
 	let selectedProject = $state('');
@@ -424,11 +433,42 @@
 	// Track current route-specific channel subscriptions for selective subscribe/unsubscribe
 	let currentExtraChannels: Channel[] = [];
 
+	// Lazy-load voice machinery when the subsystem flips on. Tearing down on
+	// disable is left to the natural state — the overlay/indicator are gated
+	// by `voice.enabled` in the render block, and the capture store's
+	// startCapture() short-circuits when disabled, so no MediaRecorder spins
+	// up after toggle-off.
+	$effect(() => {
+		if (voice.enabled && !voiceCaptureModule && !voiceLoadInFlight) {
+			voiceLoadInFlight = true;
+			Promise.all([
+				import('$lib/stores/voiceCapture.svelte'),
+				import('$lib/components/voice/PushToTalkOverlay.svelte'),
+				import('$lib/components/voice/VoiceIndicator.svelte')
+			])
+				.then(([capture, overlay, indicator]) => {
+					voiceCaptureModule = capture;
+					PushToTalkOverlayCmp = overlay.default as unknown as Component;
+					VoiceIndicatorCmp = indicator.default as unknown as Component;
+				})
+				.catch((err) => {
+					console.error('Failed to lazy-load voice modules:', err);
+				})
+				.finally(() => {
+					voiceLoadInFlight = false;
+				});
+		}
+	});
+
 	// Initialize theme-change, WebSocket, preferences, and load all tasks
 	onMount(async () => {
 		initPreferences(); // Initialize unified preferences store
 		syncSidebarFromPreferences(); // Restore sidebar collapsed state from localStorage
 		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
+		// Read voice config from disk so `voice.enabled` settles to its true value.
+		// Disabled path is a cheap no-op (PRD §7.5); when enabled the lazy-loader
+		// effect below dynamically imports the overlay/indicator/capture store.
+		voice.init();
 		// Voice subsystem upgrade toast (PRD §7.5.2). Pre-set the seen flag at show
 		// time — the PRD requires it on dismiss whether manual or auto, and the toast
 		// is shown at most once per browser, so setting it up front is equivalent.
@@ -1220,9 +1260,12 @@
 		},
 
 		'push-to-talk': async () => {
-			// keydown handler — start recording if not already
-			if (getVoiceState() === 'idle') {
-				await startCapture();
+			// keydown handler — start recording if not already.
+			// Gated on voice.enabled + lazy-loaded module so disabled installs
+			// never call getUserMedia or instantiate MediaRecorder.
+			if (!voice.enabled || !voiceCaptureModule) return;
+			if (voiceCaptureModule.getVoiceState() === 'idle') {
+				await voiceCaptureModule.startCapture();
 			}
 		},
 
@@ -1565,12 +1608,13 @@
 			return;
 		}
 
-		// Escape cancels push-to-talk if recording
-		if (event.key === 'Escape') {
-			const vs = getVoiceState();
+		// Escape cancels push-to-talk if recording. Gated on voice.enabled +
+		// lazy module so disabled installs skip the state read entirely.
+		if (event.key === 'Escape' && voice.enabled && voiceCaptureModule) {
+			const vs = voiceCaptureModule.getVoiceState();
 			if (vs === 'listening' || vs === 'transcribing') {
 				event.preventDefault();
-				cancelCapture();
+				voiceCaptureModule.cancelCapture();
 				return;
 			}
 		}
@@ -1580,9 +1624,10 @@
 		// Release push-to-talk → stop recording.
 		// Only check the key code (Space), not modifiers — on Linux, Ctrl+Space
 		// is often intercepted by the IME so ctrlKey may be gone by keyup.
-		if (getVoiceState() === 'listening' && event.code === 'Space') {
+		if (!voice.enabled || !voiceCaptureModule) return;
+		if (voiceCaptureModule.getVoiceState() === 'listening' && event.code === 'Space') {
 			event.preventDefault();
-			stopCapture();
+			voiceCaptureModule.stopCapture();
 		}
 	}
 
@@ -1706,11 +1751,15 @@
 <!-- Global Toast Notifications -->
 <ToastContainer />
 
-<!-- Push-to-Talk Voice Capture Overlay -->
-<PushToTalkOverlay />
+<!-- Push-to-Talk Voice Capture Overlay (lazy-loaded when voice.enabled) -->
+{#if voice.enabled && PushToTalkOverlayCmp}
+	<PushToTalkOverlayCmp />
+{/if}
 
-<!-- Bottom-right voice state indicator chip -->
-<VoiceIndicator />
+<!-- Bottom-right voice state indicator chip (lazy-loaded when voice.enabled) -->
+{#if voice.enabled && VoiceIndicatorCmp}
+	<VoiceIndicatorCmp />
+{/if}
 
 <!-- Vim-style marks command line (`:delm <letter>` / `:delmm`) -->
 <MarksCommandLine />

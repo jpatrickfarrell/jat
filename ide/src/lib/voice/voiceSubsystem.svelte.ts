@@ -235,6 +235,46 @@ class VoiceSubsystem {
 		this.#applyConfig(next);
 	}
 
+	async setPrivacy(partial: Partial<VoiceConfig['privacy']>): Promise<void> {
+		const next: VoiceConfig = cloneConfig(this.#config);
+		next.privacy = { ...next.privacy, ...partial };
+		await this.#persist(next);
+		this.#applyConfig(next);
+	}
+
+	async setHotkey(hotkey: string): Promise<void> {
+		const next: VoiceConfig = { ...cloneConfig(this.#config), hotkey };
+		await this.#persist(next);
+		this.#applyConfig(next);
+	}
+
+	async setInputDevice(deviceId: string): Promise<void> {
+		const next: VoiceConfig = { ...cloneConfig(this.#config), inputDeviceId: deviceId };
+		await this.#persist(next);
+		this.#applyConfig(next);
+	}
+
+	async setProviderOverride(
+		providerId: string,
+		override: Record<string, unknown>
+	): Promise<void> {
+		const next: VoiceConfig = cloneConfig(this.#config);
+		next.providerOverrides = {
+			...next.providerOverrides,
+			[providerId]: { ...(next.providerOverrides[providerId] ?? {}), ...override }
+		};
+		await this.#persist(next);
+		this.#applyConfig(next);
+	}
+
+	// Re-runs the provider probe without touching enabled/disabled state. Used
+	// by /config/voice's "Recheck" button and by enable-state recovery flows.
+	async reprobe(): Promise<void> {
+		if (!this.enabled) return;
+		this.status = 'initializing';
+		await this.#probeAndPopulate();
+	}
+
 	async #persist(config: VoiceConfig): Promise<void> {
 		const res = await fetch('/api/config/voice', {
 			method: 'PUT',

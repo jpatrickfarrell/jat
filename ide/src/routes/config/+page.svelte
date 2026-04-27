@@ -57,6 +57,7 @@
 	import LlmProviderEditor from '$lib/components/config/LlmProviderEditor.svelte';
 	import AgentProgramsEditor from '$lib/components/config/AgentProgramsEditor.svelte';
 	import SkillsEditor from '$lib/components/config/SkillsEditor.svelte';
+	import VoiceEditor from '$lib/components/config/VoiceEditor.svelte';
 	import GraduationWizard from '$lib/components/GraduationWizard.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
@@ -115,7 +116,7 @@
 	let selectedTool = $state<ToolFile | null>(null);
 
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'tools', 'projects', 'swarm', 'defaults', 'credentials', 'llm', 'agents', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts', 'commit', 'skills'];
+	const validTabs = ['commands', 'tools', 'projects', 'swarm', 'defaults', 'credentials', 'llm', 'agents', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts', 'commit', 'voice', 'skills'];
 
 	// Tabs that have navigable lists (j/k Enter). Used to wire keyboard nav
 	// and pick per-tab shortcut help. Other tabs still support Tab cycling
@@ -731,6 +732,16 @@
 						transition:fade={{ duration: 150 }}
 					>
 						<CommitMessageSettingsEditor />
+					</div>
+				{:else if activeTab === 'voice'}
+					<!-- Voice Subsystem Tab -->
+					<div
+						role="tabpanel"
+						id="voice-panel"
+						aria-labelledby="voice-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<VoiceEditor />
 					</div>
 				{:else if activeTab === 'skills'}
 					<!-- Skills Tab -->

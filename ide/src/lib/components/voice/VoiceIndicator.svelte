@@ -11,22 +11,11 @@
 
 	const MATCHED_AUTOHIDE_MS = 1500;
 
-	// TEMP TEST HARNESS — remove before completion
-	const testParam = typeof window !== 'undefined'
-		? new URLSearchParams(window.location.search).get('vTest')
-		: null;
-	const testMatch = { raw: 'next task', confidence: 0.92, entry: { shortcut: 'j', phrase: 'next task' } };
-	const testNoMatch = { raw: 'open the pod bay doors', confidence: 0.3, entry: null };
-
-	let voiceState = $derived(testParam ?? getVoiceState());
-	let transcript = $derived(testParam === 'matched' ? 'next task' : getTranscript());
+	let voiceState = $derived(getVoiceState());
+	let transcript = $derived(getTranscript());
 	let micPermission = $derived(getMicPermission());
-	let errorMessage = $derived(testParam === 'no-match' ? '' : getErrorMessage());
-	let match = $derived(
-		testParam === 'matched' ? testMatch :
-		testParam === 'no-match' ? testNoMatch :
-		getLastMatch()
-	);
+	let errorMessage = $derived(getErrorMessage());
+	let match = $derived(getLastMatch());
 
 	// Track when we entered the matched state so the chip can auto-hide 1.5s after
 	// matched feedback shows. The store keeps voiceState='matched' for ~3s, but

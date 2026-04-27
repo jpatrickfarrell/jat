@@ -3532,8 +3532,8 @@
 							</div>
 						{/if}
 
-						<!-- Milestone (postgres-backed projects only) - jat-fkyj6 -->
-						{#if isPostgresProject}
+						<!-- Milestone (postgres-backed projects with contracts/milestones) - jat-fkyj6 -->
+						{#if isPostgresProject && (milestonesLoading || milestoneList.length > 0)}
 							<div class="mt-4" data-field="milestone">
 								<TaskFieldLabel>Milestone</TaskFieldLabel>
 								<SearchDropdown

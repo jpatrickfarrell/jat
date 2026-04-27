@@ -12,7 +12,9 @@
 import { json } from '@sveltejs/kit';
 import type { TranscribeProvider, IntentProvider, SpeakProvider } from '$lib/voice/types';
 import { voxtypeProvider } from '$lib/voice/providers/voxtype';
+import { elevenlabsProvider } from '$lib/voice/providers/elevenlabs';
 import ollamaProvider from '$lib/voice/providers/ollama';
+import { openaiSttProvider, openaiIntentProvider } from '$lib/voice/providers/openai';
 
 const PROBE_TIMEOUT_MS = 2000;
 const CACHE_TTL_MS = 5000;
@@ -32,8 +34,8 @@ interface ProbeResponse {
 	speak: ProbeMeta[];
 }
 
-const STT_PROVIDERS: TranscribeProvider[] = [voxtypeProvider];
-const LLM_PROVIDERS: IntentProvider[] = [ollamaProvider];
+const STT_PROVIDERS: TranscribeProvider[] = [voxtypeProvider, openaiSttProvider, elevenlabsProvider];
+const LLM_PROVIDERS: IntentProvider[] = [ollamaProvider, openaiIntentProvider];
 const SPEAK_PROVIDERS: SpeakProvider[] = [];
 
 let cached: { value: ProbeResponse; expires: number } | null = null;

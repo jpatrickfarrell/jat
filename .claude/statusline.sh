@@ -309,32 +309,27 @@ if [[ -z "$agent_name" ]] && [[ -n "$AGENT_NAME" ]]; then
     agent_name="$AGENT_NAME"
 fi
 
-# Get tmux session name for verification and fallback
-# The tmux session name (jat-AgentName) is the authoritative source since /jat:start
-# updates both the agent file AND the tmux session name atomically
+# Get tmux session name for project-scoped fallback only
+# NOTE: tmux session name is shared across all windows/panes in a session.
+# It must NOT override the session_id-specific agent file (which is per-instance).
+# Using raw tmux name as authoritative source breaks multi-instance scenarios
+# where two Claude sessions run in the same tmux session but different projects.
 tmux_session=$(tmux display-message -p '#S' 2>/dev/null || echo "")
-tmux_agent_name=""
-# Match jat-AgentName but NOT jat-pending-* (which are sessions still being set up)
-# Uses regex_match() for bash/zsh compatibility
-if regex_match "$tmux_session" "^jat-(.+)$"; then
-    tmux_agent_name="$REGEX_MATCH"
-    # Filter out pending sessions
-    if regex_match "$tmux_agent_name" "^pending-"; then
-        tmux_agent_name=""
+
+# Fallback: Use project-specific pre-registration file if agent file doesn't exist.
+# The .tmux-agent-{session} file is written by the IDE spawn flow into the project's
+# git root, so it correctly scopes identity to this project even when multiple Claude
+# instances share the same tmux session name.
+if [[ -z "$agent_name" ]] && [[ -n "$tmux_session" ]]; then
+    pre_reg_file=""
+    if [[ -n "$git_root" ]]; then
+        pre_reg_file="$git_root/.claude/sessions/.tmux-agent-${tmux_session}"
+    elif [[ -n "$cwd" ]]; then
+        pre_reg_file="$cwd/.claude/sessions/.tmux-agent-${tmux_session}"
     fi
-fi
-
-# Verification: If agent file and tmux session name disagree, prefer tmux session name
-# This handles the case where a stale agent file exists from a previous session
-if [[ -n "$agent_name" ]] && [[ -n "$tmux_agent_name" ]] && [[ "$agent_name" != "$tmux_agent_name" ]]; then
-    # Agent file and tmux session name don't match - tmux is authoritative
-    # (tmux session is renamed by /jat:start which is the registration source)
-    agent_name="$tmux_agent_name"
-fi
-
-# Fallback: Use tmux session name if agent file doesn't exist
-if [[ -z "$agent_name" ]] && [[ -n "$tmux_agent_name" ]]; then
-    agent_name="$tmux_agent_name"
+    if [[ -n "$pre_reg_file" ]] && [[ -f "$pre_reg_file" ]]; then
+        agent_name=$(cat "$pre_reg_file" 2>/dev/null | tr -d '\n')
+    fi
 fi
 
 # Get git branch if in a git repo, prepend with folder name

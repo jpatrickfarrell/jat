@@ -18,12 +18,7 @@
 
 	import { untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
-<<<<<<< Updated upstream
 	import { getProjects, loadCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
-=======
-	import { untrack } from 'svelte';
-	import { getProjects } from '$lib/stores/configStore.svelte';
->>>>>>> Stashed changes
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import DynamicConfigForm from '$lib/components/integrations/DynamicConfigForm.svelte';
 	import FilterBuilder from '$lib/components/integrations/FilterBuilder.svelte';
@@ -305,7 +300,6 @@
 		}
 	});
 
-<<<<<<< Updated upstream
 	// Fetch existing secrets when opening token step (step 1) for new integrations
 	$effect(() => {
 		if (open && step === 1 && !isEditing && (sourceType === 'slack' || sourceType === 'telegram' || sourceType === 'gmail')) {
@@ -330,10 +324,6 @@
 			}
 		}
 	});
-=======
-	// Note: plugin secret checking is triggered inside the init effect below
-	// (after plugin fields are initialized) to avoid reactive cycles.
->>>>>>> Stashed changes
 
 	// Reset form when source type changes
 	$effect(() => {
@@ -356,7 +346,6 @@
 				channelDetectionError = '';
 				detectingChannels = false;
 
-<<<<<<< Updated upstream
 			// Build plugin state as plain objects first, then assign once.
 			// This avoids reading the reactive proxies (e.g. pluginSecretStatus[key] = ...)
 			// which would register them as dependencies and cause infinite re-triggering.
@@ -378,32 +367,9 @@
 						newPluginSecretStatus[field.key] = 'checking';
 					} else {
 						newPluginFields[field.key] = '';
-=======
-				// Reset plugin state
-				pluginFields = {};
-				pluginSecretStatus = {};
-				pluginSecretMasked = {};
-				pluginTokenInputs = {};
-				pluginShowTokenInput = {};
-
-				// Initialize plugin fields with defaults
-				if (isPluginType && pluginMetadata?.configFields) {
-					for (const field of pluginMetadata.configFields) {
-						if (field.type === 'secret') {
-							pluginFields[field.key] = field.default || field.key;
-							pluginSecretStatus[field.key] = 'checking';
-						} else if (field.default !== undefined) {
-							pluginFields[field.key] = field.default;
-						} else if (field.type === 'boolean') {
-							pluginFields[field.key] = false;
-						} else {
-							pluginFields[field.key] = '';
-						}
->>>>>>> Stashed changes
 					}
 				}
 
-<<<<<<< Updated upstream
 			// Single assignments — effect only writes, never reads these proxies
 			pluginFields = newPluginFields;
 			pluginSecretStatus = newPluginSecretStatus;
@@ -415,23 +381,6 @@
 				populateFromEdit(editSource);
 			} else {
 				resetForm();
-=======
-				if (editSource) {
-					populateFromEdit(editSource);
-				} else {
-					resetForm();
-				}
-			});
-
-			// Check plugin secrets (outside untrack so async results update reactively)
-			if (isPluginType && pluginMetadata?.configFields) {
-				for (const field of pluginMetadata.configFields) {
-					if (field.type === 'secret') {
-						const secretVal = (field.default || field.key).trim();
-						if (secretVal) checkPluginSecret(field.key, secretVal);
-					}
-				}
->>>>>>> Stashed changes
 			}
 		}
 	});
@@ -3087,7 +3036,6 @@
 					</div>
 				</div>
 			{:else}
-<<<<<<< Updated upstream
 				<!-- Secret missing or user clicked Change -->
 				<div
 					class="px-3 py-2.5 rounded-lg space-y-3 mt-2"
@@ -3140,33 +3088,6 @@
 							{/if}
 						</button>
 					</div>
-=======
-				<!-- Token input (primary UI) -->
-				<div class="flex gap-2">
-					<input
-						type="password"
-						class="input input-bordered flex-1 font-mono text-sm"
-						placeholder={field.placeholder || 'Paste your API token here...'}
-						value={pluginTokenInputs[field.key] || ''}
-						oninput={(e) => { pluginTokenInputs[field.key] = e.currentTarget.value; pluginTokenInputs = { ...pluginTokenInputs }; }}
-					/>
-					<button
-						class="btn font-mono text-xs"
-						style="background: oklch(0.35 0.10 145); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.45 0.10 145);"
-						onclick={() => {
-							const secretName = (pluginFields[field.key] || field.default || field.key).trim();
-							const token = (pluginTokenInputs[field.key] || '').trim();
-							if (secretName && token) savePluginToken(field.key, secretName, token);
-						}}
-						disabled={pluginSecretStatus[field.key] === 'saving' || !(pluginTokenInputs[field.key] || '').trim()}
-					>
-						{#if pluginSecretStatus[field.key] === 'saving'}
-							<span class="loading loading-spinner loading-xs"></span>
-						{:else}
-							Save
-						{/if}
-					</button>
->>>>>>> Stashed changes
 				</div>
 				<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
 					Stored securely as <code style="color: oklch(0.50 0.02 250);">{pluginFields[field.key] || field.default || field.key}</code> in jat-secret

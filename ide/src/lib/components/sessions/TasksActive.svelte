@@ -1574,7 +1574,7 @@
 					class:is-compacting={effectiveState === 'compacting'}
 					class:ta-session-jk-focused={$jkFocusedActiveSessionName === session.name}
 					onmouseenter={dismissTrayHint}
-					style="--card-hover-tint: {stateVisual.accent}; border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					style="--card-hover-tint: {stateVisual.accent}; border-color: color-mix(in oklch, {stateVisual.accent} 40%, oklch(0.25 0.02 250)); {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => { if (isExiting || swipeState?.swiping) return; if (trayOpenSession === session.name) { trayOpenSession = null; return; } if (sessionTask) { onViewTask?.(sessionTask.id); } else if (onCardClick) { onCardClick(session.name); } else { fullscreenSession = session.name; } }}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
@@ -1591,6 +1591,9 @@
 						<div class="ta-state-strip" style="background: {stateVisual.bgTint};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
 						</div>
+						<div class="ta-card-body">
+							<span class="ta-title">{session.name}</span>
+						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action (action.id)}
@@ -1602,10 +1605,8 @@
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										{#if isFailed}
-											<!-- ↺ retry icon -->
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
 										{:else}
-											<!-- ✓ success icon -->
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 										{/if}
 									{:else}
@@ -1615,9 +1616,9 @@
 								</button>
 							{/each}
 						</div>
-						<div class="ta-card-body">
-							<span class="ta-title">{session.name}</span>
-						</div>
+						<button class="ta-action-indicator" style="--indicator-accent: {stateVisual.accent};" title="Actions" onclick={(e) => { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); }} tabindex="-1" aria-label="Toggle actions">
+							<span></span><span></span><span></span>
+						</button>
 					</div>
 				{:else if sessionTask}
 					<!-- Agent session with task -->
@@ -1633,7 +1634,7 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<span class="ta-strip-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
-							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
+							<AgentAvatar name={sessionAgentName} size={72} showRing={false} shape="rounded" />
 							{#if stripDestructActive}
 								<span class="ta-strip-elapsed ta-strip-elapsed-destruct" title="Session self-destructing">
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="9" height="9"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1867,146 +1868,44 @@
 								/>
 							</div>
 							{/if}<!-- end {:else} non-completed -->
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<div class="ta-row2-wrapper" onclick={(e) => { if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches) { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); } }}>
-								<div class="ta-card-row2">
-									<button class="ta-task-id" class:ta-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
-										<span class="ta-task-id-text">{sessionTask.id}</span>
-										{#if copiedMobileId === sessionTask.id}<span class="ta-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
-									</button>
-									{#if harness}
-										<span class="ta-separator">·</span>
-										<span class="ta-harness" title={harness}>
-											<ProviderLogo agentId={harness} size={11} />
-											{#if sessionTask.model}
-												<span class="ta-model" title="Model: {sessionTask.model}">{sessionTask.model}</span>
-											{/if}
-										</span>
-									{/if}
-									{#if sessionTask.priority != null && sessionTask.priority <= 1}
-										<span class="ta-separator">·</span>
-										<span class="ta-priority ta-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
-									{/if}
-									<MilestoneBadge taskId={sessionTask.id} variant="inline" separator />
-									{#if /d$|w$|mo$/.test(taskAge.label)}
-										<span class="ta-separator">·</span>
-										<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>
-									{/if}
-									{#if sessionTask.comment_count > 0}
-										<span class="ta-separator">·</span>
-										<span class="ta-count-badge">💬 {sessionTask.comment_count}</span>
-									{/if}
-									{#if sessionTask.id && taskImages[sessionTask.id]?.length > 0}
-										<span class="ta-separator">·</span>
-										<span class="ta-count-badge">📎 {taskImages[sessionTask.id].length}</span>
-									{/if}
+							<div class="ta-card-row2">
+								<button class="ta-task-id" class:ta-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
+									<span class="ta-task-id-text">{sessionTask.id}</span>
+									{#if copiedMobileId === sessionTask.id}<span class="ta-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
+								</button>
+								{#if harness}
 									<span class="ta-separator">·</span>
-									<button
-										class="ta-autocomplete-toggle"
-										class:ta-autocomplete-toggle-on={!autoCompleteDisabled}
-										title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
-										onclick={(e) => { e.stopPropagation(); const newMap = new Map(autoCompleteDisabledMap); newMap.set(session.name, !autoCompleteDisabled); autoCompleteDisabledMap = newMap; }}
-									>
-										{#if autoCompleteDisabled}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="10" height="10">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-											</svg>
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="10" height="10">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-											</svg>
+									<span class="ta-harness" title={harness}>
+										<ProviderLogo agentId={harness} size={11} />
+										{#if sessionTask.model}
+											<span class="ta-model" title="Model: {sessionTask.model}">{sessionTask.model}</span>
 										{/if}
-									</button>
-									{#if effectiveState !== 'completed'}
-										<ActivityPulse
-											data={activityHistories.get(sessionAgentName) ?? []}
-											state={effectiveState}
-										/>
-									{/if}
-								</div>
-								<!-- Action tray — fades in over row2 on hover -->
-								<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-									{#each cardActions.slice(0, 5) as action (action.id)}
-										{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
-										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
-										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-										{@const isFailed = fb === 'error-fail'}
-										<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
-											{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
-											{#if fb}
-												{#if isFailed}
-													<!-- ↺ retry icon -->
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-												{:else}
-													<!-- ✓ success icon -->
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-												{/if}
-											{:else}
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
-											{/if}
-											<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
-										</button>
-									{/each}
-									{#if sessionTask.issue_type !== 'epic'}
-									<button
-										class="ta-tray-btn ta-tray-btn-epic"
-										class:ta-tray-btn-epic-open={epicPickerSession === session.name}
-										title="Add to Epic"
-										onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-										</svg>
-										<span>Epic</span>
-									</button>
-									{/if}
-									<button
-										class="ta-tray-btn ta-tray-btn-cmds"
-										class:ta-tray-btn-cmds-open={cmdPanelSession === session.name}
-										title="Run a slash command (/jat:complete, /commit, etc.)"
-										onclick={() => openMobileCmdPanel(session.name)}
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-										</svg>
-										<span>Cmds</span>
-									</button>
-									<button
-										class="ta-tray-btn ta-tray-btn-auto"
-										class:ta-tray-btn-auto-on={!autoCompleteDisabled}
-										title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
-										onclick={() => {
-											const newMap = new Map(autoCompleteDisabledMap);
-											newMap.set(session.name, !autoCompleteDisabled);
-											autoCompleteDisabledMap = newMap;
-										}}
-									>
-										{#if autoCompleteDisabled}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-											</svg>
-											<span>Review</span>
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-											</svg>
-											<span>Auto</span>
-										{/if}
-									</button>
-								</div>
+									</span>
+								{/if}
+								{#if sessionTask.priority != null && sessionTask.priority <= 1}
+									<span class="ta-separator">·</span>
+									<span class="ta-priority ta-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
+								{/if}
+								<MilestoneBadge taskId={sessionTask.id} variant="inline" separator />
+								{#if /d$|w$|mo$/.test(taskAge.label)}
+									<span class="ta-separator">·</span>
+									<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>
+								{/if}
+								{#if sessionTask.comment_count > 0}
+									<span class="ta-separator">·</span>
+									<span class="ta-count-badge">💬 {sessionTask.comment_count}</span>
+								{/if}
+								{#if sessionTask.id && taskImages[sessionTask.id]?.length > 0}
+									<span class="ta-separator">·</span>
+									<span class="ta-count-badge">📎 {taskImages[sessionTask.id].length}</span>
+								{/if}
+								{#if effectiveState !== 'completed'}
+									<ActivityPulse
+										data={activityHistories.get(sessionAgentName) ?? []}
+										state={effectiveState}
+									/>
+								{/if}
 							</div>
-						</div>
-					</div>
-				{:else}
-					<!-- Planning / no-task session -->
-					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="ta-card-inner">
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
-							<span class="ta-strip-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
-							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -2015,14 +1914,12 @@
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
 								{@const isFailed = fb === 'error-fail'}
-								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										{#if isFailed}
-											<!-- ↺ retry icon -->
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
 										{:else}
-											<!-- ✓ success icon -->
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 										{/if}
 									{:else}
@@ -2031,6 +1928,38 @@
 									<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
+							{#if sessionTask.issue_type !== 'epic'}
+							<button class="ta-tray-btn ta-tray-btn-epic" class:ta-tray-btn-epic-open={epicPickerSession === session.name} title="Add to Epic" onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+								<span>Epic</span>
+							</button>
+							{/if}
+							<button class="ta-tray-btn ta-tray-btn-cmds" class:ta-tray-btn-cmds-open={cmdPanelSession === session.name} title="Run a slash command (/jat:complete, /commit, etc.)" onclick={() => openMobileCmdPanel(session.name)}>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>
+								<span>Cmds</span>
+							</button>
+							<button class="ta-tray-btn ta-tray-btn-auto" class:ta-tray-btn-auto-on={!autoCompleteDisabled} title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'} onclick={() => { const newMap = new Map(autoCompleteDisabledMap); newMap.set(session.name, !autoCompleteDisabled); autoCompleteDisabledMap = newMap; }}>
+								{#if autoCompleteDisabled}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+									<span>Review</span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+									<span>Auto</span>
+								{/if}
+							</button>
+						</div>
+						<button class="ta-action-indicator" style="--indicator-accent: {stateVisual.accent};" title="Actions" onclick={(e) => { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); }} tabindex="-1" aria-label="Toggle actions">
+							<span></span><span></span><span></span>
+						</button>
+					</div>
+				{:else}
+					<!-- Planning / no-task session -->
+					{@const cardActions = getSessionStateActions(effectiveState)}
+					<div class="ta-card-inner">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
+							<span class="ta-strip-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
+							<AgentAvatar name={sessionAgentName} size={72} showRing={false} shape="rounded" />
 						</div>
 						<div class="ta-card-body">
 							<span class="ta-title" style="color: oklch(0.70 0.12 270);">
@@ -2045,6 +1974,31 @@
 								{/if}
 							</div>
 						</div>
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+							{#each cardActions.slice(0, 5) as action (action.id)}
+								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
+								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
+								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
+								{@const isFailed = fb === 'error-fail'}
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
+									{#if fb}
+										{#if isFailed}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+										{/if}
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									{/if}
+									<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
+								</button>
+							{/each}
+						</div>
+						<button class="ta-action-indicator" style="--indicator-accent: {stateVisual.accent};" title="Actions" onclick={(e) => { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); }} tabindex="-1" aria-label="Toggle actions">
+							<span></span><span></span><span></span>
+						</button>
 					</div>
 				{/if}
 			</div>
@@ -2975,6 +2929,20 @@
 		display: flex;
 		align-items: stretch;
 		min-height: 0;
+		flex: 1;
+	}
+
+	/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	   UNIFIED ACTION STRIP — persistent card-bottom action zone.
+	   Always visible. Same structure for all states/card types.
+	   Replaces: hover-expand tray, row2 overlay, swipe-as-primary.
+	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+	.ta-action-strip {
+		display: flex;
+		align-items: stretch;
+		flex-shrink: 0;
+		border-top: 1px solid oklch(0 0 0 / 0.35);
+		overflow: hidden;
 	}
 
 	/* State indicator strip */
@@ -2989,7 +2957,7 @@
 
 	/* Agent variant: avatar + elapsed time below */
 	.ta-state-strip-agent {
-		width: 140px;
+		width: 110px;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
@@ -3066,23 +3034,93 @@
 		background: color-mix(in oklch, var(--card-hover-tint, oklch(0.65 0.15 145)) 12%, transparent);
 	}
 
-	/* Action tray — legacy behavior (server cards, no-task cards): expands from right on hover */
+	/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	   ACTION INDICATOR — persistent right-edge tab.
+	   Always visible. Tap (mobile) or hover card (desktop)
+	   to reveal the action tray.
+	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+	.ta-action-indicator {
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		width: 20px;
+		z-index: 2;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		padding: 0;
+		border: none;
+		cursor: pointer;
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 18%, oklch(0.14 0.015 240));
+		transition: opacity 0.15s ease, background 0.15s ease;
+	}
+
+	.ta-action-indicator span {
+		width: 3px;
+		height: 3px;
+		border-radius: 50%;
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 80%, oklch(0.9 0 0));
+		transition: transform 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	/* Indicator brightens on hover */
+	.ta-action-indicator:hover {
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 32%, oklch(0.14 0.015 240));
+	}
+
+	.ta-action-indicator:hover span {
+		transform: scale(1.5);
+	}
+
+	/* Fades out when tray is open (tray covers it) */
+	.ta-session-card.tray-open .ta-action-indicator {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	/* On mobile tap (not hover-capable): indicator stays visible unless tray is open */
+	@media (hover: none) {
+		.ta-session-card .ta-action-indicator {
+			opacity: 1;
+			pointer-events: auto;
+		}
+		.ta-session-card.tray-open .ta-action-indicator {
+			opacity: 0;
+			pointer-events: none;
+		}
+	}
+
+	/* Indicator tap feedback */
+	.ta-action-indicator:active {
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 35%, transparent);
+	}
+
+	/* Action tray — absolute overlay, slides in from right.
+	   Positioned over card content — does NOT squeeze the layout. */
 	.ta-action-tray {
 		display: flex;
 		align-items: stretch;
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
 		max-width: 0;
 		overflow: hidden;
 		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		flex-shrink: 0;
-		order: 3;
-		margin-right: 2.75rem; /* clear fixed TERMINAL drawer tab at viewport right edge */
+		z-index: 3;
 	}
 
-	/* Legacy tray (server + no-task cards): direct child of card-inner only */
-	.ta-session-card:hover .ta-card-inner > .ta-action-tray,
+	/* Reveal tray ONLY when hovering the indicator (right zone) or tray itself.
+	   Full-card hover no longer triggers the tray — that's the left zone's job. */
+	.ta-card-inner:has(.ta-action-indicator:hover) > .ta-action-tray,
 	.ta-card-inner > .ta-action-tray:hover,
-	.ta-card-inner > .ta-action-tray:focus-within {
-		max-width: 480px;
+	.ta-card-inner > .ta-action-tray:focus-within,
+	.ta-session-card.tray-open .ta-card-inner > .ta-action-tray {
+		max-width: 100%;
 	}
 
 	/* Row2 wrapper — overlays tray over meta row on hover */
@@ -3152,14 +3190,32 @@
 		pointer-events: auto;
 	}
 
-	/* When hovering the row2 zone (action tray target), also expand the state
-	   card body so the card doesn't subtly contract while the user is trying to
-	   aim at a tray button. Mirrors StateCardCompact's own hover-expand rule. */
+	/* Left zone hover: terminal output crossfades IN over signal content.
+	   No height change — output is an absolute overlay, same dimensions as signal area. */
+
+	/* Position context for the overlay */
+	:global(.state-card-inline) {
+		position: relative;
+		overflow: hidden;
+	}
+
+	/* Output wrapper: absolute, always grid-expanded, hidden at rest */
+	:global(.state-card-inline .scc-output-wrapper) {
+		position: absolute !important;
+		inset: 0 !important;
+		grid-template-rows: 1fr !important;
+		opacity: 0;
+		transition: opacity 0.18s ease;
+		background: oklch(0.15 0.015 240);
+		overflow-y: auto;
+		padding: 0.25rem 0;
+		z-index: 1;
+	}
+
+	/* On left strip hover: terminal fades in, covering signal content */
 	@media (hover: hover) and (min-width: 640px) {
-		:global(.ta-session-card:hover .scc-output-wrapper),
-		:global(.ta-session-card:focus-within .scc-output-wrapper),
-		:global(.ta-session-card.tray-open .scc-output-wrapper) {
-			grid-template-rows: 1fr;
+		:global(.ta-card-inner:has(.ta-state-strip-agent:hover) .state-card-inline .scc-output-wrapper) {
+			opacity: 1;
 		}
 	}
 
@@ -3293,7 +3349,7 @@
 
 	/* Legacy tray only on tray-open: direct child of card-inner, not the overlay tray */
 	.ta-session-card.tray-open .ta-card-inner > .ta-action-tray {
-		max-width: 480px;
+		max-width: 100%;
 	}
 
 	/* Tray action buttons */
@@ -3304,7 +3360,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 4px;
-		padding: 6px 8px;
+		padding: 6px 14px;
 		border: none;
 		border-right: 1px solid oklch(0 0 0 / 0.18);
 		cursor: pointer;
@@ -3325,12 +3381,13 @@
 	.ta-tray-btn:active { filter: brightness(1.25); transform: scaleY(0.94); }
 	.ta-tray-btn:last-child { border-right: none; }
 
-	.ta-tray-btn-success  { background: oklch(0.48 0.16 145); }
-	.ta-tray-btn-warning  { background: oklch(0.52 0.14 70); }
-	.ta-tray-btn-error    { background: oklch(0.45 0.16 25); }
-	.ta-tray-btn-info     { background: oklch(0.48 0.14 220); }
-	.ta-tray-btn-default  { background: oklch(0.30 0.02 250); }
-	.ta-tray-btn-working  { background: oklch(0.52 0.14 70); }
+	.ta-tray-btn-success   { background: oklch(0.48 0.16 145); }
+	.ta-tray-btn-warning   { background: oklch(0.52 0.14 70); }
+	.ta-tray-btn-error     { background: oklch(0.45 0.16 25); }
+	.ta-tray-btn-info      { background: oklch(0.48 0.14 220); }
+	.ta-tray-btn-default   { background: oklch(0.30 0.02 250); }
+	.ta-tray-btn-working   { background: oklch(0.52 0.14 70); }
+	.ta-tray-btn-secondary { background: oklch(0.38 0.09 280); }
 	.ta-tray-btn-epic     { background: oklch(0.35 0.10 280); }
 	.ta-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
 	.ta-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
@@ -3763,7 +3820,7 @@
 	.ta-card-body {
 		flex: 1;
 		min-width: 0;
-		padding: 0.75rem 0.875rem;
+		padding: 0.75rem 2rem 0.75rem 0.875rem; /* extra right clears the 20px indicator + breathing room */
 		display: flex;
 		flex-direction: column;
 		cursor: pointer;

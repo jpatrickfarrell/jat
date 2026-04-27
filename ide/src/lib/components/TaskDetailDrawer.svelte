@@ -67,6 +67,9 @@
 		project?: string;
 		project_path?: string;
 		assignee?: string;
+		assignee_id?: string | null;
+		assignee_email?: string | null;
+		assignee_name?: string | null;
 		labels?: string[];
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
 		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
@@ -345,7 +348,52 @@
 	let milestonesLoading = $state(false);
 	let milestoneLoadedKey = $state<string | null>(null);
 
+	// Assignee picker state — populated from /api/tasks of the same project so
+	// the dropdown shows real people who already exist in the project, mirroring
+	// the /inbox quick-action picker pattern (jat-fkyj6).
+	interface AssigneeItem { id: string | null; name: string; email?: string | null }
+	let assigneeList = $state<AssigneeItem[]>([]);
+	let assigneeLoadedProject = $state<string | null>(null);
+	let assigneeLoading = $state(false);
+
 	const isPostgresProject = $derived(!!task?.project && projectBackends[task.project] === 'postgres');
+
+	// Status options as a SearchDropdown group (jat-fkyj6).
+	const statusDropdownGroups = $derived([
+		{
+			label: 'Status',
+			options: statusOptions.map((s) => ({ value: s.value, label: s.label }))
+		}
+	]);
+
+	// Assignee dropdown groups — mirrors /inbox InboxActionBar.assigneeGroups
+	// pattern: "Me" group (current user), "People" group (existing assignees),
+	// "Clear" group (unassign).
+	const assigneeGroups = $derived.by(() => {
+		const groups: { label: string; options: { value: string; label: string }[] }[] = [];
+		// Dedup by display name (case-insensitive). Prefer entries that have a
+		// UUID `id` over plain text/email rows, since postgres assignment is
+		// keyed by id and falling back to a name-only row would lose the link.
+		const byName = new Map<string, AssigneeItem>();
+		for (const a of assigneeList) {
+			const nameKey = (a.name || a.email || '').trim().toLowerCase();
+			if (!nameKey) continue;
+			const existing = byName.get(nameKey);
+			if (!existing || (!existing.id && a.id)) {
+				byName.set(nameKey, a);
+			}
+		}
+		const people = Array.from(byName.values()).map((a) => ({
+			value: a.id || a.email || a.name,
+			label: a.name
+		}));
+		people.sort((a, b) => a.label.localeCompare(b.label));
+		if (people.length > 0) {
+			groups.push({ label: 'People', options: people });
+		}
+		groups.push({ label: 'Clear', options: [{ value: '', label: '— unassigned —' }] });
+		return groups;
+	});
 
 	// Group milestones by contract title for SearchDropdown — mirrors meadow's pattern.
 	const milestoneGroups = $derived.by(() => {
@@ -822,10 +870,12 @@
 		expandedContext = new Set();
 		summaryData = null;
 		summaryError = null;
-		// Reset milestone state so the load effect re-runs for the new task
+		// Reset milestone + assignee state so the load effect re-runs for the new task
 		milestoneList = [];
 		currentMilestoneId = null;
 		milestoneLoadedKey = null;
+		// Don't reset assigneeList — it's per-project and stable across tasks
+		// in the same project. assigneeLoadedProject prevents re-fetching.
 
 		try {
 			const response = await fetch(`/api/tasks/${id}`, { signal });
@@ -895,6 +945,42 @@
 			});
 	});
 
+	// Load assignee candidates (people who already exist in the project as
+	// assignees or requesters). Only loaded for postgres-backed projects where
+	// the field is first-class; SQLite projects keep their text-input fallback.
+	$effect(() => {
+		const project = task?.project;
+		if (!project || !isPostgresProject) return;
+		if (assigneeLoadedProject === project || assigneeLoading) return;
+		untrack(() => {
+			assigneeLoading = true;
+			assigneeLoadedProject = project;
+			fetch(`/api/tasks?project=${encodeURIComponent(project)}&limit=200`)
+				.then((r) => r.json())
+				.then((data) => {
+					const seen = new Set<string>();
+					const list: AssigneeItem[] = [];
+					for (const t of data.tasks || []) {
+						const id = t.assignee_id || null;
+						const name = t.assignee_name || t.assignee || null;
+						const email = t.assignee_email || null;
+						if (!name && !id) continue;
+						const key = (id || email || name || '').toLowerCase();
+						if (!key || seen.has(key)) continue;
+						seen.add(key);
+						list.push({ id, name: name || email || 'Unknown', email });
+					}
+					assigneeList = list;
+				})
+				.catch(() => {
+					assigneeLoadedProject = null;
+				})
+				.finally(() => {
+					assigneeLoading = false;
+				});
+		});
+	});
+
 	// When a postgres-backed task is loaded, fetch the project's milestones from
 	// /api/clients and find which (if any) is currently linked to this task.
 	$effect(() => {
@@ -945,6 +1031,29 @@
 				});
 		});
 	});
+
+	// Resolve the dropdown selection back to {assignee_id, assignee} for the
+	// PATCH. Postgres-backed assignment is by UUID; SQLite is by free-form
+	// string. The dropdown's `value` is whatever we stored in assigneeGroups
+	// (UUID for known team members, email/name otherwise).
+	async function handleAssigneeChange(value: string) {
+		if (!task) return;
+		if (!value) {
+			await autoSave('assignee_id', null);
+			await autoSave('assignee', null);
+			return;
+		}
+		const item = assigneeList.find(
+			(a) => a.id === value || a.email === value || a.name === value
+		);
+		if (item) {
+			if (item.id) await autoSave('assignee_id', item.id);
+			await autoSave('assignee', item.name || item.email || value);
+		} else {
+			// Fallback for free-form (SQLite projects)
+			await autoSave('assignee', value);
+		}
+	}
 
 	async function handleMilestoneChange(newMilestoneId: string | null) {
 		if (!task) return;
@@ -3532,16 +3641,39 @@
 							</div>
 						{/if}
 
-						<!-- Milestone (postgres-backed projects with contracts/milestones) - jat-fkyj6 -->
-						{#if isPostgresProject && (milestonesLoading || milestoneList.length > 0)}
-							<div class="mt-4" data-field="milestone">
-								<TaskFieldLabel>Milestone</TaskFieldLabel>
-								<SearchDropdown
-									value={currentMilestoneId || ''}
-									groups={milestoneGroups}
-									placeholder={milestonesLoading ? 'Loading…' : '— no milestone —'}
-									onChange={(v) => handleMilestoneChange(v || null)}
-								/>
+						<!-- Status / Assignee / Milestone (postgres-backed projects) - jat-fkyj6 -->
+						{#if isPostgresProject}
+							{@const assigneeValue = task.assignee_id || task.assignee_email || task.assignee || ''}
+							<div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3" data-field="postgres-fields">
+								<div data-field="status">
+									<TaskFieldLabel>Status</TaskFieldLabel>
+									<SearchDropdown
+										value={task.status || 'open'}
+										groups={statusDropdownGroups}
+										placeholder="Status"
+										onChange={(v) => v && autoSave('status', v)}
+									/>
+								</div>
+								<div data-field="assignee">
+									<TaskFieldLabel>Assignee</TaskFieldLabel>
+									<SearchDropdown
+										value={assigneeValue}
+										groups={assigneeGroups}
+										placeholder={assigneeLoading ? 'Loading…' : '— unassigned —'}
+										onChange={handleAssigneeChange}
+									/>
+								</div>
+								{#if milestonesLoading || milestoneList.length > 0}
+									<div data-field="milestone" class="sm:col-span-2">
+										<TaskFieldLabel>Milestone</TaskFieldLabel>
+										<SearchDropdown
+											value={currentMilestoneId || ''}
+											groups={milestoneGroups}
+											placeholder={milestonesLoading ? 'Loading…' : '— no milestone —'}
+											onChange={(v) => handleMilestoneChange(v || null)}
+										/>
+									</div>
+								{/if}
 							</div>
 						{/if}
 

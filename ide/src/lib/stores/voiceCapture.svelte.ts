@@ -19,6 +19,7 @@ import {
 	MATCH_CONFIDENCE_THRESHOLD,
 	type MatchResult
 } from '$lib/voice/utteranceMatcher';
+import { getVocabularyForRoute } from '$lib/stores/voiceVocabulary.svelte';
 import { dispatchMatch } from '$lib/voice/dispatchMatch';
 import { recordMatch } from '$lib/voice/matchDebugBuffer';
 
@@ -112,7 +113,7 @@ export async function startCapture(): Promise<void> {
 
 			// Run the matcher against the current route's vocabulary.
 			const route = typeof window !== 'undefined' ? window.location.pathname : '';
-			const result = matchUtterance(text, route);
+			const result = matchUtterance(text, getVocabularyForRoute(route));
 			lastMatch = result;
 
 			if (result.entry && result.confidence >= MATCH_CONFIDENCE_THRESHOLD) {

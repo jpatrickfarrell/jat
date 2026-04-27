@@ -43,6 +43,7 @@
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut, matchesShortcut, getGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
 	import PushToTalkOverlay from '$lib/components/voice/PushToTalkOverlay.svelte';
+	import VoiceIndicator from '$lib/components/voice/VoiceIndicator.svelte';
 	import MarksCommandLine from '$lib/components/MarksCommandLine.svelte';
 	import { startCapture, stopCapture, cancelCapture, getVoiceState } from '$lib/stores/voiceCapture.svelte';
 	import { registerVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
@@ -1707,6 +1708,9 @@
 
 <!-- Push-to-Talk Voice Capture Overlay -->
 <PushToTalkOverlay />
+
+<!-- Bottom-right voice state indicator chip -->
+<VoiceIndicator />
 
 <!-- Vim-style marks command line (`:delm <letter>` / `:delmm`) -->
 <MarksCommandLine />

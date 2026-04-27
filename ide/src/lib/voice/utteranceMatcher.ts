@@ -18,10 +18,8 @@
  * transcript and understand why.
  */
 
-import {
-	getVocabularyForRoute,
-	type VoiceVocabularyEntry
-} from '$lib/stores/voiceVocabulary.svelte';
+import type { VoiceVocabularyEntry } from '$lib/voice/vocabularyData';
+export type { VoiceVocabularyEntry };
 
 export interface MatchResult {
 	/** Matched vocabulary entry, or null if no match above threshold. */
@@ -181,7 +179,11 @@ function scoreAgainstPhrase(
 // -----------------------------------------------------------------------------
 
 /**
- * Match a whisper transcript against the route-scoped vocabulary.
+ * Match a whisper transcript against a vocabulary.
+ *
+ * Caller supplies the candidate entries (already filtered by route if
+ * desired). Decoupling the matcher from the client-only vocabulary store
+ * lets server-side code (e.g. the mobile voice-memo intent route) reuse it.
  *
  * Returns the highest-confidence entry. If the best score falls below
  * MATCH_CONFIDENCE_THRESHOLD, returns entry=null so the caller can
@@ -189,7 +191,7 @@ function scoreAgainstPhrase(
  */
 export function matchUtterance(
 	transcript: string,
-	route?: string
+	entries: VoiceVocabularyEntry[]
 ): MatchResult {
 	const raw = transcript ?? '';
 	const normalized = normalize(raw);
@@ -203,8 +205,6 @@ export function matchUtterance(
 			raw
 		};
 	}
-
-	const entries = getVocabularyForRoute(route ?? '');
 
 	let best: {
 		entry: VoiceVocabularyEntry;

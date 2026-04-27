@@ -34,12 +34,23 @@ import {
 	appendFailedToVoiceTimeline
 } from '$lib/server/voice-core.js';
 import { buildTaskIdentity } from '$lib/server/task-identity.js';
+import { detectShortcutIntent, summarizeMatch } from '$lib/voice/intentDetect.js';
 
 /**
  * In-memory job status map for voice transcription polling.
- * Used by the jat-feedback widget to poll transcription status.
- * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', tasks?: {title: string, description: string}[], title?: string }
- * @type {Map<string, { status: string, tasks?: {title: string, description: string}[], title?: string }>}
+ * Used by the jat-feedback widget and the iOS Voice Memos Shortcut.
+ *
+ * Standard task-create flow values:
+ *   { status: 'transcribing'|'open'|'error', tasks?: [...], title?: string }
+ *
+ * Mobile shortcut-intent flow values (when transcript begins with
+ * "jat " or "command " and matches a known shortcut):
+ *   { status: 'matched',
+ *     match: { action, phrase, shortcut, confidence, reason },
+ *     transcript: string }
+ *   { status: 'no_match', transcript: string }   // prefix present, no match
+ *
+ * @type {Map<string, object>}
  */
 const voiceJobs = new Map();
 
@@ -71,6 +82,15 @@ export async function GET({ url }) {
 	if (!job) {
 		// Unknown ID — return open so the widget stops polling
 		return json({ id, status: 'open' }, { headers: CORS_HEADERS });
+	}
+	// Shortcut-intent jobs (mobile): include match payload, omit tasks/title
+	if (job.status === 'matched' || job.status === 'no_match') {
+		return json({
+			id,
+			status: job.status,
+			match: job.match || null,
+			transcript: job.transcript || ''
+		}, { headers: CORS_HEADERS });
 	}
 	return json({ id, status: job.status, tasks: job.tasks || [], title: job.title, description: job.tasks?.[0]?.description || '' }, { headers: CORS_HEADERS });
 }
@@ -217,7 +237,24 @@ function transcribeAndOrganize(audioPath, title, priority, requester, voiceId = 
 			// Clean up wav
 			try { unlinkSync(wavPath); } catch {}
 
-			vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
+			vlog(`Transcription complete (${text.length} chars).`);
+
+			// Mobile shortcut intent — bypass organize/createTask if the user
+			// said "jat <command>" or "command <command>".
+			const intent = detectShortcutIntent(text);
+			if (intent.hasPrefix) {
+				if (intent.matched) {
+					const summary = summarizeMatch(intent);
+					vlog(`Voice shortcut matched (audio): "${text}" → ${summary?.action} (${summary?.confidence.toFixed(2)})`);
+					resolve({ matched: true, match: summary, transcript: text });
+				} else {
+					vlog(`Voice shortcut prefix without match (audio): "${text}"`);
+					resolve({ matched: false, noMatch: true, transcript: text });
+				}
+				return;
+			}
+
+			vlog('Organizing with ollama...');
 			if (voiceId) appendProcessingToVoiceTimeline(voiceId, title, 0, 'generating');
 
 			// Step 3: Organize transcript into structured tasks via ollama
@@ -273,6 +310,33 @@ export async function POST({ request }) {
 
 			if (!text) {
 				return json({ error: true, message: 'Missing "text" field' }, { status: 400, headers: CORS_HEADERS });
+			}
+
+			// Mobile shortcut intent — if transcript begins with "jat " or
+			// "command ", route through the matcher instead of creating a task.
+			const intent = detectShortcutIntent(text);
+			if (intent.hasPrefix) {
+				const intentJobId = randomUUID();
+				if (intent.matched) {
+					const summary = summarizeMatch(intent);
+					voiceJobs.set(intentJobId, { status: 'matched', match: summary, transcript: text });
+					vlog(`Voice shortcut matched: "${text}" → ${summary?.action} (${summary?.confidence.toFixed(2)})`);
+					return json({
+						ok: true,
+						id: intentJobId,
+						status: 'matched',
+						match: summary,
+						transcript: text
+					}, { status: 200, headers: CORS_HEADERS });
+				}
+				voiceJobs.set(intentJobId, { status: 'no_match', transcript: text });
+				vlog(`Voice shortcut prefix without match: "${text}"`);
+				return json({
+					ok: true,
+					id: intentJobId,
+					status: 'no_match',
+					transcript: text
+				}, { status: 200, headers: CORS_HEADERS });
 			}
 
 			// Organize in background, don't block the response
@@ -393,7 +457,13 @@ export async function POST({ request }) {
 			// Fire and forget — transcription + organize happens in background
 			// Update voiceJobs with all tasks for widget review form
 			transcribeAndOrganize(audioTempPath, title, priority, postRequester, voiceId, fileDate).then((result) => {
-				voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
+				if (result.matched) {
+					voiceJobs.set(jobId, { status: 'matched', match: result.match, transcript: result.transcript });
+				} else if (result.noMatch) {
+					voiceJobs.set(jobId, { status: 'no_match', transcript: result.transcript });
+				} else {
+					voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
+				}
 			}).catch(() => {
 				voiceJobs.set(jobId, { status: 'open', tasks: [{ title, description: '' }], title });
 			});

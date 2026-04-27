@@ -13,7 +13,7 @@
 	 * - Task actions: Spawn, Attach, Release, Send Message
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import { formatDate, formatSavedTime, formatRelativeTimestamp } from '$lib/utils/dateFormatters';
@@ -328,6 +328,53 @@
 	// Data tables state
 	let taskTables = $state<Array<{ task_id: string; table_name: string; project: string; context_query?: string; attached_at: string }>>([]);
 	let taskTableNames = $derived(taskTables.map(t => t.table_name));
+
+	// Milestone state (postgres-backed projects only — see jat-fkyj6)
+	interface MilestoneItem {
+		id: string;
+		name: string;
+		status: string;
+		contract_id: string;
+		contract_title: string;
+		sort_order?: number;
+	}
+	let projectBackends = $state<Record<string, 'sqlite' | 'postgres'>>({});
+	let projectBackendsLoaded = $state(false);
+	let milestoneList = $state<MilestoneItem[]>([]);
+	let currentMilestoneId = $state<string | null>(null);
+	let milestonesLoading = $state(false);
+	let milestoneLoadedKey = $state<string | null>(null);
+
+	const isPostgresProject = $derived(!!task?.project && projectBackends[task.project] === 'postgres');
+
+	// Group milestones by contract title for SearchDropdown — mirrors meadow's pattern.
+	const milestoneGroups = $derived.by(() => {
+		if (milestoneList.length === 0) {
+			return [{
+				label: 'Milestones',
+				options: milestonesLoading
+					? [{ value: '', label: 'Loading…' }]
+					: [{ value: '', label: 'No milestones' }]
+			}];
+		}
+		const byContract = new Map<string, { contract_title: string; items: MilestoneItem[] }>();
+		for (const m of milestoneList) {
+			if (!byContract.has(m.contract_id)) {
+				byContract.set(m.contract_id, { contract_title: m.contract_title, items: [] });
+			}
+			byContract.get(m.contract_id)!.items.push(m);
+		}
+		const groups: { label: string; options: { value: string; label: string }[] }[] = [
+			{ label: '-', options: [{ value: '', label: '— no milestone —' }] }
+		];
+		for (const { contract_title, items } of byContract.values()) {
+			groups.push({
+				label: contract_title,
+				options: items.map((m) => ({ value: m.id, label: m.name }))
+			});
+		}
+		return groups;
+	});
 
 	// Rendered context previews
 	let renderedBases = $state<Map<string, RenderedBase>>(new Map());
@@ -775,6 +822,10 @@
 		expandedContext = new Set();
 		summaryData = null;
 		summaryError = null;
+		// Reset milestone state so the load effect re-runs for the new task
+		milestoneList = [];
+		currentMilestoneId = null;
+		milestoneLoadedKey = null;
 
 		try {
 			const response = await fetch(`/api/tasks/${id}`, { signal });
@@ -821,6 +872,132 @@
 			console.error('Error fetching task:', err);
 		} finally {
 			loading = false;
+		}
+	}
+
+	// Load project backends once on first open so we can detect postgres-backed
+	// projects and surface the Milestone field (jat-fkyj6).
+	$effect(() => {
+		if (!isOpen || projectBackendsLoaded) return;
+		projectBackendsLoaded = true;
+		fetch('/api/projects?visible=true')
+			.then((r) => r.json())
+			.then((data) => {
+				const backends: Record<string, 'sqlite' | 'postgres'> = {};
+				for (const p of data.projects || []) {
+					backends[p.name] = p.backend === 'postgres' ? 'postgres' : 'sqlite';
+				}
+				projectBackends = backends;
+			})
+			.catch(() => {
+				// Allow retry if the request failed
+				projectBackendsLoaded = false;
+			});
+	});
+
+	// When a postgres-backed task is loaded, fetch the project's milestones from
+	// /api/clients and find which (if any) is currently linked to this task.
+	$effect(() => {
+		const project = task?.project;
+		const taskId = task?.id;
+		if (!project || !taskId || !isPostgresProject) return;
+
+		const key = `${project}|${taskId}`;
+		untrack(() => {
+			if (milestoneLoadedKey === key || milestonesLoading) return;
+			milestonesLoading = true;
+			milestoneLoadedKey = key;
+			fetch('/api/clients')
+				.then((r) => r.json())
+				.then((data) => {
+					const pLower = project.toLowerCase();
+					const projectData = (data.projects || []).find(
+						(p: any) =>
+							(p.projectKey || '').toLowerCase() === pLower ||
+							(p.name || '').toLowerCase() === pLower
+					);
+					const ms: MilestoneItem[] = [];
+					let foundMilestoneId: string | null = null;
+					for (const c of projectData?.contracts || []) {
+						for (const m of c.milestones || []) {
+							ms.push({
+								id: m.id,
+								name: m.name,
+								status: m.status,
+								contract_id: c.id,
+								contract_title: c.title,
+								sort_order: m.sort_order
+							});
+							if ((m.linked_tasks || []).some((t: any) => t.jat_id === taskId)) {
+								foundMilestoneId = m.id;
+							}
+						}
+					}
+					milestoneList = ms;
+					currentMilestoneId = foundMilestoneId;
+				})
+				.catch(() => {
+					// Allow retry on next task open
+					milestoneLoadedKey = null;
+				})
+				.finally(() => {
+					milestonesLoading = false;
+				});
+		});
+	});
+
+	async function handleMilestoneChange(newMilestoneId: string | null) {
+		if (!task) return;
+		const project = task.project;
+		const taskDbId = (task as any).db_id;
+		if (!project || !taskDbId) {
+			showToast('error', 'Cannot change milestone: missing project or task UUID');
+			return;
+		}
+
+		const prev = currentMilestoneId;
+		if (prev === newMilestoneId) return;
+
+		// Optimistic update
+		currentMilestoneId = newMilestoneId;
+
+		try {
+			if (prev) {
+				const unlinkRes = await fetch('/api/clients', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'unlinkTask',
+						projectKey: project,
+						milestoneId: prev,
+						taskId: taskDbId
+					})
+				});
+				if (!unlinkRes.ok) {
+					const err = await unlinkRes.json().catch(() => ({}));
+					throw new Error(err.error || 'Failed to unlink previous milestone');
+				}
+			}
+			if (newMilestoneId) {
+				const linkRes = await fetch('/api/clients', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'linkTask',
+						projectKey: project,
+						milestoneId: newMilestoneId,
+						taskId: taskDbId
+					})
+				});
+				if (!linkRes.ok) {
+					const err = await linkRes.json().catch(() => ({}));
+					throw new Error(err.error || 'Failed to link milestone');
+				}
+			}
+			showToast('success', newMilestoneId ? 'Milestone updated' : 'Milestone cleared');
+		} catch (err: any) {
+			currentMilestoneId = prev;
+			showToast('error', err.message || 'Failed to update milestone');
 		}
 	}
 
@@ -3352,6 +3529,19 @@
 										</div>
 									{/if}
 								</div>
+							</div>
+						{/if}
+
+						<!-- Milestone (postgres-backed projects only) - jat-fkyj6 -->
+						{#if isPostgresProject}
+							<div class="mt-4" data-field="milestone">
+								<TaskFieldLabel>Milestone</TaskFieldLabel>
+								<SearchDropdown
+									value={currentMilestoneId || ''}
+									groups={milestoneGroups}
+									placeholder={milestonesLoading ? 'Loading…' : '— no milestone —'}
+									onChange={(v) => handleMilestoneChange(v || null)}
+								/>
 							</div>
 						{/if}
 

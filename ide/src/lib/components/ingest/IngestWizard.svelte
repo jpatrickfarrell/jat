@@ -345,6 +345,7 @@
 				detectedChannels = [];
 				channelDetectionError = '';
 				detectingChannels = false;
+			});
 
 			// Build plugin state as plain objects first, then assign once.
 			// This avoids reading the reactive proxies (e.g. pluginSecretStatus[key] = ...)
@@ -369,6 +370,7 @@
 						newPluginFields[field.key] = '';
 					}
 				}
+			}
 
 			// Single assignments — effect only writes, never reads these proxies
 			pluginFields = newPluginFields;

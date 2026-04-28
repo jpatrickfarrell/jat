@@ -35,7 +35,7 @@ function getProjectFromTaskId(taskId) {
  * @param {string} projectName - Project name like "chimaro"
  * @returns {string|null} Project path or null if not found
  */
-function getProjectPath(projectName) {
+async function getProjectPath(projectName) {
 	const projects = await getProjects();
 	const project = projects.find((p) => p.name === projectName);
 	return project ? project.path : null;
@@ -93,8 +93,8 @@ export async function POST({ params, request }) {
 		}
 
 		// Get project paths
-		const sourcePath = getProjectPath(sourceProject);
-		const targetPath = getProjectPath(targetProject);
+		const sourcePath = await getProjectPath(sourceProject);
+		const targetPath = await getProjectPath(targetProject);
 
 		if (!sourcePath) {
 			return json(

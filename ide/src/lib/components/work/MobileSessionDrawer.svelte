@@ -1139,8 +1139,8 @@
 		};
 	}
 
-	// Max characters to keep in terminal output — prevents unbounded growth on mobile
-	const MAX_OUTPUT_CHARS = 40_000;
+	// Max characters to keep in terminal output — enough for ~800 lines at avg 125 chars/line
+	const MAX_OUTPUT_CHARS = 100_000;
 
 	// Resize the tmux pane to match the current viewport width so output fills the screen.
 	// Called on drawer open so tmux doesn't render to a stale column count.
@@ -1164,7 +1164,7 @@
 	async function fetchOutput() {
 		if (!sessionName || logicalPage !== 'Terminal') return; // skip when not on terminal page
 		try {
-			const resp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
+			const resp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output?lines=1000`);
 			if (resp.ok) {
 				const data = await resp.json();
 				const raw: string = data.output || '';

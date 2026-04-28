@@ -12,12 +12,13 @@
 	 * same chrome, palette, and dismiss affordance. They differ only in the
 	 * interactive body (free-text answer vs TUI navigation).
 	 *
-	 * Deliberately excludes: minimap, event stack, token tracking, keyboard shortcuts,
+	 * Deliberately excludes: event stack, token tracking, keyboard shortcuts,
 	 * confirm modals, sparklines, and all other desktop-only machinery.
 	 */
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { ansiToHtmlWithLinks } from '$lib/utils/ansiToHtml';
+	import MinimapCssScale from '$lib/components/minimap/MinimapCssScale.svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { mobileSurface } from '$lib/config/mobileSurface';
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
@@ -149,8 +150,9 @@
 			if (/·\s*\[P\d\]/.test(s)) return true;
 			// JAT statusline line 3: last prompt prefix
 			if (/^[^a-zA-Z]*💬/.test(s)) return true;
-			// Claude Code bottom bar: bypass permissions
-			if (/bypass permissions on/.test(s)) return true;
+			// Claude Code bottom bar: ⏵⏵ / ▶▶ prefix (text varies: "bypass permissions on",
+			// "accept edits on", etc. — match by the play-triangle glyph cluster instead)
+			if (/[⏴-⏷]/.test(s)) return true;
 			// Separator line: ─ box-drawing chars (or spaces), at least 10 chars
 			if (/^[\s─]{10,}$/.test(s)) return true;
 			// Shell prompt remnant
@@ -167,7 +169,11 @@
 			.trimEnd();
 	}
 
-	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));
+	const strippedOutput = $derived(stripTerminalChrome(output));
+	const renderedOutput = $derived(ansiToHtmlWithLinks(strippedOutput));
+
+	// ─── Minimap ────────────────────────────────────────────────────────────────
+	let minimapRef = $state<{ setViewportPosition: (s: number, v: number) => void } | null>(null);
 
 	let scrollEl = $state<HTMLElement | null>(null);
 	let autoScroll = $state(true);
@@ -200,6 +206,12 @@
 		const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
 		autoScroll = distFromBottom < 100;
 		if (distFromBottom < 100) hasNewOutputWhilePaused = false;
+		// Update minimap viewport indicator
+		if (minimapRef && scrollEl.scrollHeight > scrollEl.clientHeight) {
+			const scrollPct = (scrollEl.scrollTop / (scrollEl.scrollHeight - scrollEl.clientHeight)) * 100;
+			const visiblePct = (scrollEl.clientHeight / scrollEl.scrollHeight) * 100;
+			minimapRef.setViewportPosition(scrollPct, visiblePct);
+		}
 	}
 
 	function jumpToBottom() {
@@ -625,6 +637,18 @@
 				{#if hasNewOutputWhilePaused}↓ New output{:else}↓{/if}
 			</button>
 		{/if}
+
+		<!-- Minimap: hidden by default, slides in via .mobile-scrolling CSS in MobileSessionDrawer -->
+		<div class="absolute top-0 right-0 bottom-0" style="width: 52px; pointer-events: none;">
+			<MinimapCssScale
+				bind:this={minimapRef}
+				output={strippedOutput}
+				onPositionClick={(pct) => {
+					if (!scrollEl) return;
+					scrollEl.scrollTop = (pct / 100) * (scrollEl.scrollHeight - scrollEl.clientHeight);
+				}}
+			/>
+		</div>
 	</div>
 
 	<!-- Event Timeline Stack: signal history, action buttons, suggested tasks, needs_input cards -->

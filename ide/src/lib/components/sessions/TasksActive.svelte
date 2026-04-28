@@ -2700,7 +2700,8 @@
 		line-clamp: 1;
 	}
 	@media (hover: hover) {
-		.ta-session-card:hover .state-card-inline :global(.scc-approach) {
+		/* Only expand approach text on left-zone hover, not right-zone (action tray) hover */
+		.ta-card-inner:has(.ta-state-strip-agent:hover) .state-card-inline :global(.scc-approach) {
 			-webkit-line-clamp: 2;
 			line-clamp: 2;
 		}
@@ -3054,7 +3055,7 @@
 		padding: 0;
 		border: none;
 		cursor: pointer;
-		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 18%, oklch(0.14 0.015 240));
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 18%, oklch(0.16 0.01 250));
 		transition: opacity 0.15s ease, background 0.15s ease;
 	}
 
@@ -3062,14 +3063,14 @@
 		width: 3px;
 		height: 3px;
 		border-radius: 50%;
-		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 80%, oklch(0.9 0 0));
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 75%, oklch(0.85 0.02 250));
 		transition: transform 0.15s ease;
 		flex-shrink: 0;
 	}
 
 	/* Indicator brightens on hover */
 	.ta-action-indicator:hover {
-		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 32%, oklch(0.14 0.015 240));
+		background: color-mix(in oklch, var(--indicator-accent, oklch(0.65 0.04 250)) 32%, oklch(0.16 0.01 250));
 	}
 
 	.ta-action-indicator:hover span {
@@ -3395,6 +3396,9 @@
 	.ta-tray-btn-auto      { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
 	.ta-tray-btn-auto-on   { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
 	.ta-tray-btn-error-fail { background: oklch(0.40 0.16 25); color: oklch(0.92 0.04 25); }
+	/* Feedback: success (✓ Done) and error-fail (↺ Retry) states */
+	.ta-tray-btn-success-done { background: oklch(0.38 0.12 145); color: oklch(0.80 0.15 145); pointer-events: none; }
+	.ta-tray-btn-feedback     { opacity: 0.8; }
 
 	.ta-tray-btn { position: relative; overflow: hidden; }
 	.tray-hold-fill {

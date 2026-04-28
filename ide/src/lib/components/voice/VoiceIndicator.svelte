@@ -134,7 +134,7 @@
 						No command for &ldquo;{match.raw}&rdquo;
 					</span>
 					<span class="vi-hint">
-						Press <kbd class="kbd kbd-xs vi-kbd-hint">?</kbd> for vocabulary
+						Try: "next item", "show shortcuts"
 					</span>
 				{:else}
 					<span class="vi-icon vi-icon-error" aria-hidden="true">✗</span>
@@ -241,12 +241,6 @@
 		border-color: oklch(0.4 0.08 250);
 		color: oklch(0.85 0.14 200);
 		font-family: ui-monospace, monospace;
-	}
-
-	.vi-kbd-hint {
-		background: oklch(0.26 0.04 250);
-		border-color: oklch(0.4 0.06 250);
-		color: oklch(0.78 0.04 250);
 	}
 
 	.vi-hint {

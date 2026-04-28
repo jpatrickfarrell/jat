@@ -2547,17 +2547,18 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						</div>
 					</details>
 
-					<!-- Internal toggle -->
-					<label class="flex items-center gap-2.5 cursor-pointer select-none py-1 group {formDisabled ? 'opacity-50' : ''}">
+					<!-- Internal toggle: unchecked = internal (default), checked = public -->
+					<label class="flex items-center gap-2.5 cursor-pointer select-none py-1 {formDisabled ? 'opacity-50' : ''}">
 						<input
 							type="checkbox"
 							class="checkbox checkbox-xs"
-							bind:checked={formData.internal}
+							checked={!formData.internal}
+							onchange={(e) => { formData.internal = !(e.currentTarget as HTMLInputElement).checked }}
 							disabled={formDisabled || isSubmitting}
 						/>
 						<span class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Internal</span>
 						{#if formData.internal}
-							<span class="badge badge-xs bg-base-content/10 text-base-content/50 normal-case tracking-normal font-normal">dev-only, closes directly</span>
+							<span class="badge badge-xs bg-base-content/10 text-base-content/50 normal-case tracking-normal font-normal">dev-only</span>
 						{:else}
 							<span class="badge badge-xs bg-success/20 text-success/80 normal-case tracking-normal font-normal">visible to clients</span>
 						{/if}

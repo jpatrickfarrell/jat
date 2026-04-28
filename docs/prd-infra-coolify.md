@@ -133,6 +133,8 @@ Pain points with current setup: env vars scattered across CF/Supabase dashboards
 
 **PG-006 (P2)** — PgBouncer provisionable per-project when needed.
 
+**PG-007 (P0)** — `pg_cron` and `pg_net` are **not** installed in project Postgres containers. Scheduled jobs are managed by the `croner` library running inside each application process (per JST PRD FR-014), firing HTTP requests to `/api/cron/*` endpoints on their configured schedules. This eliminates the `pg_net` dependency entirely — `pg_net` is a Supabase-specific extension that is not available in standard Postgres 16 packages.
+
 ### MinIO object storage
 
 **MIO-001 (P0)** — Single MinIO instance as Coolify service on mothership, accessible via Docker bridge.

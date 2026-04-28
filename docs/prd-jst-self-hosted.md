@@ -198,17 +198,29 @@ Vitest unit tests for `withRLS`, `getPublicUrl`, `checkRouteAccess`, `requireRol
 
 ## New environment variables
 
-| Old (Supabase) | New (Self-hosted) |
+These are not 1:1 replacements — they serve different purposes. Remove the old set entirely; add the new set.
+
+**Removed (Supabase-specific):**
+
+| Variable | What it did |
 |---|---|
-| `PUBLIC_SUPABASE_URL` | `DATABASE_URL` |
-| `PUBLIC_SUPABASE_ANON_KEY` | `BETTER_AUTH_SECRET` |
-| `PRIVATE_SUPABASE_SERVICE_ROLE` | `BETTER_AUTH_URL` |
-| — | `PUBLIC_MINIO_BASE_URL` |
-| — | `MINIO_ENDPOINT` |
-| — | `MINIO_ACCESS_KEY` |
-| — | `MINIO_SECRET_KEY` |
-| — | `MINIO_BUCKET_MEDIA` |
-| — | `MINIO_BUCKET_FILES` |
+| `PUBLIC_SUPABASE_URL` | PostgREST endpoint for supabase-js |
+| `PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous JWT for client-side queries |
+| `PRIVATE_SUPABASE_SERVICE_ROLE` | Supabase service-role key for admin operations |
+
+**Added (self-hosted stack):**
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | postgres.js connection string (direct Postgres) |
+| `BETTER_AUTH_SECRET` | Session signing secret for Better Auth |
+| `BETTER_AUTH_URL` | Public base URL used for auth redirect callbacks |
+| `PUBLIC_MINIO_BASE_URL` | Public CDN/proxy URL for served media |
+| `MINIO_ENDPOINT` | MinIO server internal endpoint |
+| `MINIO_ACCESS_KEY` | MinIO access key |
+| `MINIO_SECRET_KEY` | MinIO secret key |
+| `MINIO_BUCKET_MEDIA` | Bucket name for uploaded media |
+| `MINIO_BUCKET_FILES` | Bucket name for private files |
 
 ---
 

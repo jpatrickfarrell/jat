@@ -77,6 +77,7 @@
 	let voiceCaptureModule = $state<VoiceCaptureModule | null>(null);
 	let PushToTalkOverlayCmp = $state<Component | null>(null);
 	let VoiceIndicatorCmp = $state<Component | null>(null);
+	let VoiceVocabSheetCmp = $state<Component | null>(null);
 	let voiceLoadInFlight = false;
 
 	// Shared project state for entire app (always a specific project, never "All Projects")
@@ -444,12 +445,14 @@
 			Promise.all([
 				import('$lib/stores/voiceCapture.svelte'),
 				import('$lib/components/voice/PushToTalkOverlay.svelte'),
-				import('$lib/components/voice/VoiceIndicator.svelte')
+				import('$lib/components/voice/VoiceIndicator.svelte'),
+				import('$lib/components/voice/VoiceVocabSheet.svelte')
 			])
-				.then(([capture, overlay, indicator]) => {
+				.then(([capture, overlay, indicator, vocabSheet]) => {
 					voiceCaptureModule = capture;
 					PushToTalkOverlayCmp = overlay.default as unknown as Component;
 					VoiceIndicatorCmp = indicator.default as unknown as Component;
+					VoiceVocabSheetCmp = vocabSheet.default as unknown as Component;
 				})
 				.catch((err) => {
 					console.error('Failed to lazy-load voice modules:', err);
@@ -1759,6 +1762,11 @@
 <!-- Bottom-right voice state indicator chip (lazy-loaded when voice.enabled) -->
 {#if voice.enabled && VoiceIndicatorCmp}
 	<VoiceIndicatorCmp />
+{/if}
+
+<!-- Voice vocabulary sheet — slides up above the chip (lazy-loaded when voice.enabled) -->
+{#if voice.enabled && VoiceVocabSheetCmp}
+	<VoiceVocabSheetCmp />
 {/if}
 
 <!-- Vim-style marks command line (`:delm <letter>` / `:delmm`) -->

@@ -41,6 +41,26 @@ export interface IntentResult<T = unknown> {
 	schemaValid: boolean;
 }
 
+export interface VoiceTool {
+	name: string;
+	description: string;
+	input_schema: {
+		type: 'object';
+		properties: Record<string, unknown>;
+		required?: string[];
+	};
+}
+
+export interface ToolCall {
+	name: string;
+	input: Record<string, unknown>;
+}
+
+export interface DispatchResult {
+	toolCalls: ToolCall[];
+	providerLatencyMs: number;
+}
+
 export interface IntentProvider {
 	id: 'ollama' | 'openai' | 'anthropic';
 	name: string;
@@ -53,6 +73,12 @@ export interface IntentProvider {
 		schema: object;
 		model?: string;
 	}): Promise<IntentResult<T>>;
+	dispatch(
+		transcript: string,
+		tools: VoiceTool[],
+		systemPrompt: string,
+		model?: string
+	): Promise<DispatchResult>;
 }
 
 export interface SpeakProvider {

@@ -4,19 +4,11 @@
 	 *
 	 * Spec: ide/docs/prd-voice-subsystem.md §5.7
 	 * Task: jat-68j78.11
-	 *
-	 * Two states driven by voice.enabled:
-	 *  - Disabled (§5.7.1): single CTA gated on STT availability + install hints
-	 *  - Enabled  (§5.7.2): full config — input device, hotkey, STT/LLM radios,
-	 *    privacy master toggle, advanced overrides, diagnostics
-	 *
-	 * Switching providers and toggling enable take effect without reload because
-	 * the voiceSubsystem store is reactive ($state) and the component reads it
-	 * directly — no local cache, no manual rerender.
 	 */
 
 	import { onMount } from 'svelte';
 	import { voice } from '$lib/voice/voiceSubsystem.svelte';
+	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 
 	type ProbeMeta = {
 		id: string;
@@ -53,8 +45,106 @@
 	let testLlmResult = $state<LlmResult | null>(null);
 	let testLlmBusy = $state(false);
 
-	// ── Audit log accordion (data wired in jat-68j78.21) ──────────────────────
-	let recentCallsOpen = $state(false);
+	// ── Audit log feed ────────────────────────────────────────────────────────
+	type AuditEntry = {
+		ts: string;
+		provider: string;
+		op: string;
+		bytes: number;
+		latencyMs: number;
+		model: string;
+		ok: boolean;
+		errorClass?: string;
+		transcript?: string;
+		toolCalls?: Array<{ name: string; input: Record<string, unknown> }>;
+		route?: string;
+	};
+	let auditEntries = $state<AuditEntry[]>([]);
+	let auditLoading = $state(false);
+	let auditError = $state<string | null>(null);
+	let expandedAuditIdx = $state<number | null>(null);
+	let copiedIdx = $state<number | null>(null);
+	let taskSearching = $state<string | null>(null);
+
+	// ── Task detail drawer (opened from audit task chips) ─────────────────────
+	let drawerTaskId = $state<string | null>(null);
+	let drawerOpen = $state(false);
+	let drawerMode = $state<'view' | 'edit'>('view');
+
+	async function fetchAuditLog() {
+		auditLoading = true;
+		auditError = null;
+		try {
+			const res = await fetch('/api/config/voice/audit?limit=50');
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = (await res.json()) as { entries: AuditEntry[] };
+			auditEntries = data.entries ?? [];
+		} catch (e) {
+			auditError = e instanceof Error ? e.message : String(e);
+		} finally {
+			auditLoading = false;
+		}
+	}
+
+	function copyEntry(entry: AuditEntry, idx: number, e: Event) {
+		e.stopPropagation();
+		const payload: Record<string, unknown> = {
+			ts: entry.ts,
+			provider: entry.provider,
+			op: entry.op,
+			model: entry.model,
+			latencyMs: entry.latencyMs,
+			ok: entry.ok,
+			bytes: entry.bytes
+		};
+		if (entry.route) payload.route = entry.route;
+		if (entry.transcript) payload.transcript = entry.transcript;
+		if (entry.toolCalls) payload.toolCalls = entry.toolCalls;
+		if (entry.errorClass) payload.errorClass = entry.errorClass;
+		navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).catch(() => {});
+		copiedIdx = idx;
+		setTimeout(() => { if (copiedIdx === idx) copiedIdx = null; }, 1500);
+	}
+
+	async function openTaskChip(title: string, e: Event) {
+		e.stopPropagation();
+		if (taskSearching === title) return;
+		taskSearching = title;
+		try {
+			const res = await fetch(`/api/tasks?search=${encodeURIComponent(title)}&limit=5`);
+			if (res.ok) {
+				const data = (await res.json()) as { tasks?: Array<{ id: string; title: string }> };
+				const tasks = data.tasks ?? [];
+				const match =
+					tasks.find((t) => t.title.toLowerCase() === title.toLowerCase()) ?? tasks[0];
+				if (match?.id) {
+					drawerTaskId = match.id;
+					drawerMode = 'view';
+					drawerOpen = true;
+				}
+			}
+		} catch { /* ignore */ } finally {
+			taskSearching = null;
+		}
+	}
+
+	function taskTypeIcon(type: unknown): string {
+		switch (type) {
+			case 'bug': return '🐛';
+			case 'feature': return '✨';
+			case 'chore': return '🔧';
+			case 'epic': return '⚡';
+			default: return '📋';
+		}
+	}
+
+	function fmtTime(iso: string): string {
+		try {
+			return new Date(iso).toLocaleTimeString([], {
+				hour: '2-digit', minute: '2-digit', second: '2-digit'
+			});
+		} catch { return iso; }
+	}
 
 	// ── Advanced accordion ────────────────────────────────────────────────────
 	let advancedOpen = $state(false);
@@ -93,7 +183,6 @@
 	async function requestMicAndEnumerate() {
 		deviceError = null;
 		try {
-			// Triggers permission prompt; without it, device labels are blank.
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			stream.getTracks().forEach((t) => t.stop());
 			await fetchDevices();
@@ -108,6 +197,7 @@
 		await fetchProbe();
 		if (voice.enabled) {
 			await fetchDevices();
+			fetchAuditLog();
 		}
 	});
 
@@ -119,6 +209,7 @@
 			await voice.setEnabled(true);
 			await fetchProbe();
 			await fetchDevices();
+			fetchAuditLog();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -152,9 +243,6 @@
 		nuking = true;
 		actionError = null;
 		try {
-			// Writing the defaults via PUT is equivalent to deleting voice.json:
-			// next GET re-initializes from the same shape. Keeps the API surface
-			// minimal — no separate DELETE endpoint required.
 			const defaults = {
 				enabled: false,
 				activeStt: 'voxtype',
@@ -174,7 +262,6 @@
 				body: JSON.stringify(defaults)
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			// Force the store to re-read from disk: setEnabled flushes #initPromise.
 			await voice.setEnabled(false);
 			confirmingNuke = false;
 		} catch (e) {
@@ -203,8 +290,6 @@
 		}
 	}
 
-	// Master privacy toggle: writes all three off-device fields together.
-	// jat-68j78.18 will add granular sub-toggles + master gate behavior.
 	const privacyMasterOn = $derived.by(() => {
 		const c = voice.getConfig().privacy;
 		return c.offDeviceAudio || c.offDeviceText || c.offDeviceSpeech;
@@ -516,12 +601,184 @@
 					Master gate. When off, only LOCAL providers may run.
 				</span>
 			</label>
-			<p class="muted small">Granular sub-toggles: jat-68j78.18 — full audit log: jat-68j78.21</p>
+		</section>
 
-			<details class="accordion" bind:open={recentCallsOpen}>
-				<summary>Recent cloud calls</summary>
-				<p class="muted">Audit log UI lands in jat-68j78.21 (reads <code>~/.config/jat/voice-audit.jsonl</code>).</p>
-			</details>
+		<!-- ── Voice call log (first-class, scrollable) ────────────────────── -->
+		<section class="card audit-card">
+			<div class="audit-header">
+				<div class="audit-header-left">
+					<h4 class="section-label">Voice call log</h4>
+					{#if auditEntries.length > 0}
+						<span class="audit-count">{auditEntries.length}</span>
+					{/if}
+				</div>
+				<button
+					class="btn btn-ghost btn-xs"
+					onclick={fetchAuditLog}
+					disabled={auditLoading}
+					title="Refresh call log"
+				>
+					{auditLoading ? '…' : 'Refresh'}
+				</button>
+			</div>
+
+			<div class="audit-scroll">
+				{#if auditLoading && auditEntries.length === 0}
+					<p class="muted small audit-empty">Loading…</p>
+				{:else if auditError}
+					<p class="diag-result err audit-empty">{auditError}</p>
+				{:else if auditEntries.length === 0}
+					<p class="muted small audit-empty">No calls recorded yet.</p>
+				{:else}
+					{#each auditEntries as entry, i}
+						{@const isDispatch = entry.op === 'dispatch'}
+						{@const expanded = expandedAuditIdx === i}
+						<div
+							class="audit-row"
+							class:audit-row-err={!entry.ok}
+							class:audit-row-expandable={isDispatch}
+							onclick={() => { if (isDispatch) expandedAuditIdx = expanded ? null : i; }}
+							role={isDispatch ? 'button' : undefined}
+							tabindex={isDispatch ? 0 : undefined}
+							onkeydown={(e) => {
+								if (isDispatch && (e.key === 'Enter' || e.key === ' '))
+									expandedAuditIdx = expanded ? null : i;
+							}}
+						>
+							<!-- Summary row -->
+							<div class="audit-row-main">
+								<span class="audit-time">{fmtTime(entry.ts)}</span>
+								<span class="audit-op audit-op-{entry.op}">{entry.op}</span>
+								<span class="audit-provider">{entry.provider}</span>
+								<span class="audit-latency">{entry.latencyMs}ms</span>
+								{#if !entry.ok}
+									<span class="audit-err-badge">{entry.errorClass ?? 'err'}</span>
+								{/if}
+								{#if isDispatch && entry.transcript}
+									<span class="audit-transcript-preview">
+										"{entry.transcript.slice(0, 55)}{entry.transcript.length > 55 ? '…' : ''}"
+									</span>
+								{/if}
+								<div class="audit-row-actions" onclick={(e) => e.stopPropagation()} role="none">
+									<button
+										class="audit-copy-btn"
+										class:copied={copiedIdx === i}
+										onclick={(e) => copyEntry(entry, i, e)}
+										title="Copy full payload as JSON"
+										aria-label="Copy payload"
+									>
+										{copiedIdx === i ? '✓' : '⎘'}
+									</button>
+								</div>
+								{#if isDispatch}
+									<span class="audit-expand-arrow">{expanded ? '▲' : '▼'}</span>
+								{/if}
+							</div>
+
+							<!-- Expanded pipeline view -->
+							{#if expanded && isDispatch}
+								<div class="audit-pipeline">
+
+									<!-- ① Transcript -->
+									{#if entry.transcript}
+										<div class="pipeline-step">
+											<span class="pipeline-num">①</span>
+											<div class="pipeline-body">
+												<span class="pipeline-label">transcript</span>
+												<p class="pipeline-transcript">"{entry.transcript}"</p>
+											</div>
+										</div>
+									{/if}
+
+									<!-- ② Tool calls -->
+									<div class="pipeline-step">
+										<span class="pipeline-num">②</span>
+										<div class="pipeline-body">
+											<div class="pipeline-label-row">
+												<span class="pipeline-label">tool calls</span>
+												<span class="pipeline-meta">
+													{entry.model}
+													{#if entry.route}· {entry.route}{/if}
+												</span>
+											</div>
+
+											{#if !entry.toolCalls || entry.toolCalls.length === 0}
+												<span class="muted small">none — fell back to fuzzy match</span>
+											{:else}
+												<div class="pipeline-tool-calls">
+													{#each entry.toolCalls as call}
+														<div class="pipeline-tool-call">
+															<!-- ③ Tool header with result chip -->
+															<div class="pipeline-tool-header">
+																<span class="pipeline-tool-name">{call.name}</span>
+																<div class="pipeline-tool-chips" onclick={(e) => e.stopPropagation()} role="none">
+																	{#if call.name === 'create_task' && typeof call.input.title === 'string'}
+																		<button
+																			class="chip chip-task"
+																			class:chip-searching={taskSearching === call.input.title}
+																			onclick={(e) => openTaskChip(call.input.title as string, e)}
+																			title="Search and open task"
+																		>
+																			<span class="chip-icon">{taskTypeIcon(call.input.type)}</span>
+																			<span class="chip-text">{call.input.title}</span>
+																			{#if typeof call.input.priority === 'string'}
+																				<span class="chip-priority">{call.input.priority}</span>
+																			{/if}
+																			<span class="chip-arrow">↗</span>
+																		</button>
+																	{:else if call.name === 'view_task' && typeof call.input.title === 'string'}
+																		<button
+																			class="chip chip-view-task"
+																			class:chip-searching={taskSearching === call.input.title}
+																			onclick={(e) => openTaskChip(call.input.title as string, e)}
+																			title="Open task details"
+																		>
+																			<span class="chip-icon">👁</span>
+																			<span class="chip-text">{call.input.title}</span>
+																			<span class="chip-arrow">↗</span>
+																		</button>
+																	{:else if call.name === 'spawn_agent' && typeof call.input.title === 'string'}
+																		<span class="chip chip-spawn-agent">
+																			<span class="chip-icon">🚀</span>
+																			<span class="chip-text">{call.input.title}</span>
+																			{#if typeof call.input.model === 'string'}
+																				<span class="chip-priority">{call.input.model}</span>
+																			{/if}
+																		</span>
+																	{:else if call.name === 'navigate' && typeof call.input.route === 'string'}
+																		<span class="chip chip-nav">→ {call.input.route}</span>
+																	{:else if call.name === 'search' && typeof call.input.query === 'string'}
+																		<span class="chip chip-search">🔍 {call.input.query}</span>
+																	{:else if call.name === 'vocab' && typeof call.input.shortcut === 'string'}
+																		<span class="chip chip-vocab">⌨ {call.input.shortcut}</span>
+																	{/if}
+																</div>
+															</div>
+															<pre class="pipeline-tool-input">{JSON.stringify(call.input, null, 2)}</pre>
+														</div>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									</div>
+
+									<!-- Error step -->
+									{#if !entry.ok && entry.errorClass}
+										<div class="pipeline-step pipeline-step-err">
+											<span class="pipeline-num pipeline-num-err">✗</span>
+											<div class="pipeline-body">
+												<span class="pipeline-label pipeline-label-err">error</span>
+												<span class="pipeline-err-text">{entry.errorClass}</span>
+											</div>
+										</div>
+									{/if}
+
+								</div>
+							{/if}
+						</div>
+					{/each}
+				{/if}
+			</div>
 		</section>
 
 		<section class="card">
@@ -608,6 +865,9 @@
 		</section>
 	{/if}
 </div>
+
+<!-- Task detail drawer opened from audit task chips -->
+<TaskDetailDrawer bind:taskId={drawerTaskId} bind:isOpen={drawerOpen} bind:mode={drawerMode} />
 
 <style>
 	.voice-editor {
@@ -793,6 +1053,7 @@
 		transition: all 0.15s ease;
 	}
 	.btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+	.btn-xs { padding: 0.2rem 0.45rem; font-size: 0.72rem; }
 	.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 	.btn-primary {
 		background: oklch(0.32 0.18 220);
@@ -995,4 +1256,382 @@
 		gap: 0.2rem;
 	}
 	.advanced-field .input { min-width: 140px; }
+
+	/* ── Voice call log ──────────────────────────────────────────────────────── */
+	.audit-card {
+		gap: 0.6rem;
+	}
+
+	.audit-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.audit-header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.audit-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.3rem;
+		height: 1.3rem;
+		padding: 0 0.3rem;
+		background: oklch(0.22 0.06 250);
+		border-radius: 99px;
+		font-size: 0.68rem;
+		color: oklch(0.65 0.06 250);
+		font-family: ui-monospace, monospace;
+	}
+
+	.audit-scroll {
+		max-height: 480px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		/* slight inset shadow so user knows it's scrollable */
+		border-radius: 6px;
+	}
+	.audit-scroll::-webkit-scrollbar { width: 4px; }
+	.audit-scroll::-webkit-scrollbar-track { background: transparent; }
+	.audit-scroll::-webkit-scrollbar-thumb {
+		background: oklch(0.28 0.02 250);
+		border-radius: 2px;
+	}
+
+	.audit-empty {
+		padding: 0.5rem;
+	}
+
+	.audit-row {
+		display: flex;
+		flex-direction: column;
+		padding: 0.35rem 0.5rem;
+		background: oklch(0.15 0.02 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 5px;
+		font-size: 0.78rem;
+		transition: border-color 0.12s;
+	}
+	.audit-row-err {
+		background: oklch(0.15 0.04 25);
+		border-color: oklch(0.35 0.1 25 / 0.5);
+	}
+	.audit-row-expandable { cursor: pointer; }
+	.audit-row-expandable:hover { border-color: oklch(0.4 0.08 250); }
+
+	.audit-row-main {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: nowrap;
+		min-width: 0;
+	}
+
+	.audit-time {
+		font-family: ui-monospace, monospace;
+		color: oklch(0.5 0.02 250);
+		font-size: 0.72rem;
+		flex-shrink: 0;
+	}
+
+	.audit-op {
+		font-family: ui-monospace, monospace;
+		font-size: 0.68rem;
+		padding: 0.1rem 0.35rem;
+		border-radius: 3px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		flex-shrink: 0;
+	}
+	.audit-op-dispatch { background: oklch(0.28 0.1 220 / 0.4); color: oklch(0.75 0.12 220); }
+	.audit-op-transcribe { background: oklch(0.28 0.1 160 / 0.4); color: oklch(0.72 0.12 160); }
+	.audit-op-classify { background: oklch(0.28 0.1 280 / 0.4); color: oklch(0.72 0.1 280); }
+	.audit-op-speak { background: oklch(0.28 0.1 60 / 0.4); color: oklch(0.75 0.12 60); }
+
+	.audit-provider {
+		color: oklch(0.68 0.04 250);
+		flex-shrink: 0;
+		font-size: 0.75rem;
+	}
+
+	.audit-latency {
+		font-family: ui-monospace, monospace;
+		color: oklch(0.52 0.04 250);
+		font-size: 0.72rem;
+		flex-shrink: 0;
+	}
+
+	.audit-err-badge {
+		font-family: ui-monospace, monospace;
+		font-size: 0.68rem;
+		padding: 0.1rem 0.35rem;
+		border-radius: 3px;
+		background: oklch(0.35 0.12 25 / 0.3);
+		color: oklch(0.75 0.15 25);
+		flex-shrink: 0;
+	}
+
+	.audit-transcript-preview {
+		color: oklch(0.68 0.04 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		flex: 1;
+		min-width: 0;
+		font-style: italic;
+		font-size: 0.75rem;
+	}
+
+	.audit-row-actions {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
+
+	.audit-copy-btn {
+		background: none;
+		border: none;
+		color: oklch(0.45 0.03 250);
+		cursor: pointer;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		font-size: 0.78rem;
+		font-family: ui-monospace, monospace;
+		transition: all 0.1s;
+		line-height: 1;
+	}
+	.audit-copy-btn:hover {
+		color: oklch(0.72 0.06 250);
+		background: oklch(0.22 0.02 250);
+	}
+	.audit-copy-btn.copied {
+		color: oklch(0.75 0.18 145);
+	}
+
+	.audit-expand-arrow {
+		color: oklch(0.42 0.04 250);
+		font-size: 0.6rem;
+		flex-shrink: 0;
+	}
+
+	/* ── Pipeline (expanded dispatch view) ───────────────────────────────────── */
+	.audit-pipeline {
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid oklch(0.22 0.02 250);
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.pipeline-step {
+		display: flex;
+		gap: 0.55rem;
+		align-items: flex-start;
+	}
+	.pipeline-step-err { opacity: 0.9; }
+
+	.pipeline-num {
+		font-family: ui-monospace, monospace;
+		font-size: 0.78rem;
+		color: oklch(0.55 0.1 220);
+		flex-shrink: 0;
+		min-width: 1rem;
+		padding-top: 0.05rem;
+		font-weight: 600;
+	}
+	.pipeline-num-err { color: oklch(0.68 0.15 25); }
+
+	.pipeline-body {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.pipeline-label {
+		font-family: ui-monospace, monospace;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.5 0.06 250);
+		font-weight: 600;
+	}
+	.pipeline-label-err { color: oklch(0.65 0.12 25); }
+
+	.pipeline-label-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.pipeline-meta {
+		font-family: ui-monospace, monospace;
+		font-size: 0.68rem;
+		color: oklch(0.42 0.04 250);
+		text-transform: none;
+		letter-spacing: 0;
+	}
+
+	.pipeline-transcript {
+		font-size: 0.82rem;
+		color: oklch(0.82 0.03 250);
+		font-style: italic;
+		line-height: 1.45;
+		margin: 0;
+		word-break: break-word;
+	}
+
+	.pipeline-tool-calls {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.pipeline-tool-call {
+		background: oklch(0.12 0.01 250);
+		border: 1px solid oklch(0.2 0.02 250);
+		border-radius: 5px;
+		padding: 0.4rem 0.55rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.pipeline-tool-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.pipeline-tool-name {
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: oklch(0.72 0.14 220);
+	}
+
+	.pipeline-tool-chips {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+	}
+
+	.pipeline-tool-input {
+		margin: 0;
+		font-family: ui-monospace, monospace;
+		font-size: 0.7rem;
+		color: oklch(0.68 0.03 250);
+		white-space: pre-wrap;
+		word-break: break-all;
+		line-height: 1.5;
+	}
+
+	.pipeline-err-text {
+		font-family: ui-monospace, monospace;
+		font-size: 0.78rem;
+		color: oklch(0.72 0.15 25);
+	}
+
+	/* ── Result chips ────────────────────────────────────────────────────────── */
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.12rem 0.45rem;
+		border-radius: 999px;
+		font-size: 0.7rem;
+		font-family: ui-monospace, monospace;
+		white-space: nowrap;
+		max-width: 260px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.chip-task {
+		background: oklch(0.22 0.1 250 / 0.5);
+		border: 1px solid oklch(0.42 0.14 250 / 0.6);
+		color: oklch(0.8 0.1 250);
+		cursor: pointer;
+		transition: all 0.12s;
+	}
+	.chip-task:hover {
+		background: oklch(0.28 0.12 250 / 0.6);
+		border-color: oklch(0.55 0.16 250);
+		color: oklch(0.92 0.1 250);
+	}
+	.chip-task.chip-searching {
+		opacity: 0.6;
+		cursor: wait;
+	}
+	.chip-icon { font-size: 0.78rem; }
+	.chip-text {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 180px;
+	}
+	.chip-priority {
+		font-size: 0.62rem;
+		padding: 0 0.2rem;
+		background: oklch(0.28 0.06 250);
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
+	.chip-arrow {
+		font-size: 0.6rem;
+		opacity: 0.65;
+		flex-shrink: 0;
+	}
+
+	.chip-nav {
+		background: oklch(0.2 0.08 160 / 0.35);
+		border: 1px solid oklch(0.42 0.1 160 / 0.45);
+		color: oklch(0.75 0.12 160);
+	}
+
+	.chip-search {
+		background: oklch(0.2 0.08 60 / 0.35);
+		border: 1px solid oklch(0.42 0.1 60 / 0.45);
+		color: oklch(0.78 0.12 60);
+	}
+
+	.chip-vocab {
+		background: oklch(0.2 0.06 280 / 0.35);
+		border: 1px solid oklch(0.4 0.08 280 / 0.45);
+		color: oklch(0.72 0.1 280);
+	}
+
+	.chip-view-task {
+		background: oklch(0.2 0.08 220 / 0.35);
+		border: 1px solid oklch(0.42 0.12 220 / 0.5);
+		color: oklch(0.78 0.12 220);
+		cursor: pointer;
+		transition: all 0.12s;
+	}
+	.chip-view-task:hover {
+		background: oklch(0.28 0.1 220 / 0.5);
+		border-color: oklch(0.55 0.16 220);
+		color: oklch(0.92 0.1 220);
+	}
+	.chip-view-task.chip-searching {
+		opacity: 0.6;
+		cursor: wait;
+	}
+
+	.chip-spawn-agent {
+		background: oklch(0.22 0.1 85 / 0.35);
+		border: 1px solid oklch(0.45 0.14 85 / 0.5);
+		color: oklch(0.82 0.14 85);
+	}
 </style>

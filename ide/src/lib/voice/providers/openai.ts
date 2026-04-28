@@ -17,7 +17,9 @@ import type {
 	TranscribeProvider,
 	TranscribeResult,
 	IntentProvider,
-	IntentResult
+	IntentResult,
+	VoiceTool,
+	DispatchResult
 } from '../types';
 import { validate } from '../schemaValidator';
 import { recordCloudCall } from '../auditLog';
@@ -220,6 +222,9 @@ interface ChatCompletionResponse {
 	choices?: Array<{
 		message?: {
 			content?: string;
+			tool_calls?: Array<{
+				function: { name: string; arguments: string | unknown };
+			}>;
 		};
 	}>;
 }
@@ -373,5 +378,84 @@ export const openaiIntentProvider: IntentProvider = {
 			providerLatencyMs,
 			schemaValid
 		};
+	},
+
+	async dispatch(
+		transcript: string,
+		tools: VoiceTool[],
+		systemPrompt: string,
+		model?: string
+	): Promise<DispatchResult> {
+		const apiKey = getKey();
+		if (!apiKey) throw new Error('OpenAI API key not configured');
+		const m = model ?? DEFAULT_LLM_MODEL;
+		const start = Date.now();
+
+		const bodyText = JSON.stringify({
+			model: m,
+			messages: [
+				{ role: 'system', content: systemPrompt },
+				{ role: 'user', content: transcript }
+			],
+			tools: tools.map((t) => ({
+				type: 'function',
+				function: { name: t.name, description: t.description, parameters: t.input_schema }
+			})),
+			tool_choice: 'auto'
+		});
+		const bytes = Buffer.byteLength(bodyText, 'utf-8');
+
+		let res: Response;
+		try {
+			res = await fetchWithTimeout(`${OPENAI_BASE}/v1/chat/completions`, LLM_TIMEOUT_MS, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+				body: bodyText
+			});
+		} catch (err) {
+			void recordCloudCall({
+				provider: 'openai',
+				op: 'dispatch',
+				bytes,
+				model: m,
+				ok: false,
+				errorClass: classifyError(err),
+				startedAt: start
+			});
+			if (isAbortError(err)) {
+				throw new Error(`openai chat request timed out after ${LLM_TIMEOUT_MS}ms`);
+			}
+			const msg = err instanceof Error ? err.message : String(err);
+			throw new Error(`openai chat request failed: ${msg}`);
+		}
+
+		const providerLatencyMs = Date.now() - start;
+
+		if (!res.ok) {
+			const detail = (await res.text().catch(() => '')).slice(0, 200);
+			void recordCloudCall({
+				provider: 'openai',
+				op: 'dispatch',
+				bytes,
+				model: m,
+				ok: false,
+				errorClass: 'http',
+				startedAt: start,
+				endedAt: start + providerLatencyMs
+			});
+			throw new Error(`openai chat HTTP ${res.status}: ${detail}`);
+		}
+
+		const body = (await res.json()) as ChatCompletionResponse;
+		const toolCalls = (body.choices?.[0]?.message?.tool_calls ?? []).map((tc) => ({
+			name: tc.function.name,
+			input:
+				typeof tc.function.arguments === 'string'
+					? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+					: ((tc.function.arguments as Record<string, unknown>) ?? {})
+		}));
+
+		// Success is logged by the dispatch server route (with full transcript/toolCalls context).
+		return { toolCalls, providerLatencyMs };
 	}
 };

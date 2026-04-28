@@ -67,7 +67,8 @@ const DEFAULT_CONFIG: VoiceConfig = Object.freeze({
 	}
 }) as VoiceConfig;
 
-const PROBE_TIMEOUT_MS = 2000;
+// Must exceed the server's slowest provider probe (ElevenLabs = 1500ms) plus HTTP round-trip.
+const PROBE_TIMEOUT_MS = 5000;
 
 function cloneConfig(c: VoiceConfig): VoiceConfig {
 	return JSON.parse(JSON.stringify(c));
@@ -132,8 +133,14 @@ class VoiceSubsystem {
 			return;
 		}
 
+		// Hold enabled=false while probing so voice UI doesn't appear until
+		// providers are populated. Without this, the lazy-load in +layout.svelte
+		// fires immediately and the user can attempt capture before sttProviders
+		// is non-empty, producing a confusing "status=offline" error.
+		this.enabled = false;
 		this.status = 'initializing';
 		await this.#probeAndPopulate();
+		this.enabled = config.enabled;
 	}
 
 	async #readConfig(): Promise<VoiceConfig> {
@@ -187,14 +194,12 @@ class VoiceSubsystem {
 			return 'offline';
 		}
 		if (!probe) return 'degraded';
-		const someUnavailable =
-			probe.stt.some((p) => !p.available) ||
-			probe.llm.some((p) => !p.available) ||
-			probe.speak.some((p) => !p.available);
+		// Only the ACTIVE providers determine health. Inactive providers that are
+		// unavailable (no key, privacy gate, network) should not degrade the system.
 		const activeSttOk = probe.stt.find((p) => p.id === this.activeSttId)?.available !== false;
 		const activeLlmOk = probe.llm.find((p) => p.id === this.activeLlmId)?.available !== false;
 		if (!activeSttOk || !activeLlmOk) return 'degraded';
-		return someUnavailable ? 'degraded' : 'ready';
+		return 'ready';
 	}
 
 	async setEnabled(enabled: boolean): Promise<void> {

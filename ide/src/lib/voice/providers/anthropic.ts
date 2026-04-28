@@ -14,7 +14,7 @@
 import { getApiKeyWithFallback } from '$lib/utils/credentials';
 import { recordCloudCall } from '../auditLog';
 import { validate } from '../schemaValidator';
-import type { IntentProvider, IntentResult } from '../types';
+import type { IntentProvider, IntentResult, VoiceTool, DispatchResult } from '../types';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -263,6 +263,95 @@ const anthropicProvider: IntentProvider = {
 			providerLatencyMs,
 			schemaValid
 		};
+	},
+
+	async dispatch(
+		transcript: string,
+		tools: VoiceTool[],
+		systemPrompt: string,
+		model?: string
+	): Promise<DispatchResult> {
+		const apiKey = getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY');
+		if (!apiKey) {
+			throw new Error(
+				'anthropic.dispatch: no API key found. Add one in Settings → API Keys, run `jat-secret --set anthropic <key>`, or export ANTHROPIC_API_KEY.'
+			);
+		}
+
+		const m = model ?? DEFAULT_MODEL;
+		const start = Date.now();
+
+		const requestBody = JSON.stringify({
+			model: m,
+			max_tokens: MAX_OUTPUT_TOKENS,
+			system: systemPrompt,
+			messages: [{ role: 'user', content: transcript }],
+			tools: tools.map((t) => ({
+				name: t.name,
+				description: t.description,
+				input_schema: t.input_schema
+			})),
+			tool_choice: { type: 'auto' }
+		});
+		const bytes = Buffer.byteLength(requestBody, 'utf-8');
+
+		let res: Response;
+		try {
+			res = await fetchWithTimeout(API_URL, REQUEST_TIMEOUT_MS, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-api-key': apiKey,
+					'anthropic-version': ANTHROPIC_VERSION
+				},
+				body: requestBody
+			});
+		} catch (err) {
+			const timedOut = isAbortError(err);
+			void recordCloudCall({
+				provider: 'anthropic',
+				op: 'dispatch',
+				bytes,
+				model: m,
+				ok: false,
+				errorClass: timedOut ? 'timeout' : 'network',
+				startedAt: start
+			});
+			if (timedOut) {
+				throw new Error(`anthropic request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+			}
+			const msg = err instanceof Error ? err.message : String(err);
+			throw new Error(`anthropic request failed: ${msg}`);
+		}
+
+		const providerLatencyMs = Date.now() - start;
+
+		if (!res.ok) {
+			if (res.status === 429 || res.status === 529) {
+				noteRateLimit(res.status);
+			}
+			const detail = (await res.text().catch(() => '')).slice(0, 200);
+			void recordCloudCall({
+				provider: 'anthropic',
+				op: 'dispatch',
+				bytes,
+				model: m,
+				ok: false,
+				errorClass: res.status === 401 || res.status === 403 ? 'no_key' : 'http',
+				startedAt: start
+			});
+			throw new Error(`anthropic HTTP ${res.status}: ${detail}`);
+		}
+
+		clearRateLimit();
+
+		const body = (await res.json()) as AnthropicMessagesResponse;
+		const toolCalls = (body.content ?? [])
+			.filter((c) => c.type === 'tool_use')
+			.map((c) => ({ name: c.name ?? '', input: (c.input as Record<string, unknown>) ?? {} }));
+
+		// Success is logged by the dispatch server route (with full transcript/toolCalls context).
+		return { toolCalls, providerLatencyMs };
 	}
 };
 

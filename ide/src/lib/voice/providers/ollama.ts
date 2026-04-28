@@ -1,7 +1,7 @@
 // Local LLM IntentProvider wrapping ollama's /api/chat endpoint with format='json'.
 // Spec: ide/docs/prd-voice-subsystem.md §5.2, §7.4. Task: jat-68j78.5.
 
-import type { IntentProvider, IntentResult } from '../types';
+import type { IntentProvider, IntentResult, VoiceTool, DispatchResult } from '../types';
 import { validate } from '../schemaValidator';
 
 // Model and request-timeout defaults live in
@@ -133,6 +133,64 @@ const ollamaProvider: IntentProvider = {
 			providerLatencyMs,
 			schemaValid
 		};
+	},
+
+	async dispatch(
+		transcript: string,
+		tools: VoiceTool[],
+		systemPrompt: string,
+		model?: string
+	): Promise<DispatchResult> {
+		if (!model) throw new Error('ollama.dispatch: model required');
+		const start = Date.now();
+
+		let res: Response;
+		try {
+			res = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, REQUEST_TIMEOUT_MS, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					model,
+					stream: false,
+					messages: [
+						{ role: 'system', content: systemPrompt },
+						{ role: 'user', content: transcript }
+					],
+					tools: tools.map((t) => ({
+						type: 'function',
+						function: { name: t.name, description: t.description, parameters: t.input_schema }
+					}))
+				})
+			});
+		} catch (err) {
+			if (isAbortError(err)) {
+				throw new Error(`ollama request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+			}
+			const msg = err instanceof Error ? err.message : String(err);
+			throw new Error(`ollama request failed: ${msg}`);
+		}
+
+		const providerLatencyMs = Date.now() - start;
+
+		if (!res.ok) {
+			const detail = (await res.text().catch(() => '')).slice(0, 200);
+			throw new Error(`ollama HTTP ${res.status}: ${detail}`);
+		}
+
+		const body = (await res.json()) as {
+			message?: { tool_calls?: Array<{ function: { name: string; arguments: unknown } }> };
+		};
+
+		// tool_calls may be absent if model doesn't support it — return [] gracefully
+		const toolCalls = (body.message?.tool_calls ?? []).map((tc) => ({
+			name: tc.function.name,
+			input:
+				typeof tc.function.arguments === 'string'
+					? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+					: ((tc.function.arguments as Record<string, unknown>) ?? {})
+		}));
+
+		return { toolCalls, providerLatencyMs };
 	}
 };
 

@@ -55,6 +55,7 @@
 		initAudioOnInteraction
 	} from '$lib/utils/soundEffects';
 	import ActivityPulse from '$lib/components/work/ActivityPulse.svelte';
+	import { voice } from '$lib/voice/voiceSubsystem.svelte';
 
 	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
 	function splitAgentName(name: string): string[] {
@@ -535,6 +536,28 @@
 			.map(l => l.trim())
 			.filter(Boolean);
 		if (await patchTask({ labels })) closeEditor();
+	}
+
+	// Voice capture (lazy-loaded when voice.enabled)
+	type VoiceCaptureModule = typeof import('$lib/stores/voiceCapture.svelte');
+	let vcm = $state<VoiceCaptureModule | null>(null);
+
+	$effect(() => {
+		if (voice.enabled && !vcm) {
+			import('$lib/stores/voiceCapture.svelte').then(m => { vcm = m; });
+		}
+	});
+
+	const mobileVoiceState = $derived(vcm?.getVoiceState() ?? 'idle');
+	const isVoiceRecording = $derived(mobileVoiceState === 'listening');
+
+	function toggleVoice() {
+		if (!vcm) return;
+		if (mobileVoiceState === 'listening') {
+			vcm.stopCapture();
+		} else if (mobileVoiceState === 'idle') {
+			vcm.startCapture();
+		}
 	}
 
 	// Mobile input state
@@ -1846,7 +1869,24 @@
 						{/if}
 					</button>
 
-					<!-- Send button -->
+					<!-- Mic button (only when voice is enabled) -->
+					{#if voice.enabled}
+						<button
+							class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-all {isVoiceRecording ? 'bg-error/20 border-error text-error mic-recording' : 'bg-base-300 border-base-300 text-base-content/60 active:brightness-125'}"
+							aria-label={isVoiceRecording ? 'Stop recording' : 'Voice input'}
+							title={isVoiceRecording ? 'Tap to stop' : 'Tap to talk'}
+							disabled={!vcm}
+							use:directClick={toggleVoice}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<rect x="9" y="2" width="6" height="12" rx="3" />
+								<path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+								<line x1="12" y1="19" x2="12" y2="22" />
+							</svg>
+						</button>
+					{/if}
+
+				<!-- Send button -->
 					<button
 						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-default {(sentFlash || sentStayFlash) ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-300 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
@@ -2367,6 +2407,15 @@
 </div>
 
 <style>
+	.mic-recording {
+		animation: mic-pulse 1.4s ease-in-out infinite;
+	}
+
+	@keyframes mic-pulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50%       { opacity: 0.7; transform: scale(0.92); }
+	}
+
 	/* Swipe discoverability: tab indicator peeks right then snaps back on drawer open */
 	@keyframes tab-swipe-peek {
 		0%   { transform: translateX(0);    opacity: 1; }

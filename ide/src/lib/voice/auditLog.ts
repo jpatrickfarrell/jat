@@ -27,7 +27,7 @@ const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_GENERATIONS = 3;
 
-export type VoiceAuditOp = 'transcribe' | 'classify' | 'speak';
+export type VoiceAuditOp = 'transcribe' | 'classify' | 'dispatch' | 'speak';
 
 export interface VoiceAuditEntry {
 	/** ISO-8601 timestamp. */
@@ -44,6 +44,12 @@ export interface VoiceAuditEntry {
 	ok: boolean;
 	/** Coarse failure class on ok=false: 'network' | 'timeout' | 'no_key' | 'schema' | 'http' | 'unknown'. */
 	errorClass?: string;
+	/** The user utterance (dispatch/transcribe ops only). */
+	transcript?: string;
+	/** Tool calls returned by the LLM (dispatch op only). */
+	toolCalls?: Array<{ name: string; input: Record<string, unknown> }>;
+	/** Route the dispatch was called from (dispatch op only). */
+	route?: string;
 }
 
 let dirEnsured = false;
@@ -212,5 +218,10 @@ export function recordCloudCall(
 	const { startedAt, endedAt, ...rest } = args;
 	const ts = new Date(endedAt ?? Date.now()).toISOString();
 	const latencyMs = Math.max(0, (endedAt ?? Date.now()) - startedAt);
-	return appendAuditEntry({ ...rest, ts, latencyMs });
+	// Strip undefined optional fields so JSONL stays compact
+	const entry: VoiceAuditEntry = { ...rest, ts, latencyMs };
+	if (entry.transcript === undefined) delete entry.transcript;
+	if (entry.toolCalls === undefined) delete entry.toolCalls;
+	if (entry.route === undefined) delete entry.route;
+	return appendAuditEntry(entry);
 }

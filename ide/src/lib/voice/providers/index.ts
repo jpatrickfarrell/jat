@@ -101,6 +101,15 @@ const openaiIntentProxy: IntentProvider = {
 			throw new Error(`openai classify failed: ${d.error ?? res.status}`);
 		}
 		return res.json();
+	},
+	async dispatch(transcript, tools, systemPrompt, model) {
+		// Dispatch is routed through the /api/voice/dispatch server endpoint which
+		// calls the real openai.ts provider with full credentials. This proxy only
+		// exists on the client side and should not be called directly — the
+		// voiceCapture store calls /api/voice/dispatch via llmDispatch() instead.
+		// Stub throws to make misuse obvious.
+		void transcript; void tools; void systemPrompt; void model;
+		throw new Error('openaiIntentProxy.dispatch: use /api/voice/dispatch directly');
 	}
 };
 

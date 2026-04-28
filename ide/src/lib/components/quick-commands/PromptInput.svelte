@@ -114,6 +114,22 @@
 		}
 	});
 
+	// MutationObserver fallback: syncs value when oninput doesn't fire (e.g. mobile overlay)
+	$effect(() => {
+		if (!textareaRef) return;
+		const observer = new MutationObserver(() => {
+			if (!textareaRef) return;
+			const domText = getPromptText(textareaRef);
+			if (value !== domText) {
+				value = domText;
+				lastSyncedValue = domText;
+				onchange?.(domText);
+			}
+		});
+		observer.observe(textareaRef, { childList: true, subtree: true, characterData: true });
+		return () => observer.disconnect();
+	});
+
 	// --- Derived ---
 	let filteredProviderCategories = $derived(getFilteredProviderCategories());
 

@@ -8,9 +8,9 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
-	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import { openProjectDrawer, isMobileFullscreenOpen, availableProjects } from '$lib/stores/drawerStore';
+	import { get } from 'svelte/store';
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
-	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 	import ManageColumnsDropdown from '$lib/components/ManageColumnsDropdown.svelte';
 	import { columnResize } from '$lib/actions/columnResize';
 	import { fade } from 'svelte/transition';
@@ -20,6 +20,7 @@
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
 	import { STATUS_OPTIONS, type TaskStatus } from '$lib/config/task-statuses';
+	import { createListNav } from '$lib/actions/listNav';
 
 	interface Task {
 		id: string;
@@ -32,10 +33,11 @@
 		assignee?: string;
 		labels: string[];
 		due_date?: string | null;
-		created_ts?: string;
+		created_at?: string;
 		updated_at?: string;
 		milestone_id?: string | null;
 		milestone_name?: string | null;
+		creator?: { name?: string; email?: string } | string | null;
 		requester?: { name?: string; email?: string } | null;
 		approver?: { name?: string; email?: string } | null;
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
@@ -55,26 +57,45 @@
 	const ALL_COLUMNS: ColDef[] = [
 		{ id: 'project', label: 'Project', defaultWidth: 100, minWidth: 60, sortable: true, sortField: 'project' },
 		{ id: 'priority', label: 'Priority', defaultWidth: 64, minWidth: 50, sortable: true, sortField: 'priority' },
+		{ id: 'status', label: 'Status', defaultWidth: 110, minWidth: 70, sortable: true, sortField: 'status' },
 		{ id: 'type', label: 'Type', defaultWidth: 40, minWidth: 36, sortable: true, sortField: 'type' },
 		{ id: 'id', label: 'ID', defaultWidth: 110, minWidth: 70, sortable: true, sortField: 'title' },
 		{ id: 'title', label: 'Title', defaultWidth: 0, minWidth: 200, sortable: true, sortField: 'title' },
+		{ id: 'milestone', label: 'Milestone', defaultWidth: 130, minWidth: 80, sortable: false },
 		{ id: 'due_date', label: 'Due', defaultWidth: 100, minWidth: 70, sortable: true, sortField: 'due_date' },
 		{ id: 'labels', label: 'Labels', defaultWidth: 160, minWidth: 80, sortable: false },
 		{ id: 'assignee', label: 'Assignee', defaultWidth: 100, minWidth: 60, sortable: false },
+		{ id: 'created', label: 'Created', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'created' },
+		{ id: 'updated', label: 'Updated', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'updated' },
 		{ id: 'actions', label: 'Actions', defaultWidth: 72, minWidth: 50, sortable: false },
 	];
+
+	interface Milestone {
+		id: string;
+		name: string;
+		sort_order: number;
+		status: string;
+		contract_id: string | null;
+		contract_title: string | null;
+	}
 
 	// Data state
 	let tasks = $state<Task[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let availableMilestones = $state<Milestone[]>([]);
 
-	// Filter state
-	let selectedProject = $state('all');
+	// Filter state — default project comes from URL param > saved prefs > app's current project
+	const urlProject = $derived($page.url.searchParams.get('project') ?? '');
+	let selectedProject = $state(urlProject || 'all');
 	let selectedType = $state('all');
 	let searchQuery = $state('');
 	let projects = $state<string[]>([]);
+	let searchInputEl = $state<HTMLInputElement | null>(null);
+
+	// Auto-focus search on mount
+	$effect(() => { if (searchInputEl) searchInputEl.focus(); });
 
 	// Power view filter state
 	const DEFAULT_STATUSES: TaskStatus[] = ['open', 'in_progress', 'waiting', 'blocked', 'submitted', 'accepted'];
@@ -114,8 +135,21 @@
 		]
 	}];
 
+	// Agent names are PascalCase compound words (AdjectiveNoun, e.g. GentleCoast, RoundLedge)
+	function isHumanAssignee(name: string): boolean {
+		if (!name) return false;
+		if (name.includes('@')) return true;   // email
+		if (name.includes(' ')) return true;   // full name with space
+		if (name === name.toLowerCase()) return true;  // lowercase handle
+		if (/[0-9]/.test(name)) return true;   // has digits (fallback agent suffix)
+		// Exclude bare PascalCase compound words — the JAT agent name pattern
+		return !/^[A-Z][a-z]+[A-Z][a-z]+$/.test(name);
+	}
+
 	const assigneeGroups = $derived.by<SearchDropdownGroup[]>(() => {
-		const names = [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort();
+		const names = [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])]
+			.filter(isHumanAssignee)
+			.sort();
 		return [{
 			label: 'Assignee',
 			options: [
@@ -153,6 +187,36 @@
 		}];
 	});
 
+	// Milestone assignment groups (for inline cell dropdown) — includes full list from API
+	const milestoneAssignGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		if (!availableMilestones.length) {
+			// Fallback: use only milestones seen on current tasks
+			const seen = new Map<string, string>();
+			for (const t of tasks) {
+				if (t.milestone_id) seen.set(t.milestone_id, t.milestone_name || t.milestone_id);
+			}
+			const entries = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+			return [
+				{ label: '-', options: [{ value: '', label: 'No milestone' }] },
+				{ label: 'Milestones', options: entries.map(([id, name]) => ({ value: id, label: name })) },
+			];
+		}
+		// Group by contract
+		const byContract = new Map<string, { title: string; items: Milestone[] }>();
+		for (const m of availableMilestones) {
+			const key = m.contract_id || '__none__';
+			if (!byContract.has(key)) byContract.set(key, { title: m.contract_title || 'Milestones', items: [] });
+			byContract.get(key)!.items.push(m);
+		}
+		const groups: SearchDropdownGroup[] = [
+			{ label: '-', options: [{ value: '', label: 'No milestone' }] },
+		];
+		for (const { title, items } of byContract.values()) {
+			groups.push({ label: title, options: items.map(m => ({ value: m.id, label: m.name })) });
+		}
+		return groups;
+	});
+
 	const requesterGroups = $derived.by<SearchDropdownGroup[]>(() => {
 		const names = [...new Set(
 			tasks.map(t => t.requester?.name || t.requester?.email).filter(Boolean) as string[]
@@ -180,16 +244,59 @@
 	});
 
 	// Whether conditional dropdowns should render
+	// Active milestone shorthand resolution (for the inline badge)
+	const activeMilestoneShorthand = $derived.by(() => {
+		const q = searchQuery.toLowerCase().trim();
+		const m = q.match(/^m(\d+)$/);
+		if (!m) return null;
+		const idx = parseInt(m[1]) - 1;
+		const ms = sortedMilestones[idx];
+		return ms ? { label: ms.name, num: parseInt(m[1]) } : { label: null, num: parseInt(m[1]) };
+	});
+
+	// Ordered milestone list used for m1/m2/m3 search shorthands
+	const sortedMilestones = $derived.by(() => {
+		const seen = new Map<string, string>();
+		for (const t of tasks) {
+			if (t.milestone_id) seen.set(t.milestone_id, t.milestone_name || t.milestone_id);
+		}
+		return [...seen.entries()]
+			.sort((a, b) => a[1].localeCompare(b[1]))
+			.map(([id, name]) => ({ id, name }));
+	});
+
 	const hasAssignees = $derived(tasks.some(t => t.assignee));
 	const hasLabels = $derived(tasks.some(t => t.labels?.length));
 	const hasMilestones = $derived(tasks.some(t => t.milestone_id));
 	const hasRequesters = $derived(tasks.some(t => t.requester?.name || t.requester?.email));
 	const hasApprovers = $derived(tasks.some(t => t.approver?.name || t.approver?.email));
 
-	// Status counts (across all loaded tasks, not just filtered)
+	// Tasks after all filters except status — used for status-dropdown counts
+	const tasksForStatusCounts = $derived.by(() => {
+		let result = tasks;
+		if (selectedProject !== 'all') result = result.filter(t => t.project === selectedProject);
+		if (selectedType !== 'all') result = result.filter(t => t.issue_type === selectedType);
+		if (selectedPriority !== '') result = result.filter(t => String(t.priority) === selectedPriority);
+		if (selectedAssignee === '__unassigned__') result = result.filter(t => !t.assignee);
+		else if (selectedAssignee !== '') result = result.filter(t => t.assignee === selectedAssignee);
+		if (selectedLabel !== '') result = result.filter(t => (t.labels ?? []).includes(selectedLabel));
+		if (selectedMilestone === '__none__') result = result.filter(t => !t.milestone_id);
+		else if (selectedMilestone !== '') result = result.filter(t => t.milestone_id === selectedMilestone);
+		if (selectedRequester !== '') result = result.filter(t => {
+			const r = t.requester;
+			return r && (r.name === selectedRequester || r.email === selectedRequester);
+		});
+		if (selectedApprover !== '') result = result.filter(t => {
+			const a = t.approver;
+			return a && (a.name === selectedApprover || a.email === selectedApprover);
+		});
+		return result;
+	});
+
+	// Status counts scoped to currently active non-status filters
 	const statusCounts = $derived.by(() => {
 		const counts: Record<string, number> = {};
-		for (const t of tasks) counts[t.status] = (counts[t.status] ?? 0) + 1;
+		for (const t of tasksForStatusCounts) counts[t.status] = (counts[t.status] ?? 0) + 1;
 		return counts;
 	});
 
@@ -230,9 +337,149 @@
 	function clearAllStatuses() { selectedStatuses = new Set(); }
 	function resetStatuses() { selectedStatuses = new Set(DEFAULT_STATUSES); }
 
-	// Sort state
-	let sortField = $state<string>('priority');
-	let sortDir = $state<'asc' | 'desc'>('asc');
+	// j/k nav with full selection layer (x = toggle, V = visual, * = select all, Shift+J/K = range)
+	const nav = createListNav({
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		onSelect: (_el) => { const id = _el.dataset.navId; if (id) openTaskDrawer(id); },
+		selectable: true,
+		onSelectionChange: (ids) => { selectedTasks = ids; },
+		wraparound: true,
+	});
+
+	function handlePageKeydown(e: KeyboardEvent) {
+		// MobileSessionDrawer owns the keyboard when open — don't interfere
+		if (get(isMobileFullscreenOpen)) return;
+		const target = e.target as HTMLElement;
+		// Don't steal keys when typing in inputs or contenteditables (e.g. PromptInput)
+		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable) {
+			if (e.key === 'Tab' && !e.shiftKey && target === searchInputEl) {
+				e.preventDefault();
+				nav.focus(0);
+			}
+			return;
+		}
+		if (e.key === '/' || e.key === 'f') {
+			e.preventDefault();
+			searchInputEl?.focus();
+			return;
+		}
+		if (nav.handleKeydown(e)) return;
+	}
+
+	// Sort chips
+	interface SortChip { field: string; dir: 'asc' | 'desc'; }
+	const SORT_FIELDS: Record<string, string> = {
+		priority: 'Priority', status: 'Status', title: 'Title', project: 'Project',
+		type: 'Type', due_date: 'Due', created: 'Created', updated: 'Updated', assignee: 'Assignee',
+	};
+	let sortChips = $state<SortChip[]>([{ field: 'priority', dir: 'asc' }]);
+	const availableSortFields = $derived(
+		Object.keys(SORT_FIELDS).filter(f => !sortChips.some(c => c.field === f))
+	);
+
+	let chipDragIdx = $state<number | null>(null);
+	let chipDragOverIdx = $state<number | null>(null);
+	let addSortDetailsEl = $state<HTMLDetailsElement | null>(null);
+
+	function compareByField(a: Task, b: Task, field: string): number {
+		switch (field) {
+			case 'priority': return a.priority - b.priority;
+			case 'status':   return (a.status || '').localeCompare(b.status || '');
+			case 'title':    return a.title.localeCompare(b.title);
+			case 'project':  return (a.project || '').localeCompare(b.project || '');
+			case 'type':     return (a.issue_type || '').localeCompare(b.issue_type || '');
+			case 'due_date': return (a.due_date || '9999').localeCompare(b.due_date || '9999');
+			case 'created':  return (a.created_at || '').localeCompare(b.created_at || '');
+			case 'updated':  return (a.updated_at || '').localeCompare(b.updated_at || '');
+			case 'assignee': return (a.assignee || '￿').localeCompare(b.assignee || '￿');
+			default:         return 0;
+		}
+	}
+
+	function toggleChipDir(i: number) {
+		sortChips = sortChips.map((c, idx) => idx === i ? { ...c, dir: c.dir === 'asc' ? 'desc' : 'asc' } : c);
+	}
+	function removeSortChip(i: number) {
+		sortChips = sortChips.filter((_, idx) => idx !== i);
+		if (sortChips.length === 0) sortChips = [{ field: 'priority', dir: 'asc' }];
+	}
+	function addSortChip(field: string) {
+		sortChips = [...sortChips, { field, dir: 'asc' }];
+		addSortDetailsEl?.removeAttribute('open');
+	}
+
+	function handleChipDragStart(i: number, e: DragEvent) {
+		chipDragIdx = i;
+		if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); }
+	}
+	function handleChipDragOver(i: number, e: DragEvent) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		chipDragOverIdx = i;
+	}
+	function handleChipDragEnd() { chipDragIdx = null; chipDragOverIdx = null; }
+	function handleChipDrop(i: number, e: DragEvent) {
+		e.preventDefault();
+		if (chipDragIdx === null || chipDragIdx === i) { handleChipDragEnd(); return; }
+		const next = [...sortChips];
+		const [moved] = next.splice(chipDragIdx, 1);
+		next.splice(i, 0, moved);
+		sortChips = next;
+		handleChipDragEnd();
+	}
+
+	// Persist filter + sort preferences
+	function savePrefs() {
+		if (!browser) return;
+		try {
+			localStorage.setItem('jat-open-tasks-prefs', JSON.stringify({
+				selectedStatuses: [...selectedStatuses],
+				selectedProject, selectedType, selectedPriority, selectedAssignee,
+				selectedLabel, selectedMilestone, selectedRequester, selectedApprover,
+				sortChips,
+			}));
+		} catch { /* quota */ }
+	}
+	function loadPrefs() {
+		if (!browser) return;
+		try {
+			// URL param wins outright
+			const fromUrl = $page.url.searchParams.get('project');
+			if (fromUrl) { selectedProject = fromUrl; }
+
+			const raw = localStorage.getItem('jat-open-tasks-prefs');
+			if (raw) {
+				const p = JSON.parse(raw);
+				if (p.selectedStatuses) selectedStatuses = new Set(p.selectedStatuses);
+				// Only restore saved project if URL didn't specify one
+				if (!fromUrl && p.selectedProject) selectedProject = p.selectedProject;
+				if (p.selectedType) selectedType = p.selectedType;
+				if ('selectedPriority' in p) selectedPriority = p.selectedPriority;
+				if ('selectedAssignee' in p) selectedAssignee = p.selectedAssignee;
+				if ('selectedLabel' in p) selectedLabel = p.selectedLabel;
+				if ('selectedMilestone' in p) selectedMilestone = p.selectedMilestone;
+				if ('selectedRequester' in p) selectedRequester = p.selectedRequester;
+				if ('selectedApprover' in p) selectedApprover = p.selectedApprover;
+				if (p.sortChips?.length) sortChips = p.sortChips;
+			}
+
+			// If still 'all' (no URL param, no saved pref), default to the app's current project
+			if (!fromUrl && selectedProject === 'all') {
+				const appProject = get(availableProjects)[0];
+				if (appProject) selectedProject = appProject;
+			}
+		} catch { /* parse error */ }
+	}
+
+	// Auto-save whenever filter/sort state changes
+	$effect(() => {
+		const _deps = [
+			selectedProject, selectedType, selectedPriority, selectedAssignee,
+			selectedLabel, selectedMilestone, selectedRequester, selectedApprover,
+			[...selectedStatuses].join(','), JSON.stringify(sortChips),
+		];
+		if (browser) savePrefs();
+	});
 
 	// Inline editing state
 	let editingCell = $state<{ taskId: string; field: string } | null>(null);
@@ -306,12 +553,20 @@
 	function loadColumnSettings() {
 		if (!browser) return;
 		const saved = loadColumnSettingsUtil('jat-open-tasks-columns', ALL_COLUMNS.map(c => c.id));
-		if (!saved) return;
+		if (!saved) {
+			// First time — hide supplementary columns that aren't core defaults
+			hiddenColumns = new Set(['status', 'milestone', 'created', 'updated']);
+			return;
+		}
 		columnOrder = saved.order;
 		columnWidths = saved.widths;
-		hiddenColumns = new Set(saved.hidden);
-		if (saved.sortField) sortField = saved.sortField;
-		if (saved.sortDir) sortDir = saved.sortDir;
+		const hidden = new Set(saved.hidden);
+		// Newly added columns not present in old saved order default to hidden
+		for (const id of ['status', 'milestone', 'created', 'updated']) {
+			if (!(saved.order as string[]).includes(id)) hidden.add(id);
+		}
+		hiddenColumns = hidden;
+		// sort state migrated to jat-open-tasks-prefs (sortChips)
 	}
 
 	function saveColumnSettings() {
@@ -320,8 +575,7 @@
 			order: columnOrder,
 			widths: columnWidths,
 			hidden: [...hiddenColumns],
-			sortField,
-			sortDir,
+			// sort state in jat-open-tasks-prefs
 		});
 	}
 
@@ -441,42 +695,28 @@
 		}
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase().trim();
-			result = result.filter(t =>
-				t.title.toLowerCase().includes(q) ||
-				t.id.toLowerCase().includes(q) ||
-				(t.description && t.description.toLowerCase().includes(q)) ||
-				(t.labels && t.labels.some(l => l.toLowerCase().includes(q)))
-			);
+			const milestoneShorthand = q.match(/^m(\d+)$/);
+			if (milestoneShorthand) {
+				const idx = parseInt(milestoneShorthand[1]) - 1;
+				const ms = sortedMilestones[idx];
+				result = ms ? result.filter(t => t.milestone_id === ms.id) : [];
+			} else {
+				result = result.filter(t =>
+					t.title.toLowerCase().includes(q) ||
+					t.id.toLowerCase().includes(q) ||
+					(t.description && t.description.toLowerCase().includes(q)) ||
+					(t.labels && t.labels.some(l => l.toLowerCase().includes(q)))
+				);
+			}
 		}
 
-		// Sort
+		// Multi-key sort from chips
 		result = [...result].sort((a, b) => {
-			let cmp = 0;
-			switch (sortField) {
-				case 'priority':
-					cmp = a.priority - b.priority;
-					break;
-				case 'title':
-					cmp = a.title.localeCompare(b.title);
-					break;
-				case 'project':
-					cmp = (a.project || '').localeCompare(b.project || '');
-					break;
-				case 'type':
-					cmp = (a.issue_type || '').localeCompare(b.issue_type || '');
-					break;
-				case 'due_date':
-					const aDate = a.due_date || '9999';
-					const bDate = b.due_date || '9999';
-					cmp = aDate.localeCompare(bDate);
-					break;
-				case 'created':
-					cmp = (a.created_ts || '').localeCompare(b.created_ts || '');
-					break;
-				default:
-					cmp = a.priority - b.priority;
+			for (const chip of sortChips) {
+				const cmp = compareByField(a, b, chip.field);
+				if (cmp !== 0) return chip.dir === 'asc' ? cmp : -cmp;
 			}
-			return sortDir === 'asc' ? cmp : -cmp;
+			return 0;
 		});
 
 		return result;
@@ -509,6 +749,54 @@
 	const someVisibleSelected = $derived.by(() => {
 		return filteredTasks.some(t => selectedTasks.has(t.id)) && !allVisibleSelected;
 	});
+
+	async function fetchMilestones(project: string) {
+		if (!project || project === 'all') { availableMilestones = []; return; }
+		try {
+			const res = await fetch(`/api/milestones?project=${encodeURIComponent(project)}`);
+			if (res.ok) {
+				const data = await res.json();
+				availableMilestones = data.milestones || [];
+			}
+		} catch { availableMilestones = []; }
+	}
+
+	// Fetch milestones whenever the project filter changes to a single project
+	$effect(() => {
+		const p = selectedProject;
+		if (browser) fetchMilestones(p === 'all' ? '' : p);
+	});
+
+	async function setMilestone(taskId: string, milestoneId: string | null) {
+		const prev = tasks.find(t => t.id === taskId);
+		const prevMilestoneId = prev?.milestone_id ?? null;
+		const prevMilestoneName = prev?.milestone_name ?? null;
+
+		// Optimistic update
+		tasks = tasks.map(t => t.id === taskId
+			? { ...t,
+				milestone_id: milestoneId || null,
+				milestone_name: milestoneId ? (availableMilestones.find(m => m.id === milestoneId)?.name ?? null) : null
+			}
+			: t
+		);
+
+		try {
+			const res = await fetch(`/api/tasks/${taskId}/milestone`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ milestone_id: milestoneId }),
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		} catch (e) {
+			// Roll back optimistic update
+			tasks = tasks.map(t => t.id === taskId
+				? { ...t, milestone_id: prevMilestoneId, milestone_name: prevMilestoneName }
+				: t
+			);
+			addToast({ message: 'Failed to set milestone', type: 'error' });
+		}
+	}
 
 	async function fetchTasks() {
 		try {
@@ -571,9 +859,12 @@
 	}
 
 	function toggleSort(field: string) {
-		const result = toggleSortUtil(sortField, sortDir, field);
-		sortField = result.field;
-		sortDir = result.dir;
+		const idx = sortChips.findIndex(c => c.field === field);
+		if (idx >= 0) {
+			sortChips = sortChips.map((c, i) => i === idx ? { ...c, dir: c.dir === 'asc' ? 'desc' : 'asc' } : c);
+		} else {
+			sortChips = [{ field, dir: 'asc' }, ...sortChips];
+		}
 		saveColumnSettings();
 	}
 
@@ -581,6 +872,42 @@
 		drawerTaskId = taskId;
 		drawerMode = 'view';
 		drawerOpen = true;
+	}
+
+	// Compact relative/absolute date for created/updated columns
+	function formatShortDate(ts: string | null | undefined): string {
+		if (!ts) return '';
+		try {
+			const d = new Date(ts);
+			if (isNaN(d.getTime())) return '';
+			const now = new Date();
+			const diffMs = now.getTime() - d.getTime();
+			const diffMin = Math.floor(diffMs / 60000);
+			if (diffMin < 1) return 'just now';
+			if (diffMin < 60) return `${diffMin}m ago`;
+			const diffHr = Math.floor(diffMin / 60);
+			if (diffHr < 24) return `${diffHr}h ago`;
+			const diffDay = Math.floor(diffHr / 24);
+			if (diffDay === 1) return 'yesterday';
+			if (diffDay < 7) return `${diffDay}d ago`;
+			const sameYear = d.getFullYear() === now.getFullYear();
+			return d.toLocaleDateString(undefined, sameYear
+				? { month: 'short', day: 'numeric' }
+				: { month: 'short', day: 'numeric', year: '2-digit' });
+		} catch { return ''; }
+	}
+
+	// Return first letter of a person for the initials circle
+	function getPersonInitial(person: Task['creator'] | string | null | undefined): string {
+		if (!person) return '';
+		if (typeof person === 'string') return person.charAt(0).toUpperCase();
+		return ((person.name ?? person.email) ?? '').charAt(0).toUpperCase();
+	}
+
+	function getPersonLabel(person: Task['creator'] | string | null | undefined): string {
+		if (!person) return '';
+		if (typeof person === 'string') return person;
+		return person.name ?? person.email ?? '';
 	}
 
 	function formatDueDate(date: string | null | undefined): string {
@@ -1143,6 +1470,7 @@
 	onMount(() => {
 		if (browser) {
 			loadColumnSettings();
+			loadPrefs();
 			fetchTasks();
 			pollInterval = setInterval(fetchTasks, 10000);
 		}
@@ -1152,6 +1480,8 @@
 		if (pollInterval) clearInterval(pollInterval);
 	});
 </script>
+
+<svelte:window onkeydown={handlePageKeydown} />
 
 <svelte:head>
 	<title>Tasks | JAT</title>
@@ -1184,9 +1514,19 @@
 			<input
 				type="text"
 				class="search-input"
-				placeholder="Search tasks..."
+				placeholder="Search… or m1, m2, m3"
 				bind:value={searchQuery}
+				bind:this={searchInputEl}
 			/>
+			{#if activeMilestoneShorthand}
+				<span class="milestone-shorthand-badge" class:milestone-shorthand-miss={!activeMilestoneShorthand.label}>
+					{#if activeMilestoneShorthand.label}
+						→ {activeMilestoneShorthand.label}
+					{:else}
+						m{activeMilestoneShorthand.num} not found
+					{/if}
+				</span>
+			{/if}
 
 			<!-- Status multi-select dropdown -->
 			<div class="status-dropdown-wrapper">
@@ -1285,15 +1625,13 @@
 				/>
 			{/if}
 
-			<!-- Conditional: Milestone -->
-			{#if hasMilestones}
-				<SearchDropdown
-					value={selectedMilestone}
-					groups={milestoneGroups}
-					placeholder="All Milestones"
-					onChange={(v) => { selectedMilestone = v; }}
-				/>
-			{/if}
+			<!-- Milestone (always shown — postgres projects always have milestones) -->
+			<SearchDropdown
+				value={selectedMilestone}
+				groups={milestoneGroups}
+				placeholder="All Milestones"
+				onChange={(v) => { selectedMilestone = v; }}
+			/>
 
 			<!-- Conditional: Requester -->
 			{#if hasRequesters}
@@ -1322,7 +1660,51 @@
 				</button>
 			{/if}
 
-			<!-- Manage Columns (right-aligned) -->
+		</div>
+
+		<!-- Sort chips row -->
+		<div class="sort-row">
+			<span class="sort-row-label">Sort</span>
+
+			{#each sortChips as chip, i}
+				<div
+					class="sort-chip"
+					class:sort-chip-drag-over={chipDragOverIdx === i && chipDragIdx !== null && chipDragIdx !== i}
+					class:sort-chip-dragging={chipDragIdx === i}
+					draggable="true"
+					ondragstart={(e) => handleChipDragStart(i, e)}
+					ondragover={(e) => handleChipDragOver(i, e)}
+					ondragend={handleChipDragEnd}
+					ondrop={(e) => handleChipDrop(i, e)}
+					role="group"
+				>
+					<span class="sort-chip-grip" aria-hidden="true">⠿</span>
+					<span class="sort-chip-label">{SORT_FIELDS[chip.field] ?? chip.field}</span>
+					<button
+						type="button"
+						class="sort-chip-dir"
+						onclick={() => toggleChipDir(i)}
+						title={chip.dir === 'asc' ? 'Ascending — click to reverse' : 'Descending — click to reverse'}
+					>{chip.dir === 'asc' ? '↑' : '↓'}</button>
+					{#if sortChips.length > 1}
+						<button type="button" class="sort-chip-remove" onclick={() => removeSortChip(i)} title="Remove">×</button>
+					{/if}
+				</div>
+			{/each}
+
+			{#if availableSortFields.length > 0}
+				<details class="add-sort-details" bind:this={addSortDetailsEl}>
+					<summary class="add-sort-btn">+ sort</summary>
+					<div class="add-sort-menu">
+						{#each availableSortFields as field}
+							<button type="button" class="add-sort-option" onclick={() => addSortChip(field)}>
+								{SORT_FIELDS[field]}
+							</button>
+						{/each}
+					</div>
+				</details>
+			{/if}
+
 			<div class="columns-btn-wrapper">
 				<ManageColumnsDropdown
 					{columnOrder}
@@ -1427,8 +1809,11 @@
 							>
 								<span class="th-label">
 									{col.label}
-									{#if col.sortable && col.sortField === sortField}
-										{sortDir === 'asc' ? '↑' : '↓'}
+									{#if col.sortable && col.sortField}
+										{@const chipIdx = sortChips.findIndex(c => c.field === col.sortField)}
+										{#if chipIdx >= 0}
+											{sortChips[chipIdx].dir === 'asc' ? '↑' : '↓'}{#if sortChips.length > 1}<sub>{chipIdx + 1}</sub>{/if}
+										{/if}
 									{/if}
 								</span>
 							</th>
@@ -1443,6 +1828,8 @@
 							class="task-row"
 							class:saving={isSaving}
 							class:selected-row={isSelected}
+							data-nav-id={task.id}
+							tabindex="-1"
 							oncontextmenu={(e) => handleContextMenu(task, e)}
 						>
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -1544,9 +1931,47 @@
 											</div>
 										{/if}
 									</td>
+								{:else if col.id === 'status'}
+									{@const statusOpt = STATUS_OPTIONS.find(o => o.value === task.status)}
+									<td>
+										<span class="status-pill" style="background: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}20; color: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}; border: 1px solid {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}40;">
+											{statusOpt?.label ?? task.status}
+										</span>
+									</td>
+								{:else if col.id === 'milestone'}
+									<td class="milestone-cell" class:milestone-cell-set={!!task.milestone_id}>
+										<SearchDropdown
+											value={task.milestone_id || ''}
+											groups={milestoneAssignGroups}
+											placeholder="Set milestone…"
+											appendToBody
+											onChange={(v) => setMilestone(task.id, v || null)}
+										/>
+									</td>
 								{:else if col.id === 'assignee'}
 									<td>
 										<span class="assignee-text">{task.assignee || ''}</span>
+									</td>
+								{:else if col.id === 'created'}
+									{@const createdInitial = getPersonInitial(task.creator)}
+									{@const createdLabel = getPersonLabel(task.creator)}
+									<td>
+										<div class="person-date-cell">
+											{#if createdInitial}
+												<div class="person-avatar" title={createdLabel}>{createdInitial}</div>
+											{/if}
+											<span class="person-date-text" title={task.created_at}>{formatShortDate(task.created_at)}</span>
+										</div>
+									</td>
+								{:else if col.id === 'updated'}
+									{@const updatedInitial = getPersonInitial(task.assignee)}
+									<td>
+										<div class="person-date-cell">
+											{#if updatedInitial}
+												<div class="person-avatar" title={task.assignee}>{updatedInitial}</div>
+											{/if}
+											<span class="person-date-text" title={task.updated_at}>{formatShortDate(task.updated_at)}</span>
+										</div>
 									</td>
 								{:else if col.id === 'actions'}
 									<td>
@@ -2064,6 +2489,22 @@
 	.search-input::placeholder {
 		color: oklch(0.45 0.02 250);
 	}
+	.milestone-shorthand-badge {
+		padding: 0.125rem 0.5rem;
+		background: oklch(0.22 0.06 280 / 0.5);
+		border: 1px solid oklch(0.45 0.10 280 / 0.5);
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.75 0.12 280);
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+	.milestone-shorthand-miss {
+		background: oklch(0.22 0.04 25 / 0.4);
+		border-color: oklch(0.40 0.08 25 / 0.5);
+		color: oklch(0.65 0.10 25);
+	}
 	.project-dropdown-wrapper {
 		width: 150px;
 	}
@@ -2220,6 +2661,155 @@
 		margin-left: auto;
 	}
 
+	/* Sort row */
+	.sort-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
+		flex-wrap: wrap;
+	}
+	.sort-row-label {
+		font-size: 0.6875rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.45 0.03 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding-right: 0.125rem;
+		flex-shrink: 0;
+	}
+	.sort-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.125rem;
+		padding: 0 0.125rem 0 0.375rem;
+		min-height: 1.75rem;
+		background: oklch(0.20 0.03 240 / 0.5);
+		border: 1px solid oklch(0.35 0.08 240 / 0.45);
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.78 0.08 240);
+		cursor: grab;
+		user-select: none;
+		transition: background 0.1s, border-color 0.1s, opacity 0.1s;
+	}
+	.sort-chip:hover {
+		background: oklch(0.24 0.05 240 / 0.6);
+		border-color: oklch(0.50 0.12 240 / 0.6);
+	}
+	.sort-chip-drag-over {
+		border-color: oklch(0.65 0.15 240);
+		box-shadow: -3px 0 0 oklch(0.65 0.15 240);
+	}
+	.sort-chip-dragging {
+		opacity: 0.4;
+		cursor: grabbing;
+	}
+	.sort-chip-grip {
+		color: oklch(0.45 0.04 250);
+		font-size: 0.875rem;
+		cursor: grab;
+		flex-shrink: 0;
+	}
+	.sort-chip-label {
+		padding: 0 0.25rem;
+		flex-shrink: 0;
+	}
+	.sort-chip-dir {
+		padding: 0 0.3rem;
+		min-height: 1.25rem;
+		background: oklch(0.28 0.05 240 / 0.5);
+		border: none;
+		border-radius: 0.25rem;
+		color: oklch(0.85 0.10 240);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		flex-shrink: 0;
+		transition: background 0.1s, color 0.1s;
+	}
+	.sort-chip-dir:hover {
+		background: oklch(0.38 0.10 240 / 0.7);
+		color: oklch(0.95 0.08 240);
+	}
+	.sort-chip-remove {
+		padding: 0 0.3rem;
+		min-height: 1.25rem;
+		background: transparent;
+		border: none;
+		color: oklch(0.50 0.04 250);
+		font-size: 0.875rem;
+		cursor: pointer;
+		line-height: 1;
+		flex-shrink: 0;
+		transition: color 0.1s;
+	}
+	.sort-chip-remove:hover {
+		color: oklch(0.75 0.12 25);
+	}
+	/* Add sort button */
+	.add-sort-details {
+		position: relative;
+	}
+	.add-sort-details summary {
+		list-style: none;
+	}
+	.add-sort-details summary::-webkit-details-marker {
+		display: none;
+	}
+	.add-sort-btn {
+		display: flex;
+		align-items: center;
+		padding: 0 0.5rem;
+		min-height: 1.75rem;
+		background: transparent;
+		border: 1px dashed oklch(0.35 0.03 250 / 0.6);
+		border-radius: 0.375rem;
+		color: oklch(0.50 0.04 250);
+		font-size: 0.75rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: border-color 0.1s, color 0.1s;
+	}
+	.add-sort-btn:hover,
+	.add-sort-details[open] .add-sort-btn {
+		border-color: oklch(0.55 0.10 240 / 0.7);
+		color: oklch(0.75 0.08 240);
+		border-style: solid;
+	}
+	.add-sort-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 40;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		min-width: 120px;
+		padding: 0.25rem 0;
+		animation: dropdown-slide 0.12s ease-out;
+	}
+	.add-sort-option {
+		display: block;
+		width: 100%;
+		padding: 0.3rem 0.75rem;
+		background: transparent;
+		border: none;
+		text-align: left;
+		font-size: 0.8125rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.75 0.03 250);
+		cursor: pointer;
+		transition: background 0.08s, color 0.08s;
+	}
+	.add-sort-option:hover {
+		background: oklch(0.20 0.02 250);
+		color: oklch(0.92 0.02 250);
+	}
+
 
 	/* Table container */
 	.table-container {
@@ -2340,6 +2930,88 @@
 	}
 	.priority-badge:hover {
 		filter: brightness(1.2);
+	}
+
+	/* Status pill (column) */
+	.status-pill {
+		display: inline-block;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+
+	/* Person + date cell (Created / Updated columns) */
+	.person-date-cell {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.person-avatar {
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 50%;
+		background: oklch(0.30 0.03 250);
+		color: oklch(0.75 0.05 250);
+		font-size: 0.5rem;
+		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+	.person-date-text {
+		font-size: 0.6875rem;
+		color: oklch(var(--bc) / 0.5);
+		white-space: nowrap;
+	}
+
+	/* Milestone cell — SearchDropdown assignment */
+	.milestone-cell {
+		padding: 0 2px !important;
+		min-width: 0;
+	}
+	.milestone-cell :global(.sd-trigger) {
+		padding: 0.15rem 0.375rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		white-space: nowrap;
+		width: 100%;
+		min-width: 90px;
+		max-width: 160px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+		transition: background 0.1s, border-color 0.1s;
+	}
+	.milestone-cell-set :global(.sd-trigger) {
+		background: oklch(0.65 0.12 260 / 0.15);
+		border-color: oklch(0.65 0.12 260 / 0.3);
+		color: oklch(0.75 0.12 260);
+	}
+	.milestone-cell :global(.sd-trigger:hover) {
+		background: oklch(0.65 0.12 260 / 0.12);
+		border-color: oklch(0.65 0.12 260 / 0.4);
+		color: oklch(0.75 0.12 260);
+	}
+
+	/* Milestone pill (column) — kept for any other uses */
+	.milestone-pill {
+		display: inline-block;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		white-space: nowrap;
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		background: oklch(0.65 0.12 260 / 0.15);
+		color: oklch(0.75 0.12 260);
+		border: 1px solid oklch(0.65 0.12 260 / 0.3);
 	}
 
 	/* Type badge */

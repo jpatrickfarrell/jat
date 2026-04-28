@@ -789,6 +789,9 @@
 
 	async function sendWithAttachments() {
 		const text = inputText.trim();
+		// Snapshot the exact pre-send value so we can detect if the user typed
+		// something new during the async send operations below.
+		const preSendInputText = inputText;
 		const readyAttachments = pendingAttachments.filter(a => !a.uploading && a.path);
 		if (!text && !readyAttachments.length) return;
 
@@ -804,14 +807,21 @@
 
 		if (text) {
 			pushToHistory(text);
+			// Clear eagerly so the user can start typing the next message right away.
+			// Clearing here (before the awaits) avoids a race where the two ~100ms+
+			// network calls complete after the user has already started typing — which
+			// previously caused a late `inputText = ''` to wipe newly-typed content
+			// and leave the send button disabled.
+			if (inputText === preSendInputText) {
+				inputText = '';
+				if (sessionName && typeof localStorage !== 'undefined') {
+					localStorage.removeItem(`jat-draft-mobile-${sessionName}-main-input`);
+				}
+			}
 			await onSendInput(text, 'text');
 			// Extra Enter matches MobileSessionFullscreen behavior — needed for image paths.
 			await new Promise(r => setTimeout(r, 100));
 			await onSendInput('', 'enter'); // type='enter' → API sends Enter key (not literal text)
-			inputText = '';
-			if (sessionName && typeof localStorage !== 'undefined') {
-				localStorage.removeItem(`jat-draft-mobile-${sessionName}-main-input`);
-			}
 		}
 	}
 
@@ -1319,7 +1329,10 @@
 		const target = e.target as HTMLElement;
 
 		// Esc: two-stage — clear non-empty input first, then close
+		// Skip if PromptInput's autocomplete already handled the Escape (it sets defaultPrevented
+		// when closing the autocomplete dropdown — we don't want to also clear the input text).
 		if (e.key === 'Escape') {
+			if (e.defaultPrevented) return;
 			e.preventDefault();
 			if (inputText.trim().length > 0) {
 				inputText = '';

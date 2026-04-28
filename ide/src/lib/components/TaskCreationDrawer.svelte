@@ -344,6 +344,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		// Postgres-project fields
 		assignee: string;
 		milestoneId: string;
+		internal: boolean;
 	}
 
 	let formData = $state<FormData>({
@@ -362,6 +363,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		next_run_at: '',
 		assignee: '',
 		milestoneId: '',
+		internal: true,
 	});
 
 	// Per-project backend map ('sqlite' | 'postgres') — populated alongside projectHarnessMap
@@ -1247,6 +1249,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				next_run_at: nextRunAt,
 				due_date: formData.due_date || undefined,
 				assignee: formData.assignee.trim() || undefined,
+				internal: formData.internal,
 			};
 
 			// POST to API endpoint
@@ -2543,6 +2546,22 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							{/if}
 						</div>
 					</details>
+
+					<!-- Internal toggle -->
+					<label class="flex items-center gap-2.5 cursor-pointer select-none py-1 group {formDisabled ? 'opacity-50' : ''}">
+						<input
+							type="checkbox"
+							class="checkbox checkbox-xs"
+							bind:checked={formData.internal}
+							disabled={formDisabled || isSubmitting}
+						/>
+						<span class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Internal</span>
+						{#if formData.internal}
+							<span class="badge badge-xs bg-base-content/10 text-base-content/50 normal-case tracking-normal font-normal">dev-only, closes directly</span>
+						{:else}
+							<span class="badge badge-xs bg-success/20 text-success/80 normal-case tracking-normal font-normal">visible to clients</span>
+						{/if}
+					</label>
 
 					<!-- AI Analysis Reasoning — bottom of form -->
 					{#if suggestionReasoning}

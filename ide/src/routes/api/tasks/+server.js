@@ -364,6 +364,8 @@ export async function POST({ request }) {
 
 		const parentId = (body.parent_id && typeof body.parent_id === 'string') ? body.parent_id.trim() : null;
 
+		const internalValue = typeof body.internal === 'boolean' ? body.internal : true;
+
 		/** @type {any} */
 		const createdTask = await (pgBackendForCreate
 			? pgBackendForCreate.create({
@@ -382,6 +384,7 @@ export async function POST({ request }) {
 				approver,
 				approver_id,
 				notes,
+				internal: internalValue,
 				...(parentId ? { parent_id: parentId } : {}),
 				...schedulingFields
 			})

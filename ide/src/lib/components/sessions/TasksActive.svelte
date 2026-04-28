@@ -3111,7 +3111,7 @@
 		bottom: 0;
 		max-width: 0;
 		overflow: hidden;
-		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transition: max-width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		z-index: 3;
 	}
 
@@ -3124,72 +3124,7 @@
 		max-width: 100%;
 	}
 
-	/* Row2 wrapper — overlays tray over meta row on hover */
-	.ta-row2-wrapper {
-		display: grid;
-		grid-template-areas: "row2";
-		position: relative;
-		cursor: pointer;
-		border-radius: 3px;
-		transition: background 0.15s ease;
-		padding-right: 2.75rem; /* clear fixed TERMINAL drawer tab at viewport right edge */
-	}
-
-	.ta-row2-wrapper:hover,
-	.ta-session-card:hover .ta-row2-wrapper,
-	.ta-session-card.tray-open .ta-row2-wrapper {
-		background: oklch(0.22 0.02 250 / 0.6);
-	}
-
-	/* Affordance glyph hinting that hover reveals actions */
-	.ta-row2-wrapper::after {
-		content: '⋯';
-		position: absolute;
-		right: 2.875rem; /* aligns just inside the padding-right zone, clear of TERMINAL tab */
-		top: 50%;
-		transform: translateY(-50%);
-		font-size: 0.75rem;
-		line-height: 1;
-		color: oklch(0.65 0.04 250);
-		pointer-events: none;
-		transition: opacity 0.12s ease;
-	}
-
-	.ta-row2-wrapper:hover::after,
-	.ta-session-card:hover .ta-row2-wrapper::after,
-	.ta-session-card.tray-open .ta-row2-wrapper::after {
-		opacity: 0;
-	}
-
-	.ta-row2-wrapper > .ta-card-row2 {
-		grid-area: row2;
-		margin-top: 0;
-		padding-right: 1.125rem;
-	}
-
-	/* Tray inside wrapper: opacity overlay, triggered only by hovering the row2 zone */
-	.ta-row2-wrapper > .ta-action-tray {
-		grid-area: row2;
-		position: relative;
-		max-width: none;
-		overflow: hidden;
-		order: unset;
-		flex-shrink: unset;
-		margin-right: 0; /* override base tray margin — wrapper padding-right handles clearance */
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 0.15s ease;
-		border-radius: 3px;
-	}
-
-	/* Reveal on any card hover + focus/open states */
-	.ta-row2-wrapper:hover > .ta-action-tray,
-	.ta-session-card:hover .ta-row2-wrapper > .ta-action-tray,
-	.ta-row2-wrapper > .ta-action-tray:focus-within,
-	.ta-session-card.tray-open .ta-row2-wrapper > .ta-action-tray {
-		opacity: 1;
-		pointer-events: auto;
-	}
+	/* ta-row2-wrapper removed — tray is now position:absolute on ta-card-inner */
 
 	/* Left zone hover: terminal output crossfades IN over signal content.
 	   No height change — output is an absolute overlay, same dimensions as signal area. */
@@ -3218,19 +3153,6 @@
 		:global(.ta-card-inner:has(.ta-state-strip-agent:hover) .state-card-inline .scc-output-wrapper) {
 			opacity: 1;
 		}
-	}
-
-	/* Overlay buttons: single-line horizontal layout to fit row2 height */
-	.ta-row2-wrapper > .ta-action-tray .ta-tray-btn {
-		flex-direction: row;
-		padding: 0 7px;
-		font-size: 0.6rem;
-		height: 100%;
-		gap: 3px;
-	}
-	/* No icon in overlay context — label only */
-	.ta-row2-wrapper > .ta-action-tray .ta-tray-btn > svg {
-		display: none;
 	}
 
 	/* Hold isolation: dim inactive buttons while a hold is in progress */

@@ -19,7 +19,7 @@
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
-	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
+	import { STATUS_OPTIONS, type TaskStatus } from '$lib/config/task-statuses';
 
 	interface Task {
 		id: string;
@@ -34,6 +34,10 @@
 		due_date?: string | null;
 		created_ts?: string;
 		updated_at?: string;
+		milestone_id?: string | null;
+		milestone_name?: string | null;
+		requester?: { name?: string; email?: string } | null;
+		approver?: { name?: string; email?: string } | null;
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
 		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
 	}
@@ -72,6 +76,16 @@
 	let searchQuery = $state('');
 	let projects = $state<string[]>([]);
 
+	// Power view filter state
+	const DEFAULT_STATUSES: TaskStatus[] = ['open', 'in_progress', 'waiting', 'blocked', 'submitted', 'accepted'];
+	let selectedStatuses = $state<Set<TaskStatus>>(new Set(DEFAULT_STATUSES));
+	let selectedPriority = $state('');
+	let selectedAssignee = $state('');
+	let selectedLabel = $state('');
+	let selectedMilestone = $state('');
+	let selectedRequester = $state('');
+	let selectedApprover = $state('');
+
 	const projectDropdownGroups = $derived.by<SearchDropdownGroup[]>(() => [{
 		label: 'Projects',
 		options: [
@@ -87,6 +101,134 @@
 			...taskTypes.map(t => ({ value: t, label: `${typeIcon(t)} ${t}` }))
 		]
 	}]);
+
+	const priorityGroups: SearchDropdownGroup[] = [{
+		label: 'Priority',
+		options: [
+			{ value: '', label: 'All Priorities' },
+			{ value: '0', label: 'P0 — Critical' },
+			{ value: '1', label: 'P1 — High' },
+			{ value: '2', label: 'P2 — Medium' },
+			{ value: '3', label: 'P3 — Low' },
+			{ value: '4', label: 'P4 — Lowest' },
+		]
+	}];
+
+	const assigneeGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const names = [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort();
+		return [{
+			label: 'Assignee',
+			options: [
+				{ value: '', label: 'All Assignees' },
+				{ value: '__unassigned__', label: 'Unassigned' },
+				...names.map(n => ({ value: n, label: n }))
+			]
+		}];
+	});
+
+	const labelGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const all = [...new Set(tasks.flatMap(t => t.labels ?? []))].sort();
+		return [{
+			label: 'Label',
+			options: [
+				{ value: '', label: 'All Labels' },
+				...all.map(l => ({ value: l, label: l }))
+			]
+		}];
+	});
+
+	const milestoneGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const seen = new Map<string, string>();
+		for (const t of tasks) {
+			if (t.milestone_id) seen.set(t.milestone_id, t.milestone_name || t.milestone_id);
+		}
+		const entries = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+		return [{
+			label: 'Milestone',
+			options: [
+				{ value: '', label: 'All Milestones' },
+				{ value: '__none__', label: 'No Milestone' },
+				...entries.map(([id, name]) => ({ value: id, label: name }))
+			]
+		}];
+	});
+
+	const requesterGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const names = [...new Set(
+			tasks.map(t => t.requester?.name || t.requester?.email).filter(Boolean) as string[]
+		)].sort();
+		return [{
+			label: 'Requester',
+			options: [
+				{ value: '', label: 'All Requesters' },
+				...names.map(n => ({ value: n, label: n }))
+			]
+		}];
+	});
+
+	const approverGroups = $derived.by<SearchDropdownGroup[]>(() => {
+		const names = [...new Set(
+			tasks.map(t => t.approver?.name || t.approver?.email).filter(Boolean) as string[]
+		)].sort();
+		return [{
+			label: 'Approver',
+			options: [
+				{ value: '', label: 'All Approvers' },
+				...names.map(n => ({ value: n, label: n }))
+			]
+		}];
+	});
+
+	// Whether conditional dropdowns should render
+	const hasAssignees = $derived(tasks.some(t => t.assignee));
+	const hasLabels = $derived(tasks.some(t => t.labels?.length));
+	const hasMilestones = $derived(tasks.some(t => t.milestone_id));
+	const hasRequesters = $derived(tasks.some(t => t.requester?.name || t.requester?.email));
+	const hasApprovers = $derived(tasks.some(t => t.approver?.name || t.approver?.email));
+
+	// Status counts (across all loaded tasks, not just filtered)
+	const statusCounts = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const t of tasks) counts[t.status] = (counts[t.status] ?? 0) + 1;
+		return counts;
+	});
+
+	const hasActiveFilters = $derived(
+		selectedProject !== 'all' ||
+		selectedType !== 'all' ||
+		searchQuery.trim() !== '' ||
+		selectedPriority !== '' ||
+		selectedAssignee !== '' ||
+		selectedLabel !== '' ||
+		selectedMilestone !== '' ||
+		selectedRequester !== '' ||
+		selectedApprover !== '' ||
+		selectedStatuses.size !== DEFAULT_STATUSES.length ||
+		!DEFAULT_STATUSES.every(s => selectedStatuses.has(s))
+	);
+
+	function clearFilters() {
+		selectedProject = 'all';
+		selectedType = 'all';
+		searchQuery = '';
+		selectedPriority = '';
+		selectedAssignee = '';
+		selectedLabel = '';
+		selectedMilestone = '';
+		selectedRequester = '';
+		selectedApprover = '';
+		selectedStatuses = new Set(DEFAULT_STATUSES);
+	}
+
+	function toggleStatus(s: TaskStatus) {
+		const next = new Set(selectedStatuses);
+		if (next.has(s)) next.delete(s); else next.add(s);
+		selectedStatuses = next;
+	}
+
+	function selectAllStatuses() { selectedStatuses = new Set(STATUS_OPTIONS.map(o => o.value)); }
+	function clearAllStatuses() { selectedStatuses = new Set(); }
+	function resetStatuses() { selectedStatuses = new Set(DEFAULT_STATUSES); }
 
 	// Sort state
 	let sortField = $state<string>('priority');
@@ -259,11 +401,43 @@
 	const filteredTasks = $derived.by(() => {
 		let result = tasks;
 
+		// Status multi-select
+		if (selectedStatuses.size > 0) {
+			result = result.filter(t => selectedStatuses.has(t.status as TaskStatus));
+		}
 		if (selectedProject !== 'all') {
 			result = result.filter(t => t.project === selectedProject);
 		}
 		if (selectedType !== 'all') {
 			result = result.filter(t => t.issue_type === selectedType);
+		}
+		if (selectedPriority !== '') {
+			result = result.filter(t => String(t.priority) === selectedPriority);
+		}
+		if (selectedAssignee === '__unassigned__') {
+			result = result.filter(t => !t.assignee);
+		} else if (selectedAssignee !== '') {
+			result = result.filter(t => t.assignee === selectedAssignee);
+		}
+		if (selectedLabel !== '') {
+			result = result.filter(t => (t.labels ?? []).includes(selectedLabel));
+		}
+		if (selectedMilestone === '__none__') {
+			result = result.filter(t => !t.milestone_id);
+		} else if (selectedMilestone !== '') {
+			result = result.filter(t => t.milestone_id === selectedMilestone);
+		}
+		if (selectedRequester !== '') {
+			result = result.filter(t => {
+				const r = t.requester;
+				return r && (r.name === selectedRequester || r.email === selectedRequester);
+			});
+		}
+		if (selectedApprover !== '') {
+			result = result.filter(t => {
+				const a = t.approver;
+				return a && (a.name === selectedApprover || a.email === selectedApprover);
+			});
 		}
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase().trim();
@@ -338,7 +512,7 @@
 
 	async function fetchTasks() {
 		try {
-			const res = await fetch('/api/tasks?status=open');
+			const res = await fetch('/api/tasks');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
 			tasks = (data.tasks || []).map((t: any) => ({
@@ -980,13 +1154,13 @@
 </script>
 
 <svelte:head>
-	<title>Open Tasks | JAT</title>
+	<title>Tasks | JAT</title>
 </svelte:head>
 
 <div class="open-tasks-page">
 	<!-- Header -->
 	<div class="page-header">
-		<h1 class="page-title">Open Tasks</h1>
+		<h1 class="page-title">Tasks</h1>
 		{#if !loading}
 			<div class="stats-row">
 				<span class="stat">{stats.total} tasks</span>
@@ -1005,15 +1179,56 @@
 
 	<!-- Filters -->
 	<div class="filters-bar">
-		<div class="filter-group">
+		<!-- Row 1: Search + Status multi-select + core filters -->
+		<div class="filter-row">
 			<input
 				type="text"
 				class="search-input"
 				placeholder="Search tasks..."
 				bind:value={searchQuery}
 			/>
-		</div>
-		<div class="filter-group">
+
+			<!-- Status multi-select dropdown -->
+			<div class="status-dropdown-wrapper">
+				<details class="status-dropdown">
+					<summary class="status-dropdown-trigger">
+						<span class="status-dropdown-label">
+							{#if selectedStatuses.size === STATUS_OPTIONS.length}
+								All Statuses
+							{:else if selectedStatuses.size === 0}
+								No Statuses
+							{:else}
+								{selectedStatuses.size} of {STATUS_OPTIONS.length}
+							{/if}
+						</span>
+						<svg class="status-dropdown-caret" viewBox="0 0 20 20" fill="currentColor" width="12" height="12">
+							<path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+						</svg>
+					</summary>
+					<div class="status-dropdown-menu">
+						<div class="status-dropdown-controls">
+							<button type="button" onclick={selectAllStatuses} class="sd-ctrl-btn">All</button>
+							<button type="button" onclick={resetStatuses} class="sd-ctrl-btn">Default</button>
+							<button type="button" onclick={clearAllStatuses} class="sd-ctrl-btn">None</button>
+						</div>
+						{#each STATUS_OPTIONS as opt}
+							<label class="status-option">
+								<input
+									type="checkbox"
+									checked={selectedStatuses.has(opt.value)}
+									onchange={() => toggleStatus(opt.value)}
+								/>
+								<span class="status-option-label">{opt.label}</span>
+								{#if statusCounts[opt.value]}
+									<span class="status-option-count">{statusCounts[opt.value]}</span>
+								{/if}
+							</label>
+						{/each}
+					</div>
+				</details>
+			</div>
+
+			<!-- Project -->
 			<div class="project-dropdown-wrapper">
 				<SearchDropdown
 					value={selectedProject}
@@ -1033,20 +1248,90 @@
 					{/snippet}
 				</SearchDropdown>
 			</div>
+
+			<!-- Priority -->
+			<SearchDropdown
+				value={selectedPriority}
+				groups={priorityGroups}
+				placeholder="All Priorities"
+				onChange={(v) => { selectedPriority = v; }}
+			/>
+
+			<!-- Type -->
 			<SearchDropdown
 				value={selectedType}
 				groups={typeDropdownGroups}
 				placeholder="All Types"
 				onChange={(v) => { selectedType = v; }}
 			/>
-			<!-- Manage Columns -->
-			<ManageColumnsDropdown
-				{columnOrder}
-				{hiddenColumns}
-				getLabel={(id) => ALL_COLUMNS.find(c => c.id === id)?.label ?? id}
-				onReorder={(newOrder) => { columnOrder = newOrder; saveColumnSettings(); }}
-				onToggleVisibility={toggleColumnVisibility}
-			/>
+
+			<!-- Conditional: Assignee -->
+			{#if hasAssignees}
+				<SearchDropdown
+					value={selectedAssignee}
+					groups={assigneeGroups}
+					placeholder="All Assignees"
+					onChange={(v) => { selectedAssignee = v; }}
+				/>
+			{/if}
+
+			<!-- Conditional: Labels -->
+			{#if hasLabels}
+				<SearchDropdown
+					value={selectedLabel}
+					groups={labelGroups}
+					placeholder="All Labels"
+					onChange={(v) => { selectedLabel = v; }}
+				/>
+			{/if}
+
+			<!-- Conditional: Milestone -->
+			{#if hasMilestones}
+				<SearchDropdown
+					value={selectedMilestone}
+					groups={milestoneGroups}
+					placeholder="All Milestones"
+					onChange={(v) => { selectedMilestone = v; }}
+				/>
+			{/if}
+
+			<!-- Conditional: Requester -->
+			{#if hasRequesters}
+				<SearchDropdown
+					value={selectedRequester}
+					groups={requesterGroups}
+					placeholder="All Requesters"
+					onChange={(v) => { selectedRequester = v; }}
+				/>
+			{/if}
+
+			<!-- Conditional: Approver -->
+			{#if hasApprovers}
+				<SearchDropdown
+					value={selectedApprover}
+					groups={approverGroups}
+					placeholder="All Approvers"
+					onChange={(v) => { selectedApprover = v; }}
+				/>
+			{/if}
+
+			<!-- Clear all filters -->
+			{#if hasActiveFilters}
+				<button type="button" class="clear-filters-btn" onclick={clearFilters}>
+					Clear
+				</button>
+			{/if}
+
+			<!-- Manage Columns (right-aligned) -->
+			<div class="columns-btn-wrapper">
+				<ManageColumnsDropdown
+					{columnOrder}
+					{hiddenColumns}
+					getLabel={(id) => ALL_COLUMNS.find(c => c.id === id)?.label ?? id}
+					onReorder={(newOrder) => { columnOrder = newOrder; saveColumnSettings(); }}
+					onToggleVisibility={toggleColumnVisibility}
+				/>
+			</div>
 		</div>
 	</div>
 
@@ -1073,9 +1358,9 @@
 		</div>
 	{:else if filteredTasks.length === 0}
 		<div class="empty-state">
-			<p class="empty-title">No open tasks found</p>
+			<p class="empty-title">No tasks found</p>
 			<p class="empty-desc">
-				{#if searchQuery || selectedProject !== 'all' || selectedType !== 'all'}
+				{#if hasActiveFilters}
 					Try adjusting your filters.
 				{:else}
 					All tasks are complete! Time to celebrate.
@@ -1751,18 +2036,14 @@
 
 	/* Filters */
 	.filters-bar {
-		display: flex;
-		gap: 0.75rem;
 		margin-bottom: 0.75rem;
 		flex-shrink: 0;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
 	}
-	.filter-group {
+	.filter-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: 0.375rem;
 		align-items: center;
+		flex-wrap: wrap;
 	}
 	.search-input {
 		padding: 0.25rem 0.5rem;
@@ -1774,7 +2055,7 @@
 		color: oklch(0.90 0.02 250);
 		min-height: 2rem;
 		outline: none;
-		width: 240px;
+		width: 200px;
 		transition: border-color 0.15s;
 	}
 	.search-input:focus {
@@ -1784,7 +2065,7 @@
 		color: oklch(0.45 0.02 250);
 	}
 	.project-dropdown-wrapper {
-		width: 160px;
+		width: 150px;
 	}
 	.sd-add-project {
 		width: 100%;
@@ -1803,6 +2084,140 @@
 	.sd-add-project:hover {
 		background: oklch(0.24 0.06 145 / 0.3);
 		color: oklch(0.80 0.15 145);
+	}
+
+	/* Status multi-select dropdown */
+	.status-dropdown-wrapper {
+		position: relative;
+	}
+	.status-dropdown {
+		position: relative;
+	}
+	.status-dropdown summary {
+		list-style: none;
+	}
+	.status-dropdown summary::-webkit-details-marker {
+		display: none;
+	}
+	.status-dropdown-trigger {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.625rem;
+		min-height: 2rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.5rem;
+		color: oklch(0.70 0.03 250);
+		font-size: 0.8125rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		white-space: nowrap;
+		user-select: none;
+		transition: border-color 0.15s, color 0.15s;
+	}
+	.status-dropdown[open] .status-dropdown-trigger,
+	.status-dropdown-trigger:hover {
+		border-color: oklch(0.55 0.12 220);
+		color: oklch(0.90 0.02 250);
+	}
+	.status-dropdown-label {
+		flex: 1;
+	}
+	.status-dropdown-caret {
+		opacity: 0.5;
+		flex-shrink: 0;
+	}
+	.status-dropdown-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 40;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		min-width: 180px;
+		padding: 0.375rem 0;
+		animation: dropdown-slide 0.12s ease-out;
+	}
+	.status-dropdown-controls {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.25rem 0.625rem 0.375rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		margin-bottom: 0.25rem;
+	}
+	.sd-ctrl-btn {
+		font-size: 0.6875rem;
+		padding: 0.125rem 0.375rem;
+		background: oklch(0.22 0.02 250);
+		border: none;
+		border-radius: 0.25rem;
+		color: oklch(0.60 0.03 250);
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		transition: background 0.1s, color 0.1s;
+	}
+	.sd-ctrl-btn:hover {
+		background: oklch(0.28 0.03 250);
+		color: oklch(0.85 0.02 250);
+	}
+	.status-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.75rem;
+		cursor: pointer;
+		font-size: 0.8125rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.75 0.03 250);
+		transition: background 0.08s;
+	}
+	.status-option:hover {
+		background: oklch(0.20 0.02 250);
+		color: oklch(0.92 0.02 250);
+	}
+	.status-option input[type="checkbox"] {
+		accent-color: oklch(0.65 0.15 220);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.status-option-label {
+		flex: 1;
+	}
+	.status-option-count {
+		font-size: 0.6875rem;
+		color: oklch(0.50 0.03 250);
+		background: oklch(0.20 0.02 250);
+		padding: 0 0.3rem;
+		border-radius: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	/* Clear filters button */
+	.clear-filters-btn {
+		padding: 0.25rem 0.625rem;
+		min-height: 2rem;
+		background: transparent;
+		border: 1px solid oklch(0.35 0.05 25 / 0.5);
+		border-radius: 0.5rem;
+		color: oklch(0.65 0.10 25);
+		font-size: 0.8125rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 0.1s, color 0.1s, border-color 0.1s;
+	}
+	.clear-filters-btn:hover {
+		background: oklch(0.35 0.08 25 / 0.15);
+		border-color: oklch(0.55 0.12 25);
+		color: oklch(0.80 0.12 25);
+	}
+
+	/* Columns button pushed to end */
+	.columns-btn-wrapper {
+		margin-left: auto;
 	}
 
 

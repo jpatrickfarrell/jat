@@ -1165,18 +1165,22 @@
 	// Max characters to keep in terminal output — enough for ~800 lines at avg 125 chars/line
 	const MAX_OUTPUT_CHARS = 100_000;
 
-	// Resize the tmux pane to match the current viewport width so output fills the screen.
+	// Resize the tmux pane to match the current viewport width and height so output fills the screen.
 	// Called on drawer open so tmux doesn't render to a stale column count.
 	async function resizeTerminalToFit() {
 		if (!sessionName) return;
 		// Monospace chars at 0.8125rem (~13px) are ~7.8px wide.
 		// The pre has px-3 padding (12px each side = 24px total).
 		const cols = Math.max(40, Math.floor((window.innerWidth - 24) / 7.8));
+		// Don't send height — let tmux negotiate it naturally with whatever client is
+		// attached (alacritty etc.). Forcing any height creates dead area when it differs
+		// from the terminal's actual row count. JAT reads output via capture-pane so pane
+		// height doesn't affect what the IDE displays.
 		try {
 			await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ width: cols, height: 40 })
+				body: JSON.stringify({ width: cols })
 			});
 		} catch {
 			// Non-critical — ignore resize errors

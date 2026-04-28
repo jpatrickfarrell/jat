@@ -37,7 +37,7 @@ export async function POST({ params, request }) {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	const { width, height = 40 } = body;
+	const { width, height } = body;
 
 	if (!width || typeof width !== 'number' || width < 40 || width > 500) {
 		return json({
@@ -46,7 +46,7 @@ export async function POST({ params, request }) {
 		}, { status: 400 });
 	}
 
-	if (typeof height !== 'number' || height < 10 || height > 200) {
+	if (height !== undefined && (typeof height !== 'number' || height < 10 || height > 200)) {
 		return json({
 			error: 'Invalid height',
 			message: 'Height must be a number between 10 and 200 rows'
@@ -64,8 +64,31 @@ export async function POST({ params, request }) {
 			}, { status: 404 });
 		}
 
-		// Resize the window
-		await execAsync(`tmux resize-window -t "${sessionId}" -x ${Math.floor(width)} -y ${Math.floor(height)}`);
+		// Determine effective height:
+		// - If height explicitly provided, use it.
+		// - Otherwise, query attached terminal clients. Using their actual height
+		//   prevents dead-area (the ......... pattern) that appears when the pane
+		//   is a different size than the terminal window.
+		// - If no clients are attached (JAT-only view), default to 50 rows.
+		let effectiveHeight = height;
+		if (effectiveHeight === undefined) {
+			try {
+				const { stdout: clientOut } = await execAsync(
+					`tmux list-clients -t "${sessionId}" -F "#{client_height}" 2>/dev/null`
+				);
+				const clientHeights = clientOut.trim().split('\n').map(Number).filter(h => h > 0);
+				if (clientHeights.length > 0) {
+					// Use smallest client height minus 1 for the tmux status bar.
+					effectiveHeight = Math.max(10, Math.min(...clientHeights) - 1);
+				} else {
+					effectiveHeight = 50;
+				}
+			} catch {
+				effectiveHeight = 50;
+			}
+		}
+
+		await execAsync(`tmux resize-window -t "${sessionId}" -x ${Math.floor(width)} -y ${Math.floor(effectiveHeight)}`);
 
 		// Send SIGWINCH to the process in the pane so it can re-render at the new size
 		// This helps Claude Code redraw its current display (though scrollback history won't reflow)

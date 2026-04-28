@@ -58,11 +58,13 @@ function getExistingNotes(project) {
  * migrating content from projects.json if available.
  *
  * Routes between SQLite and Postgres based on the project's backend.
+ * Returns both the base and which backend was actually used, because
+ * Postgres may fall back to SQLite when the bases table doesn't exist yet.
  *
  * @param {string} projectPath
  * @param {string} project
  * @param {string|null} pgUrl - postgres DSN for graduated projects, or null
- * @returns {Promise<Object>|Object} The notes base
+ * @returns {Promise<{base: Object, backend: 'postgres'|'sqlite'}>}
  */
 async function ensureNotesBase(projectPath, project, pgUrl) {
 	const id = notesBaseId(project);
@@ -70,7 +72,7 @@ async function ensureNotesBase(projectPath, project, pgUrl) {
 	if (pgUrl) {
 		try {
 			let base = await pgBases.getBase(pgUrl, id);
-			if (base) return base;
+			if (base) return { base, backend: 'postgres' };
 
 			const existingNotes = getExistingNotes(project);
 			const blocks = existingNotes
@@ -87,7 +89,7 @@ async function ensureNotesBase(projectPath, project, pgUrl) {
 				token_estimate: existingNotes ? Math.ceil(existingNotes.length / 4) : 0,
 				source_config: { _projectNotes: true },
 			});
-			return base;
+			return { base, backend: 'postgres' };
 		} catch (err) {
 			// If the bases table doesn't exist in Postgres yet, fall back to SQLite
 			if (err.code !== '42P01' && !err.message?.includes('does not exist')) throw err;
@@ -96,7 +98,7 @@ async function ensureNotesBase(projectPath, project, pgUrl) {
 
 	initBasesDb(projectPath);
 	let base = getBase(projectPath, id);
-	if (base) return base;
+	if (base) return { base, backend: 'sqlite' };
 
 	const existingNotes = getExistingNotes(project);
 	const blocks = existingNotes
@@ -114,7 +116,7 @@ async function ensureNotesBase(projectPath, project, pgUrl) {
 		source_config: { _projectNotes: true },
 	});
 
-	return base;
+	return { base, backend: 'sqlite' };
 }
 
 /**
@@ -142,7 +144,7 @@ export async function GET({ url }) {
 		}
 
 		const pgUrl = getPostgresUrlForProject(project);
-		const base = await ensureNotesBase(path, project, pgUrl);
+		const { base } = await ensureNotesBase(path, project, pgUrl);
 		const content = getNotesContent(base);
 
 		return json({
@@ -170,7 +172,7 @@ export async function PUT({ request }) {
 		}
 
 		const pgUrl = getPostgresUrlForProject(project);
-		const base = await ensureNotesBase(path, project, pgUrl);
+		const { base, backend } = await ensureNotesBase(path, project, pgUrl);
 		const id = base.id;
 
 		// Update blocks with new content
@@ -182,7 +184,7 @@ export async function PUT({ request }) {
 			blocks,
 			token_estimate: content ? Math.ceil(content.length / 4) : 0,
 		};
-		if (pgUrl) {
+		if (backend === 'postgres') {
 			await pgBases.updateBase(pgUrl, id, patch);
 		} else {
 			updateBase(path, id, patch);
@@ -214,7 +216,7 @@ export async function POST({ request }) {
 		}
 
 		const pgUrl = getPostgresUrlForProject(project);
-		const base = await ensureNotesBase(path, project, pgUrl);
+		const { base, backend } = await ensureNotesBase(path, project, pgUrl);
 		const id = base.id;
 
 		const blocks = content
@@ -225,7 +227,7 @@ export async function POST({ request }) {
 			blocks,
 			token_estimate: content ? Math.ceil(content.length / 4) : 0,
 		};
-		if (pgUrl) {
+		if (backend === 'postgres') {
 			await pgBases.updateBase(pgUrl, id, patch);
 		} else {
 			updateBase(path, id, patch);

@@ -28,6 +28,7 @@
 		variant = 'default',
 		size = 'md',
 		dropup = false,
+		appendToBody = false,
 		onChange,
 	}: {
 		value: string;
@@ -43,15 +44,19 @@
 		size?: 'sm' | 'md';
 		/** Open the panel above the trigger instead of below */
 		dropup?: boolean;
+		/** Render panel with position:fixed using viewport coordinates — escapes table/overflow stacking contexts */
+		appendToBody?: boolean;
 		onChange: (value: string) => void;
 	} = $props();
 
 	let open = $state(false);
 	let searchQuery = $state('');
 	let highlightedIndex = $state(-1);
+	let panelStyle = $state('');
 	let searchInput: HTMLInputElement | undefined;
 	let optionListRef: HTMLUListElement | undefined;
 	let containerRef: HTMLDivElement | undefined;
+	let triggerRef: HTMLButtonElement | undefined;
 
 	// Find the currently selected option across all groups
 	const selectedOption = $derived.by(() => {
@@ -140,6 +145,10 @@
 
 	$effect(() => {
 		if (open) {
+			if (appendToBody && triggerRef) {
+				const rect = triggerRef.getBoundingClientRect();
+				panelStyle = `position: fixed; z-index: 9999; top: ${rect.bottom + 4}px; left: ${rect.left}px; width: ${Math.max(rect.width, 192)}px; margin-top: 0;`;
+			}
 			document.addEventListener('mousedown', handleClickOutside);
 			tick().then(() => searchInput?.focus());
 			return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -159,6 +168,7 @@
 				? `--sd-color: ${activeColor};`
 				: `border-left-color: ${activeColor}; border-left-width: 3px; color: ${activeColor};`
 			: ''}
+		bind:this={triggerRef}
 		onclick={() => { if (!disabled) open = !open; }}
 		{disabled}
 	>
@@ -175,7 +185,8 @@
 		<div
 			class="sd-panel"
 			class:sd-panel-sm={size === 'sm'}
-			class:sd-panel-dropup={dropup}
+			class:sd-panel-dropup={dropup && !appendToBody}
+			style={appendToBody ? panelStyle : undefined}
 			transition:slide={{ duration: 120 }}
 		>
 			<!-- Search input -->

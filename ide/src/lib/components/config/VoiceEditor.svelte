@@ -397,6 +397,14 @@
 			<h2 class="voice-title">Voice subsystem</h2>
 			<p class="voice-subtitle">
 				Push-to-talk transcription, intent classification, and click-to-speak across the IDE.
+				<a
+					href="https://github.com/joewinke/jat/blob/master/ide/docs/voice-commands.md"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="voice-help-link"
+				>
+					What can I say?
+				</a>
 			</p>
 		</div>
 
@@ -897,6 +905,19 @@
 		color: oklch(0.6 0.02 250);
 		font-size: 0.85rem;
 		margin: 0.25rem 0 0;
+	}
+
+	.voice-help-link {
+		color: oklch(0.78 0.12 200);
+		text-decoration: none;
+		margin-left: 0.4rem;
+		border-bottom: 1px dotted oklch(0.55 0.10 200);
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.voice-help-link:hover {
+		color: oklch(0.88 0.14 200);
+		border-bottom-color: oklch(0.78 0.12 200);
 	}
 
 	.status-pill {

@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { isValidToolCall, ALL_VOICE_TOOLS } from './+server';
+import { PARAMETERIZED_VERBS, PHASE_2_VERB_NAMES } from '$lib/voice/parameterizedVerbs';
 
 const ctx = {
 	validShortcuts: new Set(['s', 'p', 'Enter', 'Alt+N']),
@@ -40,6 +41,34 @@ describe('VOICE_TOOLS catalog', () => {
 		const update = ALL_VOICE_TOOLS.find((t) => t.name === 'update_task');
 		expect(close?.input_schema.required).toEqual(['taskId']);
 		expect(update?.input_schema.required).toEqual(['taskId']);
+	});
+});
+
+describe('PARAMETERIZED_VERBS user-facing catalog', () => {
+	it('has a display entry for every Phase 2 tool in VOICE_TOOLS', () => {
+		const phase2VerbNames = new Set(PHASE_2_VERB_NAMES);
+		const expectedPhase2 = ['close_task', 'update_task', 'attach_terminal', 'kill_session', 'epic_swarm', 'add_project'];
+		for (const name of expectedPhase2) {
+			expect(phase2VerbNames.has(name)).toBe(true);
+		}
+	});
+
+	it('every PARAMETERIZED_VERBS entry has a matching tool in VOICE_TOOLS', () => {
+		const toolNames = new Set(ALL_VOICE_TOOLS.map((t) => t.name));
+		for (const verb of PARAMETERIZED_VERBS) {
+			expect(toolNames.has(verb.toolName), `${verb.toolName} missing from VOICE_TOOLS`).toBe(true);
+		}
+	});
+
+	it('every entry has at least one example utterance', () => {
+		for (const verb of PARAMETERIZED_VERBS) {
+			expect(verb.examples.length).toBeGreaterThan(0);
+		}
+	});
+
+	it('marks only close_task and kill_session as destructive', () => {
+		const destructive = PARAMETERIZED_VERBS.filter((v) => v.destructive).map((v) => v.toolName).sort();
+		expect(destructive).toEqual(['close_task', 'kill_session']);
 	});
 });
 

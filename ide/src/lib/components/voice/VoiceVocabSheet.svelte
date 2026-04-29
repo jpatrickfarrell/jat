@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import { voiceVocabSheet } from '$lib/stores/voiceVocabSheet.svelte';
 	import { getVocabularyForRoute } from '$lib/stores/voiceVocabulary.svelte';
+	import { PARAMETERIZED_VERBS } from '$lib/voice/parameterizedVerbs';
 
 	const pathname = $derived($page.url.pathname);
 
@@ -63,6 +64,31 @@
 		</div>
 
 		<div class="vvs-body">
+			<!-- Natural-language verbs (LLM-dispatched, parameterized) -->
+			<div class="vvs-section">
+				<div class="vvs-section-label">
+					<span>Natural language</span>
+					<span class="vvs-section-hint">spoken — parameters extracted</span>
+				</div>
+				{#each PARAMETERIZED_VERBS as verb}
+					<div class="vvs-nl-row">
+						<div class="vvs-nl-head">
+							<span class="vvs-nl-label">{verb.label}</span>
+							{#if verb.destructive}
+								<span class="vvs-nl-badge vvs-nl-badge-danger" title="Confirms before running">destructive</span>
+							{/if}
+						</div>
+						<div class="vvs-nl-desc">{verb.description}</div>
+						<div class="vvs-nl-examples">
+							{#each verb.examples as ex}
+								<span class="vvs-nl-example">"{ex}"</span>
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+			<div class="vvs-divider"></div>
+
 			<!-- Route-specific section -->
 			{#if routeEntries.length > 0}
 				<div class="vvs-section">
@@ -203,6 +229,79 @@
 		text-transform: uppercase;
 		letter-spacing: 0.07em;
 		padding: 0.25rem 0.875rem 0.125rem;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+	}
+
+	.vvs-section-hint {
+		font-size: 0.625rem;
+		font-weight: 400;
+		color: oklch(0.45 0.04 250);
+		text-transform: none;
+		letter-spacing: 0;
+	}
+
+	.vvs-nl-row {
+		padding: 0.4rem 0.875rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.vvs-nl-row:hover {
+		background: oklch(0.24 0.03 250 / 0.5);
+	}
+
+	.vvs-nl-head {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.vvs-nl-label {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.86 0.05 250);
+	}
+
+	.vvs-nl-badge {
+		font-size: 0.625rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		padding: 0.05rem 0.4rem;
+		border-radius: 9999px;
+		border: 1px solid;
+		font-weight: 600;
+	}
+
+	.vvs-nl-badge-danger {
+		color: oklch(0.78 0.15 25);
+		background: oklch(0.30 0.10 25 / 0.35);
+		border-color: oklch(0.45 0.12 25 / 0.5);
+	}
+
+	.vvs-nl-desc {
+		font-size: 0.75rem;
+		color: oklch(0.65 0.04 250);
+		line-height: 1.35;
+	}
+
+	.vvs-nl-examples {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin-top: 0.05rem;
+	}
+
+	.vvs-nl-example {
+		font-size: 0.7rem;
+		color: oklch(0.78 0.08 200);
+		background: oklch(0.22 0.04 230 / 0.5);
+		border: 1px solid oklch(0.32 0.06 230 / 0.4);
+		border-radius: 0.3rem;
+		padding: 0.075rem 0.4rem;
+		font-family: ui-monospace, monospace;
 	}
 
 	.vvs-row {

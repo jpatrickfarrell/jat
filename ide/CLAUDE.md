@@ -3019,6 +3019,78 @@ await fetch('/api/config/defaults', {
 
 - jat-zzlgv: Document SwarmSettingsEditor in CLAUDE.md (this section)
 
+## Voice Dispatch
+
+The IDE supports two complementary voice paths, both initiated by holding the push-to-talk key (default `Ctrl+Space`).
+
+### Two-tier dispatch
+
+| Tier | What it handles | Where it's defined |
+|------|-----------------|--------------------|
+| **Fast match** | Fixed phrases / aliases that map 1:1 to a keyboard shortcut or registered action ID. No parameters. | `src/lib/voice/vocabularyData.ts` |
+| **LLM dispatch** | Natural-language utterances with parameter extraction (taskId, sessionName, priority, etc.). Returns one or more tool calls. | `src/routes/api/voice/dispatch/+server.ts` |
+
+The push-to-talk pipeline calls LLM dispatch first (5s timeout); on any failure it falls back to fast match.
+
+### LLM-dispatched tool catalog
+
+Defined in `VOICE_TOOLS` in `src/routes/api/voice/dispatch/+server.ts`. User-facing display metadata (label, description, example utterances, destructive flag) lives in `src/lib/voice/parameterizedVerbs.ts` — that module is the single source of truth shown in `VoiceVocabSheet.svelte`.
+
+**Phase 1 (launched):**
+
+| Tool | Required | Optional | Destructive |
+|------|----------|----------|-------------|
+| `create_task` | title | type, priority, project | No |
+| `view_task` | title | — | No |
+| `spawn_agent` | title | model | No |
+| `navigate` | route | — | No |
+| `search` | query | — | No |
+| `vocab` | shortcut | action, phrase | No |
+
+**Phase 2 (jat-ho0mz.8 — parameterized verbs):**
+
+| Tool | Required | Optional | Destructive |
+|------|----------|----------|-------------|
+| `close_task` | taskId | reason | **Yes** |
+| `update_task` | taskId + ≥1 of {status, priority, type, assignee} | — | No |
+| `attach_terminal` | — | sessionName (defaults to hovered) | No |
+| `kill_session` | — | sessionName (defaults to hovered) | **Yes** |
+| `epic_swarm` | — | epicTaskId, agentCount (1–12) | No |
+| `add_project` | — | projectName | No |
+
+Destructive verbs trigger a client-side confirmation overlay (jat-ho0mz.13).
+
+### Validation
+
+`isValidToolCall(call, ctx)` in `+server.ts` is the single validator. It enforces required fields, enum membership for status/priority/type, and integer bounds for `agentCount`. Phase 1 tools pass through unchanged for backwards compatibility.
+
+### Discoverability
+
+Users see all natural-language verbs in **Voice Vocab Sheet** (`VoiceVocabSheet.svelte`) under the "Natural language" section, including 2–4 example utterances per verb. The sheet opens via the `?` overlay or by clicking the voice command pill.
+
+### Adding a new verb
+
+1. Add the LLM-facing tool definition to `VOICE_TOOLS` in `src/routes/api/voice/dispatch/+server.ts`.
+2. Add the user-facing entry to `PARAMETERIZED_VERBS` in `src/lib/voice/parameterizedVerbs.ts` (label, description, examples, destructive, phase).
+3. Add a validation case in `isValidToolCall()` if the verb has constraints beyond the schema.
+4. Add a tool selection rule and (if compound-utterance behavior matters) an example to `buildSystemPrompt()`.
+5. Wire the client-side handler in `src/lib/stores/voiceCapture.svelte.ts` (`executePendingCalls()`).
+6. Update the catalog test in `src/routes/api/voice/dispatch/dispatch.test.ts` — it asserts every `PARAMETERIZED_VERBS` entry maps to a real tool name and vice versa.
+
+### Files
+
+| File | Role |
+|------|------|
+| `src/routes/api/voice/dispatch/+server.ts` | `VOICE_TOOLS` catalog, system prompt builder, `isValidToolCall()` validator, POST handler |
+| `src/lib/voice/parameterizedVerbs.ts` | User-facing display metadata (browser-safe pure data) |
+| `src/lib/voice/vocabularyData.ts` | Fast-match phrase + alias entries |
+| `src/lib/components/voice/VoiceVocabSheet.svelte` | Combined surface: natural-language verbs + per-route shortcuts |
+| `src/lib/stores/voiceCapture.svelte.ts` | Push-to-talk pipeline, tool-call execution |
+
+### PRD
+
+Full design spec: `ide/docs/prd-siri-for-jat.md`. Intent catalog at §5.1; JSON output schema at §5.5.
+
 ## Keyboard Shortcuts
 
 > **Full reference:** `ide/docs/keyboard-navigation.md` — every shortcut, every route.

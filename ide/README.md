@@ -16,6 +16,7 @@ The JAT IDE provides a unified web interface for viewing and managing tasks acro
 **Key Features:**
 
 - **Keyboard-First Navigation** - Every route supports `j`/`k` (vim-style) over its primary list, table, or card grid. Press `?` on any page for the shortcut overlay. Full reference: [`docs/keyboard-navigation.md`](./docs/keyboard-navigation.md)
+- **Voice Commands** - Hold `Ctrl+Space` and talk. Fast-match phrases fire keyboard shortcuts; natural-language utterances ("Spawn four agents on the triage epic", "Set the auth task to P1") are routed through an LLM that extracts parameters and chains actions. Full guide: [`docs/voice-commands.md`](./docs/voice-commands.md)
 - **Multi-Project View** - Aggregates tasks from all projects in `~/code/*` with intelligent project detection
 - **Project Filtering** - Filter by project via dropdown or URL parameter (`?project=chimaro`)
 - **Dependency Graph Visualization** - Interactive D3.js force-directed graph showing task relationships

@@ -51,9 +51,9 @@ describe('contextAssembly framework', () => {
 		expect(result.context.pinned).toEqual({ v: 2 });
 	});
 
-	it('enforces the 4 KB budget by trimming oldest tail items', async () => {
-		// Build enough fake tasks to overflow 4 KB. Each task is ~80 bytes
-		// serialized, so ~80 entries already crosses the budget.
+	it('enforces the configured budget by trimming oldest tail items', async () => {
+		// Force overflow with a tight budget so the test stays fast and avoids
+		// generating 30 KB of fake data just to exercise the trim path.
 		const bigList = Array.from({ length: 200 }, (_, i) => ({
 			id: `jat-${i.toString().padStart(4, '0')}`,
 			title: `Task number ${i} — long enough to pad bytes`,
@@ -66,11 +66,72 @@ describe('contextAssembly framework', () => {
 			trimmable: { visibleTasks: bigList }
 		}));
 
-		const result = await assembleContext({ route: '/tasks' });
-		expect(result.sizeBytes).toBeLessThanOrEqual(CONTEXT_BUDGET_BYTES);
+		const result = await assembleContext({ route: '/tasks', budgetBytes: 4 * 1024 });
+		expect(result.sizeBytes).toBeLessThanOrEqual(4 * 1024);
 		expect(result.truncated).toBe(true);
 		expect(result.dropped.visibleTasks).toBeGreaterThan(0);
 		expect(result.context.trimmable.visibleTasks.length).toBeLessThan(bigList.length);
+	});
+
+	it('default 32 KB budget accommodates rich descriptions without trim', async () => {
+		// A realistic JAT-shaped context: 19 projects with ~200-char descriptions,
+		// 30 visible tasks with 200-char descriptions, 10 sessions, 10 recent
+		// closed. Should fit comfortably under 32 KB with no trim needed.
+		registerContextBuilder(() => ({
+			pinned: {
+				route: '/tasks',
+				hoveredSession: 'jat-EarlyShore',
+				selectedTask: 'jat-abc',
+				lastMatchedAction: null
+			},
+			trimmable: {
+				projects: Array.from({ length: 19 }, (_, i) => ({
+					name: `project${i}`,
+					description: 'A '.repeat(100) + 'description.',
+					path: `/home/jw/code/project${i}`
+				})),
+				visibleTasks: Array.from({ length: 30 }, (_, i) => ({
+					id: `jat-${i}`,
+					title: `Task ${i} title`,
+					status: 'open',
+					priority: 1,
+					description: 'B '.repeat(100) + 'task body.',
+					labels: ['voice', 'phase2']
+				})),
+				activeSessions: Array.from({ length: 10 }, (_, i) => ({
+					name: `jat-Agent${i}`,
+					agentName: `Agent${i}`,
+					taskId: `jat-${i}`,
+					taskTitle: `Task ${i}`,
+					state: 'working'
+				})),
+				recentlyClosedTasks: Array.from({ length: 10 }, (_, i) => ({
+					id: `jat-closed-${i}`,
+					title: `Closed task ${i}`,
+					closedByAgent: 'TestAgent'
+				}))
+			}
+		}));
+
+		const result = await assembleContext({ route: '/tasks' });
+		expect(result.truncated).toBe(false);
+		expect(result.sizeBytes).toBeLessThanOrEqual(CONTEXT_BUDGET_BYTES);
+		expect(result.context.trimmable.projects).toHaveLength(19);
+		expect(result.context.trimmable.visibleTasks).toHaveLength(30);
+	});
+
+	it('preserves description text when budget is generous', async () => {
+		const description = 'Brand content platform — users set up companies, upload media, and generate marketing content.';
+		registerContextBuilder(() => ({
+			pinned: { route: '/tasks' },
+			trimmable: {
+				projects: [{ name: 'chimaro', description }]
+			}
+		}));
+
+		const result = await assembleContext({ route: '/tasks' });
+		expect(result.serialized).toContain('Brand content platform');
+		expect(result.truncated).toBe(false);
 	});
 
 	it('trim respects hover by preserving the front of the array (PRD §5.4)', async () => {
@@ -81,7 +142,7 @@ describe('contextAssembly framework', () => {
 			{ id: HOVERED_ID, title: 'Hovered task', priority: 1 },
 			...Array.from({ length: 200 }, (_, i) => ({
 				id: `jat-${i}`,
-				title: `Filler task with enough chars to push the byte budget over 4096 quickly`,
+				title: `Filler task with enough chars to push the byte budget over the cap quickly`,
 				priority: 2
 			}))
 		];
@@ -91,9 +152,9 @@ describe('contextAssembly framework', () => {
 			trimmable: { visibleTasks: list }
 		}));
 
-		const result = await assembleContext({ route: '/tasks' });
+		const result = await assembleContext({ route: '/tasks', budgetBytes: 4 * 1024 });
 		expect(result.truncated).toBe(true);
-		expect(result.sizeBytes).toBeLessThanOrEqual(CONTEXT_BUDGET_BYTES);
+		expect(result.sizeBytes).toBeLessThanOrEqual(4 * 1024);
 		const survivors = result.context.trimmable.visibleTasks as Array<{ id: string }>;
 		expect(survivors[0].id).toBe(HOVERED_ID);
 		expect(result.context.pinned.selectedTask).toBe(HOVERED_ID);
@@ -115,8 +176,8 @@ describe('contextAssembly framework', () => {
 			trimmable: { visibleTasks: tasks, activeSessions: sessions }
 		}));
 
-		const result = await assembleContext({ route: '/tasks' });
-		expect(result.sizeBytes).toBeLessThanOrEqual(CONTEXT_BUDGET_BYTES);
+		const result = await assembleContext({ route: '/tasks', budgetBytes: 4 * 1024 });
+		expect(result.sizeBytes).toBeLessThanOrEqual(4 * 1024);
 		// Both arrays were considered; tasks (much larger) absorbs most of the trim.
 		expect(result.dropped.visibleTasks).toBeGreaterThan(0);
 	});

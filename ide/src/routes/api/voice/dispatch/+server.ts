@@ -7,8 +7,9 @@
  * `context` is the framework-assembled context blob produced client-side via
  * `assembleContext()` (see `lib/voice/contextAssembly.ts`). It is opaque to
  * the server: we cap size as defence-in-depth and append it to the system
- * prompt as the dynamic suffix. Per PRD §5.4 the 4 KB trim budget is enforced
- * on the client; the server's 8 KB cap is a guardrail against abuse.
+ * prompt as the dynamic suffix. The client trims to its configured budget
+ * (default 32 KB — see CONTEXT_BUDGET_BYTES); the server's 128 KB cap is a
+ * guardrail against abuse, not a meaningful limit on legitimate traffic.
  *
  * Returns:
  *   { toolCalls: ToolCall[], providerLatencyMs: number, provider: string }

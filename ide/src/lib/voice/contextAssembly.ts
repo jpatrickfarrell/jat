@@ -5,8 +5,9 @@
  *
  * Apps register a single context builder via `registerContextBuilder(fn)`. At
  * dispatch time the framework calls the builder with the current route, runs
- * a 4 KB size enforcement (trimming oldest non-hovered items first), and
- * returns a stable serialized blob to inject as the dynamic prompt suffix.
+ * size enforcement (trimming oldest non-hovered items first — see
+ * CONTEXT_BUDGET_BYTES below for the budget rationale), and returns a stable
+ * serialized blob to inject as the dynamic prompt suffix.
  *
  * The framework is opaque to tenant-specific shapes. The only contract is the
  * `AssembledContext` envelope: `pinned` fields are kept verbatim; `trimmable`
@@ -17,8 +18,20 @@
  * items in `pinned`. The framework does not inspect array contents.
  */
 
-/** Soft cap on the rendered context block (PRD §5.4 acceptance). */
-export const CONTEXT_BUDGET_BYTES = 4 * 1024;
+/**
+ * Soft cap on the rendered context block.
+ *
+ * The PRD originally specced 4 KB for prefix-cache friendliness on small local
+ * models (gemma3:4b on CPU). In practice almost all dispatch traffic goes to
+ * Anthropic Haiku / Sonnet (200 K window) or OpenAI gpt-4o-mini (128 K), and
+ * even local stacks now run 32 K+ models. Spending 10–100 KB of context on a
+ * <5 KB query is the right trade-off — accuracy on ambiguous references
+ * matters more than caching the suffix. The trim algorithm still runs as a
+ * safety net for pathological store sizes.
+ *
+ * Callers can override via `assembleContext({ budgetBytes })`.
+ */
+export const CONTEXT_BUDGET_BYTES = 32 * 1024;
 
 /**
  * Stable shape returned by a registered context builder.

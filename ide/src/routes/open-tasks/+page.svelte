@@ -475,6 +475,22 @@
 		Object.keys(SORT_FIELDS).filter(f => !sortChips.some(c => c.field === f))
 	);
 
+	// Group-by
+	type GroupBy = 'none' | 'milestone' | 'assignee' | 'status';
+	const GROUP_BY_OPTIONS: Array<{ value: GroupBy; label: string }> = [
+		{ value: 'none', label: 'None' },
+		{ value: 'milestone', label: 'Milestone' },
+		{ value: 'assignee', label: 'Assignee' },
+		{ value: 'status', label: 'Status' },
+	];
+	let groupBy = $state<GroupBy>('none');
+	let collapsedGroups = $state<Set<string>>(new Set());
+	function toggleGroupCollapse(key: string) {
+		const next = new Set(collapsedGroups);
+		if (next.has(key)) next.delete(key); else next.add(key);
+		collapsedGroups = next;
+	}
+
 	let chipDragIdx = $state<number | null>(null);
 	let chipDragOverIdx = $state<number | null>(null);
 	let addSortDetailsEl = $state<HTMLDetailsElement | null>(null);
@@ -527,14 +543,17 @@
 	}
 
 	// Persist filter + sort preferences
+	let prefsLoaded = false;
 	function savePrefs() {
-		if (!browser) return;
+		if (!browser || !prefsLoaded) return;
 		try {
 			localStorage.setItem('jat-open-tasks-prefs', JSON.stringify({
 				selectedStatuses: [...selectedStatuses],
 				selectedProject, selectedType, selectedPriority, selectedAssignee,
 				selectedLabel, selectedMilestone, selectedRequester, selectedApprover,
 				sortChips,
+				groupBy,
+				collapsedGroups: [...collapsedGroups],
 			}));
 		} catch { /* quota */ }
 	}
@@ -559,6 +578,8 @@
 				if ('selectedRequester' in p) selectedRequester = p.selectedRequester;
 				if ('selectedApprover' in p) selectedApprover = p.selectedApprover;
 				if (p.sortChips?.length) sortChips = p.sortChips;
+				if (p.groupBy) groupBy = p.groupBy;
+				if (Array.isArray(p.collapsedGroups)) collapsedGroups = new Set(p.collapsedGroups);
 			}
 
 			// If still 'all' (no URL param, no saved pref), default to the app's current project
@@ -567,6 +588,7 @@
 				if (appProject) selectedProject = appProject;
 			}
 		} catch { /* parse error */ }
+		prefsLoaded = true;
 	}
 
 	// Auto-save whenever filter/sort state changes
@@ -575,6 +597,7 @@
 			selectedProject, selectedType, selectedPriority, selectedAssignee,
 			selectedLabel, selectedMilestone, selectedRequester, selectedApprover,
 			[...selectedStatuses].join(','), JSON.stringify(sortChips),
+			groupBy, [...collapsedGroups].join(','),
 		];
 		if (browser) savePrefs();
 	});
@@ -593,6 +616,8 @@
 		internal: 'all' | 'internal' | 'public';
 		search: string;
 		sortChips: SortChip[];
+		groupBy?: GroupBy;
+		collapsedGroups?: string[];
 	}
 	interface SavedView {
 		id: string;
@@ -623,6 +648,8 @@
 			internal: internalFilter,
 			search: searchQuery,
 			sortChips: sortChips.map(c => ({ ...c })),
+			groupBy,
+			collapsedGroups: [...collapsedGroups],
 		};
 	}
 
@@ -639,6 +666,8 @@
 		internalFilter = f.internal ?? 'all';
 		searchQuery = f.search ?? '';
 		if (f.sortChips?.length) sortChips = f.sortChips.map(c => ({ ...c }));
+		groupBy = f.groupBy ?? 'none';
+		collapsedGroups = new Set(Array.isArray(f.collapsedGroups) ? f.collapsedGroups : []);
 	}
 
 	function filtersEqual(a: SavedViewFilters, b: SavedViewFilters): boolean {
@@ -652,9 +681,15 @@
 		if (a.approver !== b.approver) return false;
 		if ((a.internal ?? 'all') !== (b.internal ?? 'all')) return false;
 		if ((a.search ?? '') !== (b.search ?? '')) return false;
+		if ((a.groupBy ?? 'none') !== (b.groupBy ?? 'none')) return false;
 		if (a.statuses.length !== b.statuses.length) return false;
 		const aSet = new Set(a.statuses);
 		for (const s of b.statuses) if (!aSet.has(s)) return false;
+		const aCol = a.collapsedGroups ?? [];
+		const bCol = b.collapsedGroups ?? [];
+		if (aCol.length !== bCol.length) return false;
+		const aColSet = new Set(aCol);
+		for (const k of bCol) if (!aColSet.has(k)) return false;
 		return true;
 	}
 
@@ -774,6 +809,8 @@
 			internal: internalFilter,
 			search: searchQuery,
 			sortChips: [],
+			groupBy,
+			collapsedGroups: [...collapsedGroups],
 		};
 		if (!activeViewId) return false;
 		const view = savedViews.find(v => v.id === activeViewId);
@@ -1083,6 +1120,90 @@
 		});
 
 		return result;
+	});
+
+	// Group-by: collapse filtered rows into milestone/assignee/status groups
+	type TaskGroup = { key: string; label: string; count: number; tasks: Task[] };
+	const groupedRows = $derived.by<TaskGroup[] | null>(() => {
+		if (groupBy === 'none') return null;
+		const items = filteredTasks;
+		const groups = new Map<string, TaskGroup>();
+
+		if (groupBy === 'status') {
+			for (const opt of STATUS_OPTIONS) {
+				groups.set(opt.value, { key: opt.value, label: opt.label, count: 0, tasks: [] });
+			}
+			for (const t of items) {
+				const k = t.status || 'open';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label: k, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].filter(g => g.count > 0);
+		}
+
+		if (groupBy === 'assignee') {
+			for (const t of items) {
+				const k = t.assignee || '__unassigned__';
+				const label = t.assignee || 'Unassigned';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].sort((a, b) => {
+				if (a.key === '__unassigned__') return -1;
+				if (b.key === '__unassigned__') return 1;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		// milestone — use availableMilestones (carries real sort_order from /api/milestones).
+		// Build sort_order map; tasks whose milestone_id isn't in the curated list
+		// (legacy/orphaned) get sort_order=Infinity so they fall after curated ones.
+		const orderById = new Map<string, number>();
+		const nameById = new Map<string, string>();
+		for (const m of availableMilestones) {
+			orderById.set(m.id, m.sort_order ?? 9999);
+			nameById.set(m.id, m.name);
+		}
+		for (const t of items) {
+			const k = t.milestone_id || '__none__';
+			const label = t.milestone_id
+				? (nameById.get(t.milestone_id) || t.milestone_name || t.milestone_id)
+				: 'No milestone';
+			let g = groups.get(k);
+			if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+			g.tasks.push(t); g.count++;
+		}
+		return [...groups.values()].sort((a, b) => {
+			// "No milestone" pinned to the top (where unsorted/new work lives)
+			if (a.key === '__none__') return -1;
+			if (b.key === '__none__') return 1;
+			const ao = orderById.get(a.key);
+			const bo = orderById.get(b.key);
+			// Both curated → use sort_order; one curated → curated first; neither → alpha
+			if (ao !== undefined && bo !== undefined) return ao - bo;
+			if (ao !== undefined) return -1;
+			if (bo !== undefined) return 1;
+			return a.label.localeCompare(b.label);
+		});
+	});
+
+	type RenderItem = { type: 'header'; group: TaskGroup } | { type: 'task'; task: Task };
+	const renderItems = $derived.by<RenderItem[]>(() => {
+		const collapsed = collapsedGroups;
+		const groups = groupedRows;
+		if (groups) {
+			const out: RenderItem[] = [];
+			for (const group of groups) {
+				out.push({ type: 'header', group });
+				if (!collapsed.has(group.key)) {
+					for (const t of group.tasks) out.push({ type: 'task', task: t });
+				}
+			}
+			return out;
+		}
+		return filteredTasks.map(t => ({ type: 'task' as const, task: t }));
 	});
 
 	// Unique types for filter
@@ -2551,6 +2672,28 @@
 
 		<!-- Sort chips row -->
 		<div class="sort-row">
+			<span class="sort-row-label">Group</span>
+			<select class="group-by-select" bind:value={groupBy} title="Group rows by">
+				{#each GROUP_BY_OPTIONS as opt}
+					<option value={opt.value}>{opt.label}</option>
+				{/each}
+			</select>
+			{#if groupBy !== 'none' && groupedRows && groupedRows.length > 0}
+				<button
+					type="button"
+					class="group-collapse-all-btn"
+					onclick={() => {
+						const allKeys = (groupedRows ?? []).map(g => g.key);
+						const allCollapsed = allKeys.every(k => collapsedGroups.has(k));
+						collapsedGroups = allCollapsed ? new Set() : new Set(allKeys);
+					}}
+					title="Collapse or expand all groups"
+				>
+					{(groupedRows ?? []).every(g => collapsedGroups.has(g.key)) ? 'Expand all' : 'Collapse all'}
+				</button>
+			{/if}
+
+			<span class="sort-row-divider"></span>
 			<span class="sort-row-label">Sort</span>
 
 			{#each sortChips as chip, i}
@@ -2647,7 +2790,7 @@
 				</button>
 			</div>
 		{/if}
-		<div class="table-container" bind:this={tableContainerEl}>
+		<div class="table-container" class:has-selection={selectionCount > 0} bind:this={tableContainerEl}>
 			{#if resizeGuideX !== null}
 				<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
 			{/if}
@@ -2709,10 +2852,22 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each filteredTasks as task (task.id)}
-						{@const isSaving = saving === task.id}
-						{@const isSelected = selectedTasks.has(task.id)}
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+					{#each renderItems as item (item.type === 'header' ? `__group_${item.group.key}` : item.task.id)}
+						{#if item.type === 'header'}
+							{@const isCollapsed = collapsedGroups.has(item.group.key)}
+							<tr class="group-header-row">
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+								<td class="group-header-cell" colspan={visibleColumns.length + 1} onclick={() => toggleGroupCollapse(item.group.key)}>
+									<span class="group-chevron" class:open={!isCollapsed} aria-hidden="true">▸</span>
+									<span class="group-header-label">{item.group.label}</span>
+									<span class="group-header-count">{item.group.count}</span>
+								</td>
+							</tr>
+						{:else}
+							{@const task = item.task}
+							{@const isSaving = saving === task.id}
+							{@const isSelected = selectedTasks.has(task.id)}
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 						<tr
 							class="task-row"
 							class:saving={isSaving}
@@ -3018,6 +3173,7 @@
 								{/if}
 							{/each}
 						</tr>
+						{/if}
 					{/each}
 				</tbody>
 			</table>
@@ -4066,6 +4222,90 @@
 		padding-right: 0.125rem;
 		flex-shrink: 0;
 	}
+	.sort-row-divider {
+		width: 1px;
+		height: 1.125rem;
+		background: oklch(0.25 0.02 250);
+		margin: 0 0.25rem;
+		flex-shrink: 0;
+	}
+	.group-by-select {
+		background: oklch(0.18 0.02 250);
+		color: oklch(0.85 0.04 250);
+		border: 1px solid oklch(0.28 0.03 250);
+		border-radius: 0.375rem;
+		padding: 0.2rem 1.5rem 0.2rem 0.5rem;
+		font-size: 0.75rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		appearance: none;
+		-webkit-appearance: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 0.4rem center;
+		transition: border-color 0.15s ease;
+	}
+	.group-by-select:hover { border-color: oklch(0.40 0.05 240); }
+	.group-by-select:focus { outline: none; border-color: oklch(0.55 0.18 240); }
+	.group-collapse-all-btn {
+		background: oklch(0.18 0.02 250);
+		color: oklch(0.65 0.04 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.2rem 0.5rem;
+		font-size: 0.7rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.group-collapse-all-btn:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.85 0.04 250);
+		border-color: oklch(0.35 0.04 250);
+	}
+	.group-header-row {
+		background: oklch(0.16 0.02 250);
+	}
+	.group-header-cell {
+		padding: 0.4rem 0.625rem !important;
+		border-top: 1px solid oklch(0.28 0.03 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		cursor: pointer;
+		user-select: none;
+		font-size: 0.8125rem;
+		color: oklch(0.85 0.04 250);
+		font-weight: 600;
+		position: sticky;
+		left: 0;
+	}
+	.group-header-cell:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.group-chevron {
+		display: inline-block;
+		margin-right: 0.5rem;
+		font-size: 0.7rem;
+		color: oklch(0.55 0.05 250);
+		transition: transform 0.15s ease;
+		width: 0.75rem;
+	}
+	.group-chevron.open {
+		transform: rotate(90deg);
+	}
+	.group-header-label {
+		font-weight: 600;
+	}
+	.group-header-count {
+		display: inline-block;
+		margin-left: 0.5rem;
+		background: oklch(0.24 0.03 250);
+		color: oklch(0.65 0.05 250);
+		padding: 0.05rem 0.4rem;
+		border-radius: 0.625rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+	}
 	.sort-chip {
 		display: flex;
 		align-items: center;
@@ -4206,6 +4446,9 @@
 		border: 1px solid oklch(0.24 0.02 250);
 		border-radius: 0.5rem;
 		position: relative;
+	}
+	.table-container.has-selection {
+		padding-bottom: 5rem;
 	}
 
 	/* Resize guide line */

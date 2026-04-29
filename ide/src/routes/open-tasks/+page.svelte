@@ -2098,7 +2098,7 @@
 			});
 			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
 			clearSelection();
-			fetchTasks();
+			tasks = tasks.filter(t => !ids.includes(t.id));
 			showUndoToast(`Hidden ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
 		} catch (err) {
 			bulkActionError = err instanceof Error ? err.message : String(err);

@@ -96,6 +96,8 @@ export async function startCapture(): Promise<void> {
 		errorMessage = 'Voice initializing — try again in a moment';
 		voiceState = 'no-match';
 		scheduleReset(2000);
+		// Kick off a background reprobe so the next press succeeds
+		void voice.reprobe();
 		return;
 	}
 
@@ -523,7 +525,7 @@ async function llmDispatch(transcript: string, route: string): Promise<LlmDispat
 	if (!browser) return null;
 	try {
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 12000);
 		const res = await fetch('/api/voice/dispatch', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },

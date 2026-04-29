@@ -221,6 +221,17 @@ export async function PUT({ params, request }) {
 			updateFields.approver = updates.approver;
 		}
 
+		// Labels — accept array or comma-separated string. Replaces all existing labels.
+		if (updates.labels !== undefined) {
+			if (Array.isArray(updates.labels)) {
+				updateFields.labels = updates.labels.map((/** @type {string} */ l) => l.trim()).filter(Boolean);
+			} else if (typeof updates.labels === 'string') {
+				updateFields.labels = updates.labels.trim()
+					? updates.labels.split(',').map((/** @type {string} */ l) => l.trim()).filter(Boolean)
+					: [];
+			}
+		}
+
 		// Tasks with a cron schedule are automatically chores
 		if (updateFields.schedule_cron) {
 			updateFields.issue_type = 'chore';

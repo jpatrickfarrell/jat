@@ -26,7 +26,7 @@
 		class="push-to-talk-overlay"
 		role="status"
 		aria-live="polite"
-		transition:fly={{ y: -80, duration: 220, easing: cubicOut }}
+		in:fly={{ y: -80, duration: 220, easing: cubicOut }}
 	>
 		<div class="ptl-inner">
 			{#if voiceState === 'listening'}
@@ -44,6 +44,15 @@
 			{:else if voiceState === 'transcribing'}
 				<span class="ptl-spinner" aria-hidden="true"></span>
 				<span class="ptl-label transcribing">Transcribing…</span>
+
+			{:else if voiceState === 'preview'}
+				<span class="ptl-spinner ptl-spinner-preview" aria-hidden="true"></span>
+				<span class="ptl-label transcribing">"{transcript}"</span>
+				<span class="ptl-hint">Esc to cancel</span>
+
+			{:else if voiceState === 'executing'}
+				<span class="ptl-spinner" aria-hidden="true"></span>
+				<span class="ptl-label transcribing">Executing…</span>
 
 			{:else if voiceState === 'matched'}
 				<span class="ptl-icon matched" aria-hidden="true">✓</span>
@@ -120,6 +129,10 @@
 	}
 
 	/* Spinner */
+	.ptl-spinner-preview {
+		border-top-color: oklch(0.78 0.16 85);
+	}
+
 	.ptl-spinner {
 		display: inline-block;
 		width: 14px;

@@ -2394,6 +2394,23 @@
 								onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
 							/>
 						</label>
+						<!-- Internal toggle -->
+						<label
+							class="flex items-center justify-between gap-3 py-3 cursor-pointer"
+							title="Internal tasks are dev-only and hidden from clients."
+						>
+							<div class="flex flex-col gap-0.5">
+								<span class="text-sm font-medium">Internal</span>
+								<span class="text-xs text-base-content/50">Dev-only — hidden from clients</span>
+							</div>
+							<input
+								type="checkbox"
+								class="toggle toggle-warning flex-shrink-0"
+								checked={task?.internal !== false}
+								onchange={(e) => patchTask({ internal: (e.target as HTMLInputElement).checked })}
+							/>
+						</label>
+
 						<!-- Link to Epic -->
 						{#if task?.issue_type !== 'epic'}
 							<div class="flex items-center justify-between gap-3 py-3">

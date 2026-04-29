@@ -51,6 +51,7 @@
 		created_at?: string;
 		updated_at?: string;
 		blocked_by?: { id: string; title?: string; status?: string; issue_type?: string }[];
+		internal?: boolean | null;
 	}
 
 	type FocusZone = "list" | "detail" | "compose";
@@ -1758,6 +1759,21 @@
 		} catch { /* silent */ }
 	}
 
+	async function ctxToggleInternal(task: Task) {
+		closeContextMenu();
+		const newInternal = !(task.internal ?? true);
+		try {
+			await fetch(`/api/tasks/${task.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ internal: newInternal }),
+			});
+			fetchTasks();
+		} catch (err) {
+			console.error('Failed to update internal flag:', err);
+		}
+	}
+
 	async function ctxDuplicateTask(task: Task) {
 		closeContextMenu();
 		try {
@@ -2688,6 +2704,17 @@
 	</div>
 
 	<div class="ctx-divider"></div>
+
+	<!-- Internal toggle -->
+	<button class="ctx-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => ctxToggleInternal(ctxTask!)}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+			<circle cx="9" cy="7" r="4"/>
+			<path d="M23 21v-2a4 4 0 00-3-3.87"/>
+			<path d="M16 3.13a4 4 0 010 7.75"/>
+		</svg>
+		<span>{(ctxTask?.internal ?? true) ? 'Make Public' : 'Mark Internal'}</span>
+	</button>
 
 	<!-- Duplicate -->
 	<button class="ctx-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxPrioritySubmenuOpen = false; }} onclick={() => { const t = ctxTask!; ctxTask = null; ctxDuplicateTask(t); }}>

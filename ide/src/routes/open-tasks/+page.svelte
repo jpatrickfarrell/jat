@@ -579,6 +579,205 @@
 		if (browser) savePrefs();
 	});
 
+	// ─── Saved Views ──────────────────────────────────────────────────────
+	interface SavedViewFilters {
+		statuses: TaskStatus[];
+		project: string;
+		type: string;
+		priority: string;
+		assignee: string;
+		label: string;
+		milestone: string;
+		requester: string;
+		approver: string;
+		search: string;
+		sortChips: SortChip[];
+	}
+	interface SavedView {
+		id: string;
+		name: string;
+		filters: SavedViewFilters;
+	}
+	const SAVED_VIEWS_KEY = 'jat-open-tasks-saved-views';
+	let savedViews = $state<SavedView[]>([]);
+	let activeViewId = $state<string | null>(null);
+	let showSaveDialog = $state(false);
+	let savingViewName = $state('');
+	let saveDialogInputEl = $state<HTMLInputElement | null>(null);
+	let renamingViewId = $state<string | null>(null);
+	let renamingViewName = $state('');
+	let renameInputEl = $state<HTMLInputElement | null>(null);
+
+	function captureCurrentFilters(): SavedViewFilters {
+		return {
+			statuses: [...selectedStatuses],
+			project: selectedProject,
+			type: selectedType,
+			priority: selectedPriority,
+			assignee: selectedAssignee,
+			label: selectedLabel,
+			milestone: selectedMilestone,
+			requester: selectedRequester,
+			approver: selectedApprover,
+			search: searchQuery,
+			sortChips: sortChips.map(c => ({ ...c })),
+		};
+	}
+
+	function applyViewFilters(f: SavedViewFilters) {
+		selectedStatuses = new Set(f.statuses);
+		selectedProject = f.project;
+		selectedType = f.type;
+		selectedPriority = f.priority;
+		selectedAssignee = f.assignee;
+		selectedLabel = f.label;
+		selectedMilestone = f.milestone;
+		selectedRequester = f.requester;
+		selectedApprover = f.approver;
+		searchQuery = f.search ?? '';
+		if (f.sortChips?.length) sortChips = f.sortChips.map(c => ({ ...c }));
+	}
+
+	function filtersEqual(a: SavedViewFilters, b: SavedViewFilters): boolean {
+		if (a.project !== b.project) return false;
+		if (a.type !== b.type) return false;
+		if (a.priority !== b.priority) return false;
+		if (a.assignee !== b.assignee) return false;
+		if (a.label !== b.label) return false;
+		if (a.milestone !== b.milestone) return false;
+		if (a.requester !== b.requester) return false;
+		if (a.approver !== b.approver) return false;
+		if ((a.search ?? '') !== (b.search ?? '')) return false;
+		if (a.statuses.length !== b.statuses.length) return false;
+		const aSet = new Set(a.statuses);
+		for (const s of b.statuses) if (!aSet.has(s)) return false;
+		return true;
+	}
+
+	function loadSavedViews() {
+		if (!browser) return;
+		try {
+			const raw = localStorage.getItem(SAVED_VIEWS_KEY);
+			if (raw) {
+				const parsed = JSON.parse(raw);
+				if (Array.isArray(parsed)) savedViews = parsed;
+			}
+			const activeRaw = localStorage.getItem(SAVED_VIEWS_KEY + ':active');
+			if (activeRaw) {
+				const view = savedViews.find(v => v.id === activeRaw);
+				if (view) {
+					applyViewFilters(view.filters);
+					activeViewId = view.id;
+				}
+			}
+		} catch { /* parse error */ }
+	}
+
+	function persistSavedViews() {
+		if (!browser) return;
+		try {
+			localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(savedViews));
+			if (activeViewId) localStorage.setItem(SAVED_VIEWS_KEY + ':active', activeViewId);
+			else localStorage.removeItem(SAVED_VIEWS_KEY + ':active');
+		} catch { /* quota */ }
+	}
+
+	function applySavedView(view: SavedView) {
+		applyViewFilters(view.filters);
+		activeViewId = view.id;
+		persistSavedViews();
+	}
+
+	function applyAllOpenView() {
+		clearFilters();
+		activeViewId = null;
+		persistSavedViews();
+	}
+
+	function openSaveDialog() {
+		showSaveDialog = true;
+		savingViewName = '';
+		tick().then(() => saveDialogInputEl?.focus());
+	}
+
+	function closeSaveDialog() {
+		showSaveDialog = false;
+		savingViewName = '';
+	}
+
+	function confirmSaveView() {
+		const name = savingViewName.trim();
+		if (!name) return;
+		const view: SavedView = {
+			id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+			name,
+			filters: captureCurrentFilters(),
+		};
+		savedViews = [...savedViews, view];
+		activeViewId = view.id;
+		persistSavedViews();
+		closeSaveDialog();
+	}
+
+	function deleteView(id: string) {
+		savedViews = savedViews.filter(v => v.id !== id);
+		if (activeViewId === id) activeViewId = null;
+		persistSavedViews();
+	}
+
+	function startRenameView(view: SavedView) {
+		renamingViewId = view.id;
+		renamingViewName = view.name;
+		tick().then(() => {
+			renameInputEl?.focus();
+			renameInputEl?.select();
+		});
+	}
+
+	function commitRenameView() {
+		if (!renamingViewId) return;
+		const name = renamingViewName.trim();
+		if (name) {
+			savedViews = savedViews.map(v => v.id === renamingViewId ? { ...v, name } : v);
+			persistSavedViews();
+		}
+		renamingViewId = null;
+		renamingViewName = '';
+	}
+
+	function cancelRenameView() {
+		renamingViewId = null;
+		renamingViewName = '';
+	}
+
+	function updateActiveView() {
+		if (!activeViewId) return;
+		savedViews = savedViews.map(v => v.id === activeViewId ? { ...v, filters: captureCurrentFilters() } : v);
+		persistSavedViews();
+	}
+
+	const activeViewMatchesCurrent = $derived.by(() => {
+		const snap: SavedViewFilters = {
+			statuses: [...selectedStatuses],
+			project: selectedProject,
+			type: selectedType,
+			priority: selectedPriority,
+			assignee: selectedAssignee,
+			label: selectedLabel,
+			milestone: selectedMilestone,
+			requester: selectedRequester,
+			approver: selectedApprover,
+			search: searchQuery,
+			sortChips: [],
+		};
+		if (!activeViewId) return false;
+		const view = savedViews.find(v => v.id === activeViewId);
+		if (!view) return false;
+		return filtersEqual(view.filters, snap);
+	});
+
+	const allOpenViewActive = $derived(!activeViewId && !hasActiveFilters);
+
 	// Inline editing state
 	let editingCell = $state<{ taskId: string; field: string } | null>(null);
 	let saving = $state<string | null>(null);
@@ -1092,6 +1291,10 @@
 		} catch {
 			return '';
 		}
+	}
+
+	function parseLabelsInput(value: string): string[] {
+		return value.split(',').map(s => s.trim()).filter(Boolean);
 	}
 
 	function priorityLabel(p: number): string {
@@ -1960,6 +2163,7 @@
 		if (browser) {
 			loadColumnSettings();
 			loadPrefs();
+			loadSavedViews();
 			fetchTasks();
 			pollInterval = setInterval(fetchTasks, 10000);
 			unregisterVoice = addVoiceActionHandlers({
@@ -2002,6 +2206,18 @@
 	<title>Tasks | JAT</title>
 </svelte:head>
 
+<datalist id="opentasks-assignee-suggestions">
+	{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort() as name}
+		<option value={name}></option>
+	{/each}
+</datalist>
+
+<datalist id="opentasks-label-suggestions">
+	{#each [...new Set(tasks.flatMap(t => t.labels || []))].sort() as label}
+		<option value={label}></option>
+	{/each}
+</datalist>
+
 <div class="open-tasks-page">
 	<!-- Header -->
 	<div class="page-header">
@@ -2019,6 +2235,110 @@
 					<span class="stat">{stats.withDueDate} with due dates</span>
 				{/if}
 			</div>
+		{/if}
+	</div>
+
+	<!-- Saved Views — quick-switch tabs for named filter combos -->
+	<div class="saved-views-bar" role="tablist" aria-label="Saved views">
+		<button
+			type="button"
+			class="view-tab"
+			class:view-tab-active={allOpenViewActive}
+			role="tab"
+			aria-selected={allOpenViewActive}
+			onclick={applyAllOpenView}
+			title="Reset to default open-tasks view"
+		>
+			All Open
+		</button>
+
+		{#each savedViews as view (view.id)}
+			{@const isActive = activeViewId === view.id}
+			{@const isModified = isActive && !activeViewMatchesCurrent}
+			<div class="view-tab-wrapper" class:view-tab-wrapper-active={isActive}>
+				{#if renamingViewId === view.id}
+					<input
+						bind:this={renameInputEl}
+						bind:value={renamingViewName}
+						class="view-tab-rename-input"
+						onkeydown={(e) => {
+							if (e.key === 'Enter') { e.preventDefault(); commitRenameView(); }
+							else if (e.key === 'Escape') { e.preventDefault(); cancelRenameView(); }
+						}}
+						onblur={commitRenameView}
+						maxlength={40}
+					/>
+				{:else}
+					<button
+						type="button"
+						class="view-tab"
+						class:view-tab-active={isActive}
+						role="tab"
+						aria-selected={isActive}
+						ondblclick={() => startRenameView(view)}
+						onclick={() => applySavedView(view)}
+						title="{view.name}{isModified ? ' (modified — double-click to rename)' : ' (double-click to rename)'}"
+					>
+						<span class="view-tab-name">{view.name}</span>
+						{#if isModified}
+							<span class="view-tab-modified-dot" aria-label="Modified" title="Filters differ from saved view">●</span>
+						{/if}
+					</button>
+					{#if isActive && isModified}
+						<button
+							type="button"
+							class="view-tab-action"
+							onclick={updateActiveView}
+							title="Update saved view with current filters"
+							aria-label="Update view"
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
+						</button>
+					{/if}
+					<button
+						type="button"
+						class="view-tab-action view-tab-delete"
+						onclick={(e) => { e.stopPropagation(); deleteView(view.id); }}
+						title="Delete this saved view"
+						aria-label="Delete view"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+					</button>
+				{/if}
+			</div>
+		{/each}
+
+		{#if showSaveDialog}
+			<div class="view-tab-save-dialog">
+				<input
+					bind:this={saveDialogInputEl}
+					bind:value={savingViewName}
+					class="view-tab-rename-input"
+					placeholder="View name…"
+					maxlength={40}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') { e.preventDefault(); confirmSaveView(); }
+						else if (e.key === 'Escape') { e.preventDefault(); closeSaveDialog(); }
+					}}
+				/>
+				<button type="button" class="view-tab-action" onclick={confirmSaveView} disabled={!savingViewName.trim()} title="Save view">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
+				</button>
+				<button type="button" class="view-tab-action view-tab-delete" onclick={closeSaveDialog} title="Cancel">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			</div>
+		{:else}
+			<button
+				type="button"
+				class="view-tab view-tab-add"
+				onclick={openSaveDialog}
+				disabled={!hasActiveFilters && savedViews.length === 0}
+				title={hasActiveFilters ? 'Save current filters as a new view' : 'Adjust some filters first, then save them as a view'}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+				Save current
+			</button>
 		{/if}
 	</div>
 
@@ -2373,6 +2693,7 @@
 					{#each filteredTasks as task (task.id)}
 						{@const isSaving = saving === task.id}
 						{@const isSelected = selectedTasks.has(task.id)}
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 						<tr
 							class="task-row"
 							class:saving={isSaving}
@@ -2380,6 +2701,11 @@
 							data-nav-id={task.id}
 							tabindex="-1"
 							oncontextmenu={(e) => handleContextMenu(task, e)}
+							onclick={(e) => {
+								const t = e.target as HTMLElement;
+								if (t.closest('.priority-badge, .status-pill, .type-badge, .assignee-editable, .label-editable, .title-editable, .due-date-cell, .milestone-cell, .td-checkbox, .inline-edit-input, .inline-edit-select, button, input, select, textarea')) return;
+								openTaskDrawer(task.id);
+							}}
 						>
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 							<td class="td-checkbox" onclick={(e) => { e.stopPropagation(); toggleTask(task.id, e); }}>
@@ -2420,8 +2746,8 @@
 											<span
 												class="priority-badge"
 												style="background: {priorityColor(task.priority)}20; color: {priorityColor(task.priority)}; border: 1px solid {priorityColor(task.priority)}40;"
-												ondblclick={() => { editingCell = { taskId: task.id, field: 'priority' }; }}
-												title="Double-click to edit"
+												onclick={() => { editingCell = { taskId: task.id, field: 'priority' }; }}
+												title="Click to edit"
 											>
 												{priorityLabel(task.priority)}
 											</span>
@@ -2429,9 +2755,30 @@
 									</td>
 								{:else if col.id === 'type'}
 									<td style="text-align: center;">
-										<span class="type-badge" title={task.issue_type}>
-											{typeIcon(task.issue_type)}
-										</span>
+										{#if editingCell?.taskId === task.id && editingCell?.field === 'issue_type'}
+											<!-- svelte-ignore a11y_autofocus -->
+											<select
+												class="inline-edit-select"
+												value={task.issue_type}
+												onchange={(e) => saveField(task.id, 'issue_type', e.currentTarget.value)}
+												onblur={() => { editingCell = null; }}
+												onkeydown={(e) => { if (e.key === 'Escape') editingCell = null; }}
+												autofocus
+											>
+												{#each ['bug', 'feature', 'task', 'epic', 'chore'] as t}
+													<option value={t}>{typeIcon(t)} {t}</option>
+												{/each}
+											</select>
+										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="type-badge"
+												title="Click to edit ({task.issue_type})"
+												onclick={() => { editingCell = { taskId: task.id, field: 'issue_type' }; }}
+											>
+												{typeIcon(task.issue_type)}
+											</span>
+										{/if}
 									</td>
 								{:else if col.id === 'id'}
 									<td>
@@ -2445,16 +2792,36 @@
 									</td>
 								{:else if col.id === 'title'}
 									<td>
-										<button
-											class="task-title-btn"
-											onclick={() => openTaskDrawer(task.id)}
-											title={task.description || task.title}
-										>
-											{#if task.internal === false}
-												<svg class="visibility-badge public" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" title="Public — visible to clients"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-											{/if}
-											<span class="task-title-text">{task.title}</span>
-										</button>
+										{#if editingCell?.taskId === task.id && editingCell?.field === 'title'}
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												type="text"
+												class="inline-edit-input"
+												value={task.title}
+												onkeydown={(e) => {
+													if (e.key === 'Enter') saveField(task.id, 'title', e.currentTarget.value);
+													else if (e.key === 'Escape') editingCell = null;
+												}}
+												onblur={(e) => {
+													if (editingCell?.taskId === task.id && editingCell?.field === 'title') {
+														saveField(task.id, 'title', e.currentTarget.value);
+													}
+												}}
+												autofocus
+											/>
+										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="title-editable"
+												title={task.description || 'Click to edit'}
+												onclick={() => { editingCell = { taskId: task.id, field: 'title' }; }}
+											>
+												{#if task.internal === false}
+													<svg class="visibility-badge public" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+												{/if}
+												<span class="task-title-text">{task.title}</span>
+											</span>
+										{/if}
 									</td>
 								{:else if col.id === 'due_date'}
 									<td style="padding: 0;">
@@ -2472,23 +2839,73 @@
 									</td>
 								{:else if col.id === 'labels'}
 									<td>
-										{#if task.labels && task.labels.length > 0}
-											<div class="labels-list">
-												{#each task.labels.slice(0, 3) as label}
-													<span class="label-badge">{label}</span>
-												{/each}
-												{#if task.labels.length > 3}
-													<span class="label-more">+{task.labels.length - 3}</span>
+										{#if editingCell?.taskId === task.id && editingCell?.field === 'labels'}
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												type="text"
+												class="inline-edit-input"
+												value={(task.labels || []).join(', ')}
+												list="opentasks-label-suggestions"
+												placeholder="comma, separated"
+												onkeydown={(e) => {
+													if (e.key === 'Enter') saveField(task.id, 'labels', parseLabelsInput(e.currentTarget.value));
+													else if (e.key === 'Escape') editingCell = null;
+												}}
+												onblur={(e) => {
+													if (editingCell?.taskId === task.id && editingCell?.field === 'labels') {
+														saveField(task.id, 'labels', parseLabelsInput(e.currentTarget.value));
+													}
+												}}
+												autofocus
+											/>
+										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="labels-list label-editable"
+												title="Click to edit labels"
+												onclick={() => { editingCell = { taskId: task.id, field: 'labels' }; }}
+											>
+												{#if task.labels && task.labels.length > 0}
+													{#each task.labels.slice(0, 3) as label}
+														<span class="label-badge">{label}</span>
+													{/each}
+													{#if task.labels.length > 3}
+														<span class="label-more">+{task.labels.length - 3}</span>
+													{/if}
+												{:else}
+													<span class="no-labels">—</span>
 												{/if}
-											</div>
+											</span>
 										{/if}
 									</td>
 								{:else if col.id === 'status'}
 									{@const statusOpt = STATUS_OPTIONS.find(o => o.value === task.status)}
 									<td>
-										<span class="status-pill" style="background: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}20; color: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}; border: 1px solid {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}40;">
-											{statusOpt?.label ?? task.status}
-										</span>
+										{#if editingCell?.taskId === task.id && editingCell?.field === 'status'}
+											<!-- svelte-ignore a11y_autofocus -->
+											<select
+												class="inline-edit-select"
+												value={task.status}
+												onchange={(e) => saveField(task.id, 'status', e.currentTarget.value)}
+												onblur={() => { editingCell = null; }}
+												onkeydown={(e) => { if (e.key === 'Escape') editingCell = null; }}
+												autofocus
+											>
+												{#each STATUS_OPTIONS as opt}
+													<option value={opt.value}>{opt.label}</option>
+												{/each}
+											</select>
+										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="status-pill"
+												style="background: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}20; color: {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}; border: 1px solid {statusOpt?.color ?? 'oklch(0.55 0.03 250)'}40;"
+												title="Click to edit"
+												onclick={() => { editingCell = { taskId: task.id, field: 'status' }; }}
+											>
+												{statusOpt?.label ?? task.status}
+											</span>
+										{/if}
 									</td>
 								{:else if col.id === 'milestone'}
 									<td class="milestone-cell" class:milestone-cell-set={!!task.milestone_id}>
@@ -2502,7 +2919,35 @@
 									</td>
 								{:else if col.id === 'assignee'}
 									<td>
-										<span class="assignee-text">{task.assignee || ''}</span>
+										{#if editingCell?.taskId === task.id && editingCell?.field === 'assignee'}
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												type="text"
+												class="inline-edit-input"
+												value={task.assignee || ''}
+												list="opentasks-assignee-suggestions"
+												placeholder="Unassigned"
+												onkeydown={(e) => {
+													if (e.key === 'Enter') saveField(task.id, 'assignee', e.currentTarget.value);
+													else if (e.key === 'Escape') editingCell = null;
+												}}
+												onblur={(e) => {
+													if (editingCell?.taskId === task.id && editingCell?.field === 'assignee') {
+														saveField(task.id, 'assignee', e.currentTarget.value);
+													}
+												}}
+												autofocus
+											/>
+										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="assignee-text assignee-editable"
+												title="Click to edit"
+												onclick={() => { editingCell = { taskId: task.id, field: 'assignee' }; }}
+											>
+												{task.assignee || '—'}
+											</span>
+										{/if}
 									</td>
 								{:else if col.id === 'created'}
 									{@const createdInitial = getPersonInitial(task.creator)}
@@ -3211,6 +3656,142 @@
 		color: oklch(0.70 0.20 25);
 	}
 
+	/* Saved Views — quick-switch tabs */
+	.saved-views-bar {
+		display: flex;
+		gap: 0.25rem;
+		align-items: center;
+		flex-wrap: wrap;
+		margin-bottom: 0.625rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid oklch(0.30 0.02 250 / 0.5);
+		flex-shrink: 0;
+	}
+	.view-tab-wrapper {
+		display: inline-flex;
+		align-items: stretch;
+		gap: 0;
+		border-radius: 0.375rem;
+		overflow: hidden;
+	}
+	.view-tab-wrapper-active {
+		box-shadow: 0 0 0 1px oklch(0.70 0.18 240 / 0.4);
+	}
+	.view-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.3125rem 0.625rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+		white-space: nowrap;
+		line-height: 1.2;
+	}
+	.view-tab:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.85 0.02 250);
+		border-color: oklch(0.35 0.02 250);
+	}
+	.view-tab:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.view-tab.view-tab-active {
+		background: oklch(0.30 0.10 240 / 0.4);
+		color: oklch(0.92 0.05 240);
+		border-color: oklch(0.55 0.15 240 / 0.6);
+	}
+	.view-tab-wrapper .view-tab {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+		border-right: none;
+	}
+	.view-tab-name {
+		max-width: 14rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.view-tab-modified-dot {
+		color: oklch(0.75 0.18 85);
+		font-size: 0.75rem;
+		line-height: 1;
+	}
+	.view-tab-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.375rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-left: none;
+		color: oklch(0.65 0.02 250);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+	}
+	.view-tab-action:last-child {
+		border-top-right-radius: 0.375rem;
+		border-bottom-right-radius: 0.375rem;
+	}
+	.view-tab-action:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.90 0.02 250);
+	}
+	.view-tab-action:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+	.view-tab-wrapper-active .view-tab-action {
+		background: oklch(0.30 0.10 240 / 0.4);
+		border-color: oklch(0.55 0.15 240 / 0.6);
+		color: oklch(0.85 0.05 240);
+	}
+	.view-tab-wrapper-active .view-tab-action:hover {
+		background: oklch(0.36 0.12 240 / 0.55);
+		color: oklch(0.96 0.04 240);
+	}
+	.view-tab-delete:hover:not(:disabled) {
+		background: oklch(0.32 0.12 25 / 0.5) !important;
+		color: oklch(0.85 0.18 25) !important;
+		border-color: oklch(0.55 0.18 25 / 0.6) !important;
+	}
+	.view-tab-add {
+		color: oklch(0.65 0.02 250);
+		border-style: dashed;
+	}
+	.view-tab-add:hover:not(:disabled) {
+		color: oklch(0.85 0.10 145);
+		border-color: oklch(0.55 0.15 145 / 0.6);
+	}
+	.view-tab-save-dialog {
+		display: inline-flex;
+		align-items: stretch;
+		gap: 0;
+		border-radius: 0.375rem;
+		box-shadow: 0 0 0 1px oklch(0.55 0.15 145 / 0.5);
+	}
+	.view-tab-rename-input {
+		padding: 0.3125rem 0.625rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: oklch(0.92 0.02 250);
+		background: oklch(0.16 0.02 250);
+		border: 1px solid oklch(0.45 0.10 240);
+		border-radius: 0.375rem 0 0 0.375rem;
+		outline: none;
+		min-width: 8rem;
+		max-width: 14rem;
+		line-height: 1.2;
+	}
+	.view-tab-rename-input:focus {
+		border-color: oklch(0.65 0.18 240);
+	}
+
 	/* Filters */
 	.filters-bar {
 		margin-bottom: 0.75rem;
@@ -3727,6 +4308,7 @@
 		font-size: 0.6875rem;
 		font-weight: 500;
 		white-space: nowrap;
+		cursor: pointer;
 	}
 
 	/* Person + date cell (Created / Updated columns) */
@@ -3804,7 +4386,7 @@
 	/* Type badge */
 	.type-badge {
 		font-size: 0.875rem;
-		cursor: default;
+		cursor: pointer;
 	}
 
 	/* Task ID */
@@ -4101,6 +4683,64 @@
 	}
 	.inline-edit-select:focus {
 		border-color: oklch(0.60 0.15 220);
+	}
+	.inline-edit-input {
+		width: 100%;
+		min-width: 6rem;
+		padding: 0.125rem 0.375rem;
+		font-size: 0.75rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.50 0.10 200);
+		border-radius: 0.1875rem;
+		color: oklch(0.90 0.02 250);
+		outline: none;
+		font-family: inherit;
+	}
+	.inline-edit-input:focus {
+		border-color: oklch(0.60 0.15 220);
+	}
+	.assignee-editable {
+		display: inline-block;
+		min-width: 3rem;
+		cursor: text;
+		padding: 0.0625rem 0.125rem;
+		border-radius: 0.125rem;
+	}
+	.assignee-editable:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.title-editable {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		cursor: text;
+		padding: 0.0625rem 0.125rem;
+		border-radius: 0.125rem;
+		overflow: hidden;
+	}
+	.title-editable:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.title-editable:hover .task-title-text {
+		color: oklch(0.80 0.10 220);
+	}
+	.label-editable {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		min-width: 3rem;
+		cursor: text;
+		padding: 0.0625rem 0.125rem;
+		border-radius: 0.125rem;
+	}
+	.label-editable:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.no-labels {
+		color: oklch(0.50 0.02 250);
+		font-size: 0.75rem;
 	}
 
 	/* Actions */

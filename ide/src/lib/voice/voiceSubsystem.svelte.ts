@@ -68,7 +68,8 @@ const DEFAULT_CONFIG: VoiceConfig = Object.freeze({
 }) as VoiceConfig;
 
 // Must exceed the server's slowest provider probe (ElevenLabs = 1500ms) plus HTTP round-trip.
-const PROBE_TIMEOUT_MS = 5000;
+// 12s matches the LLM dispatch client timeout — the server can be slow under agent load.
+const PROBE_TIMEOUT_MS = 12000;
 
 function cloneConfig(c: VoiceConfig): VoiceConfig {
 	return JSON.parse(JSON.stringify(c));
@@ -176,15 +177,21 @@ class VoiceSubsystem {
 			// AbortError or network failure → degraded with empty registries.
 		}
 
-		const sttAvailable = new Set((probe?.stt ?? []).filter((p) => p.available).map((p) => p.id));
-		const llmAvailable = new Set((probe?.llm ?? []).filter((p) => p.available).map((p) => p.id));
-		const speakAvailable = new Set(
-			(probe?.speak ?? []).filter((p) => p.available).map((p) => p.id)
-		);
-
-		this.sttProviders = sttProviderCatalog.filter((p) => sttAvailable.has(p.id));
-		this.llmProviders = llmProviderCatalog.filter((p) => llmAvailable.has(p.id));
-		this.speakProviders = speakProviderCatalog.filter((p) => speakAvailable.has(p.id));
+		if (probe) {
+			const sttAvailable = new Set(probe.stt.filter((p) => p.available).map((p) => p.id));
+			const llmAvailable = new Set(probe.llm.filter((p) => p.available).map((p) => p.id));
+			const speakAvailable = new Set(probe.speak.filter((p) => p.available).map((p) => p.id));
+			this.sttProviders = sttProviderCatalog.filter((p) => sttAvailable.has(p.id));
+			this.llmProviders = llmProviderCatalog.filter((p) => llmAvailable.has(p.id));
+			this.speakProviders = speakProviderCatalog.filter((p) => speakAvailable.has(p.id));
+		} else {
+			// Probe timed out (server under load) — assume the configured provider is
+			// available so voice remains functional. If transcription itself fails, the
+			// error surfaces then rather than blocking before even trying.
+			this.sttProviders = sttProviderCatalog.filter((p) => p.id === this.activeSttId);
+			this.llmProviders = [];
+			this.speakProviders = [];
+		}
 
 		this.status = this.#deriveStatus(probe);
 	}

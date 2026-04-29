@@ -92,6 +92,23 @@ Every route supports vim-style `j`/`k` navigation. Press `?` on any page for the
 
 Full per-route reference: [`ide/docs/keyboard-navigation.md`](./ide/docs/keyboard-navigation.md).
 
+### Voice Commands
+
+Hold `Ctrl+Space` and talk. JAT runs a two-tier dispatcher: fixed phrases fire keyboard shortcuts (sub-second, no LLM); natural-language utterances are routed through an LLM that extracts parameters and chains actions in one shot.
+
+```
+"Create a bug for the login crash and spawn an agent"
+   → opens new-task drawer (title="login crash", type=bug)
+   → spawns an agent on the new task
+
+"Close the auth task"                              → confirms, then closes
+"Set the auth task to P1 and assign it to Mike"    → updates two fields in one call
+"Spawn four agents on the triage epic"             → opens swarm dialog pre-filled
+"Kill the EarlyShore session"                      → confirms, then kills
+```
+
+Open the in-app **Voice Vocab Sheet** (mic button or `?` overlay) to see every command available on the page you're on, with example utterances. Full guide: [`ide/docs/voice-commands.md`](./ide/docs/voice-commands.md).
+
 ### Code Editor (`/files`)
 
 Full Monaco editor (VS Code's engine):
@@ -426,6 +443,8 @@ IDE settings at `/config`:
 | [QUICKSTART.md](./QUICKSTART.md) | 5-minute tutorial |
 | [CLAUDE.md](./CLAUDE.md) | Full technical reference |
 | [ide/CLAUDE.md](./ide/CLAUDE.md) | IDE dev guide |
+| [ide/docs/keyboard-navigation.md](./ide/docs/keyboard-navigation.md) | Keyboard shortcut reference |
+| [ide/docs/voice-commands.md](./ide/docs/voice-commands.md) | Voice command guide |
 | [shared/scheduler.md](./shared/scheduler.md) | Scheduler daemon reference |
 | [tools/ingest/PLUGINS.md](./tools/ingest/PLUGINS.md) | Custom integration plugin guide |
 | [shared/](./shared/) | Agent documentation |

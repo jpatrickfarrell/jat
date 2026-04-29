@@ -22,6 +22,7 @@
 	import { STATUS_OPTIONS, type TaskStatus } from '$lib/config/task-statuses';
 	import { createListNav } from '$lib/actions/listNav';
 	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
+	import { addVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
 
 	interface Task {
 		id: string;
@@ -38,6 +39,7 @@
 		updated_at?: string;
 		milestone_id?: string | null;
 		milestone_name?: string | null;
+		internal?: boolean | null;
 		creator?: { name?: string; email?: string } | string | null;
 		requester?: { name?: string; email?: string } | null;
 		approver?: { name?: string; email?: string } | null;
@@ -106,6 +108,7 @@
 	let selectedMilestone = $state('');
 	let selectedRequester = $state('');
 	let selectedApprover = $state('');
+	let internalFilter = $state<'all' | 'internal' | 'public'>('all');
 
 	const projectDropdownGroups = $derived.by<SearchDropdownGroup[]>(() => [{
 		label: 'Projects',
@@ -324,6 +327,7 @@
 		selectedMilestone !== '' ||
 		selectedRequester !== '' ||
 		selectedApprover !== '' ||
+		internalFilter !== 'all' ||
 		selectedStatuses.size !== DEFAULT_STATUSES.length ||
 		!DEFAULT_STATUSES.every(s => selectedStatuses.has(s))
 	);
@@ -338,6 +342,7 @@
 		selectedMilestone = '';
 		selectedRequester = '';
 		selectedApprover = '';
+		internalFilter = 'all';
 		selectedStatuses = new Set(DEFAULT_STATUSES);
 	}
 
@@ -827,6 +832,11 @@
 				const a = t.approver;
 				return a && (a.name === selectedApprover || a.email === selectedApprover);
 			});
+		}
+		if (internalFilter === 'internal') {
+			result = result.filter(t => t.internal !== false);
+		} else if (internalFilter === 'public') {
+			result = result.filter(t => t.internal === false);
 		}
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase().trim();
@@ -1830,10 +1840,29 @@
 		}
 	}
 
+	async function ctxToggleInternal(task: Task) {
+		closeContextMenu();
+		const newInternal = !(task.internal ?? true);
+		tasks = tasks.map(t => t.id === task.id ? { ...t, internal: newInternal } : t);
+		try {
+			const response = await fetch(`/api/tasks/${task.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ internal: newInternal }),
+			});
+			if (!response.ok) {
+				tasks = tasks.map(t => t.id === task.id ? { ...t, internal: task.internal } : t);
+			}
+		} catch (err) {
+			tasks = tasks.map(t => t.id === task.id ? { ...t, internal: task.internal } : t);
+			console.error('Failed to update internal flag:', err);
+		}
+	}
+
 	async function handleBulkHide() {
 		const ids = [...selectedTasks];
 		if (ids.length === 0) return;
-		const snap = ids.map(id => ({ id, body: { status: tasks.find(t => t.id === id)?.status || 'open' } }));
+		const snap = ids.map(id => ({ id, body: { internal: tasks.find(t => t.id === id)?.internal ?? true } }));
 		bulkActionLoading = true;
 		bulkActionError = '';
 		try {
@@ -1841,7 +1870,7 @@
 				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ status: 'dev' })
+					body: JSON.stringify({ internal: true })
 				});
 				if (!response.ok) throw new Error(await handleApiError(response, `hide ${taskId}`));
 			});
@@ -1849,6 +1878,32 @@
 			clearSelection();
 			fetchTasks();
 			showUndoToast(`Hidden ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkPublish() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		const snap = ids.map(id => ({ id, body: { internal: tasks.find(t => t.id === id)?.internal ?? true } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ internal: false })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `publish ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			showUndoToast(`Published ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
 		} catch (err) {
 			bulkActionError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -1895,17 +1950,49 @@
 		deleteArmTimeout = setTimeout(() => { deleteArmed = false; }, 4000);
 	}
 
+	let unregisterVoice: (() => void) | null = null;
+
+	function setStatusOnly(s: TaskStatus) {
+		selectedStatuses = new Set([s]);
+	}
+
 	onMount(() => {
 		if (browser) {
 			loadColumnSettings();
 			loadPrefs();
 			fetchTasks();
 			pollInterval = setInterval(fetchTasks, 10000);
+			unregisterVoice = addVoiceActionHandlers({
+				'open-tasks-status-open': () => setStatusOnly('open'),
+				'open-tasks-status-in-progress': () => setStatusOnly('in_progress'),
+				'open-tasks-status-waiting': () => setStatusOnly('waiting'),
+				'open-tasks-status-blocked': () => setStatusOnly('blocked'),
+				'open-tasks-status-submitted': () => setStatusOnly('submitted'),
+				'open-tasks-status-accepted': () => setStatusOnly('accepted'),
+				'open-tasks-status-closed': () => setStatusOnly('closed'),
+				'open-tasks-status-reset': () => resetStatuses(),
+				'open-tasks-priority-0': () => { selectedPriority = '0'; },
+				'open-tasks-priority-1': () => { selectedPriority = '1'; },
+				'open-tasks-priority-2': () => { selectedPriority = '2'; },
+				'open-tasks-priority-3': () => { selectedPriority = '3'; },
+				'open-tasks-priority-4': () => { selectedPriority = '4'; },
+				'open-tasks-priority-reset': () => { selectedPriority = ''; },
+				'open-tasks-type-bug': () => { selectedType = 'bug'; },
+				'open-tasks-type-feature': () => { selectedType = 'feature'; },
+				'open-tasks-type-task': () => { selectedType = 'task'; },
+				'open-tasks-type-epic': () => { selectedType = 'epic'; },
+				'open-tasks-type-chore': () => { selectedType = 'chore'; },
+				'open-tasks-type-reset': () => { selectedType = 'all'; },
+				'open-tasks-assignee-unassigned': () => { selectedAssignee = '__unassigned__'; },
+				'open-tasks-assignee-reset': () => { selectedAssignee = ''; },
+				'open-tasks-clear-all': () => clearFilters(),
+			});
 		}
 	});
 
 	onDestroy(() => {
 		if (pollInterval) clearInterval(pollInterval);
+		unregisterVoice?.();
 	});
 </script>
 
@@ -2085,6 +2172,34 @@
 					onChange={(v) => { selectedApprover = v; }}
 				/>
 			{/if}
+
+			<!-- Internal / Public filter -->
+			<div class="internal-filter-toggle">
+				<button
+					class="internal-filter-btn"
+					class:active={internalFilter === 'all'}
+					onclick={() => internalFilter = 'all'}
+					title="Show all tasks"
+				>All</button>
+				<button
+					class="internal-filter-btn"
+					class:active={internalFilter === 'internal'}
+					onclick={() => internalFilter = 'internal'}
+					title="Show only dev-internal tasks"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+					Internal
+				</button>
+				<button
+					class="internal-filter-btn"
+					class:active={internalFilter === 'public'}
+					onclick={() => internalFilter = 'public'}
+					title="Show only client-visible tasks"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+					Public
+				</button>
+			</div>
 
 			<!-- Clear all filters -->
 			{#if hasActiveFilters}
@@ -2335,6 +2450,9 @@
 											onclick={() => openTaskDrawer(task.id)}
 											title={task.description || task.title}
 										>
+											{#if task.internal === false}
+												<svg class="visibility-badge public" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" title="Public — visible to clients"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+											{/if}
 											<span class="task-title-text">{task.title}</span>
 										</button>
 									</td>
@@ -2729,6 +2847,17 @@
 
 		<div class="task-context-menu-divider"></div>
 
+		<!-- Internal toggle -->
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => ctxToggleInternal(ctxTask!)}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+				<circle cx="9" cy="7" r="4"/>
+				<path d="M23 21v-2a4 4 0 00-3-3.87"/>
+				<path d="M16 3.13a4 4 0 010 7.75"/>
+			</svg>
+			<span>{(ctxTask?.internal ?? true) ? 'Make Public' : 'Mark Internal'}</span>
+		</button>
+
 		<!-- Duplicate -->
 		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => ctxDuplicateTask(ctxTask!)}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2905,14 +3034,18 @@
 
 	<div class="floating-divider"></div>
 
-	<!-- Promote / Hide / Close -->
+	<!-- Promote / Hide / Make Public / Close -->
 	<button type="button" class="floating-btn floating-btn-promote" onclick={handleBulkPromote} disabled={bulkActionLoading} title="Set status=open (promote to active queue)">
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
 		Promote
 	</button>
-	<button type="button" class="floating-btn floating-btn-hide" onclick={handleBulkHide} disabled={bulkActionLoading} title="Set status=dev (hidden from clients)">
+	<button type="button" class="floating-btn floating-btn-hide" onclick={handleBulkHide} disabled={bulkActionLoading} title="Mark internal=true (hidden from clients)">
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
 		Hide
+	</button>
+	<button type="button" class="floating-btn floating-btn-publish" onclick={handleBulkPublish} disabled={bulkActionLoading} title="Mark internal=false (visible to clients)">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+		Publish
 	</button>
 	<button type="button" class="floating-btn floating-btn-close" onclick={handleBulkClose} disabled={bulkActionLoading}>
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -3273,6 +3406,41 @@
 		background: oklch(0.35 0.08 25 / 0.15);
 		border-color: oklch(0.55 0.12 25);
 		color: oklch(0.80 0.12 25);
+	}
+
+	/* Internal/Public filter toggle */
+	.internal-filter-toggle {
+		display: flex;
+		align-items: center;
+		border: 1px solid oklch(0.30 0.03 250 / 0.5);
+		border-radius: 0.5rem;
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+	.internal-filter-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		min-height: 2rem;
+		background: transparent;
+		border: none;
+		border-right: 1px solid oklch(0.30 0.03 250 / 0.4);
+		color: oklch(0.55 0.05 250);
+		font-size: 0.75rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 0.1s, color 0.1s;
+	}
+	.internal-filter-btn:last-child { border-right: none; }
+	.internal-filter-btn:hover {
+		background: oklch(0.28 0.04 250 / 0.4);
+		color: oklch(0.80 0.05 250);
+	}
+	.internal-filter-btn.active {
+		background: oklch(0.28 0.04 250 / 0.6);
+		color: oklch(0.88 0.04 250);
 	}
 
 	/* Columns button pushed to end */
@@ -3678,6 +3846,15 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		transition: color 0.1s;
+	}
+	.visibility-badge {
+		flex-shrink: 0;
+		width: 12px;
+		height: 12px;
+		opacity: 0.7;
+	}
+	.visibility-badge.public {
+		color: oklch(0.70 0.18 145);
 	}
 
 	/* Due date cell */
@@ -4361,6 +4538,14 @@
 	}
 	.floating-btn-hide:hover {
 		background: oklch(0.65 0.15 85 / 0.25);
+	}
+	.floating-btn-publish {
+		background: oklch(0.55 0.18 145 / 0.15);
+		color: oklch(0.75 0.18 145);
+		border-color: oklch(0.55 0.18 145 / 0.3);
+	}
+	.floating-btn-publish:hover {
+		background: oklch(0.55 0.18 145 / 0.25);
 	}
 	.floating-btn-copy {
 		background: oklch(0.55 0.10 250 / 0.15);

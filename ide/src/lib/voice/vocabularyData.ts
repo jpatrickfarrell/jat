@@ -151,7 +151,38 @@ export const ROUTE_ENTRIES: VoiceVocabularyEntry[] = [
 	{ phrase: 'next table', aliases: ['switch table', 'next project table', 'right table'], shortcut: 'Tab', scope: '/data', category: 'route' },
 	{ phrase: 'previous table', aliases: ['previous project table', 'left table'], shortcut: 'Shift+Tab', scope: '/data', category: 'route' },
 	{ phrase: 'next column in data', aliases: ['right cell', 'move right cell'], shortcut: 'ArrowRight', scope: '/data', category: 'route' },
-	{ phrase: 'previous column in data', aliases: ['left cell', 'move left cell'], shortcut: 'ArrowLeft', scope: '/data', category: 'route' }
+	{ phrase: 'previous column in data', aliases: ['left cell', 'move left cell'], shortcut: 'ArrowLeft', scope: '/data', category: 'route' },
+
+	// ── /open-tasks ────────────────────────────────────────────────────────
+	// Filter dispatch — speak a filter and the page mutates its filter state
+	// directly via registered action handlers (see /open-tasks/+page.svelte).
+	{ phrase: 'show only open', aliases: ['only open', 'filter open', 'just open tasks', 'open only', 'show open tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-open', category: 'route' },
+	{ phrase: 'show in progress', aliases: ['only in progress', 'show working', 'filter in progress', 'show working tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-in-progress', category: 'route' },
+	{ phrase: 'show waiting', aliases: ['only waiting', 'filter waiting', 'show waiting tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-waiting', category: 'route' },
+	{ phrase: 'show blocked', aliases: ['only blocked', 'filter blocked', 'show blocked tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-blocked', category: 'route' },
+	{ phrase: 'show submitted', aliases: ['only submitted', 'filter submitted', 'show submitted tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-submitted', category: 'route' },
+	{ phrase: 'show accepted', aliases: ['only accepted', 'filter accepted', 'show accepted tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-accepted', category: 'route' },
+	{ phrase: 'show closed', aliases: ['only closed', 'filter closed', 'show done', 'show finished'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-closed', category: 'route' },
+	{ phrase: 'show all statuses', aliases: ['all statuses', 'reset statuses', 'every status', 'show all states'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-status-reset', category: 'route' },
+
+	{ phrase: 'show critical', aliases: ['priority zero', 'p zero', 'show p zero', 'critical priority'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-0', category: 'route' },
+	{ phrase: 'show high priority', aliases: ['priority one', 'p one', 'show p one', 'high priority'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-1', category: 'route' },
+	{ phrase: 'show medium priority', aliases: ['priority two', 'p two', 'show p two', 'medium priority'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-2', category: 'route' },
+	{ phrase: 'show low priority', aliases: ['priority three', 'p three', 'show p three', 'low priority'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-3', category: 'route' },
+	{ phrase: 'show lowest priority', aliases: ['priority four', 'p four', 'show p four', 'lowest priority'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-4', category: 'route' },
+	{ phrase: 'all priorities', aliases: ['any priority', 'clear priority', 'show all priorities'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-priority-reset', category: 'route' },
+
+	{ phrase: 'show only bugs', aliases: ['filter bugs', 'just bugs', 'only bugs'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-bug', category: 'route' },
+	{ phrase: 'show only features', aliases: ['filter features', 'just features', 'only features'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-feature', category: 'route' },
+	{ phrase: 'show only tasks', aliases: ['filter tasks', 'just tasks', 'only tasks'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-task', category: 'route' },
+	{ phrase: 'show only epics', aliases: ['filter epics', 'just epics', 'only epics'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-epic', category: 'route' },
+	{ phrase: 'show only chores', aliases: ['filter chores', 'just chores', 'only chores'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-chore', category: 'route' },
+	{ phrase: 'all types', aliases: ['any type', 'clear type', 'show all types'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-type-reset', category: 'route' },
+
+	{ phrase: 'show unassigned', aliases: ['only unassigned', 'filter unassigned', 'no assignee'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-assignee-unassigned', category: 'route' },
+	{ phrase: 'all assignees', aliases: ['any assignee', 'clear assignee', 'show all assignees'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-assignee-reset', category: 'route' },
+
+	{ phrase: 'clear filters', aliases: ['reset filters', 'show all tasks', 'clear all filters', 'reset all filters'], shortcut: '', scope: '/open-tasks', action: 'open-tasks-clear-all', category: 'route' }
 ];
 
 // =============================================================================

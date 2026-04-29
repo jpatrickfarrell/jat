@@ -590,6 +590,7 @@
 		milestone: string;
 		requester: string;
 		approver: string;
+		internal: 'all' | 'internal' | 'public';
 		search: string;
 		sortChips: SortChip[];
 	}
@@ -619,6 +620,7 @@
 			milestone: selectedMilestone,
 			requester: selectedRequester,
 			approver: selectedApprover,
+			internal: internalFilter,
 			search: searchQuery,
 			sortChips: sortChips.map(c => ({ ...c })),
 		};
@@ -634,6 +636,7 @@
 		selectedMilestone = f.milestone;
 		selectedRequester = f.requester;
 		selectedApprover = f.approver;
+		internalFilter = f.internal ?? 'all';
 		searchQuery = f.search ?? '';
 		if (f.sortChips?.length) sortChips = f.sortChips.map(c => ({ ...c }));
 	}
@@ -647,6 +650,7 @@
 		if (a.milestone !== b.milestone) return false;
 		if (a.requester !== b.requester) return false;
 		if (a.approver !== b.approver) return false;
+		if ((a.internal ?? 'all') !== (b.internal ?? 'all')) return false;
 		if ((a.search ?? '') !== (b.search ?? '')) return false;
 		if (a.statuses.length !== b.statuses.length) return false;
 		const aSet = new Set(a.statuses);
@@ -767,6 +771,7 @@
 			milestone: selectedMilestone,
 			requester: selectedRequester,
 			approver: selectedApprover,
+			internal: internalFilter,
 			search: searchQuery,
 			sortChips: [],
 		};

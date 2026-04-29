@@ -21,17 +21,17 @@
 /**
  * Soft cap on the rendered context block.
  *
- * The PRD originally specced 4 KB for prefix-cache friendliness on small local
- * models (gemma3:4b on CPU). In practice almost all dispatch traffic goes to
- * Anthropic Haiku / Sonnet (200 K window) or OpenAI gpt-4o-mini (128 K), and
- * even local stacks now run 32 K+ models. Spending 10–100 KB of context on a
- * <5 KB query is the right trade-off — accuracy on ambiguous references
- * matters more than caching the suffix. The trim algorithm still runs as a
- * safety net for pathological store sizes.
+ * Default 128 KB. The PRD originally specced 4 KB for prefix-cache friendliness
+ * on small local models (gemma3:4b on CPU), but in practice almost all dispatch
+ * traffic goes to Anthropic Haiku / Sonnet (200 K window) or OpenAI gpt-4o-mini
+ * (128 K). Spending the budget on rich context — full task descriptions, agent
+ * memories, project bios — wins more on resolution accuracy than it loses on
+ * cache cost, and the prompt is still a fraction of the model's window.
  *
+ * The trim algorithm still runs as a safety net for pathological store sizes.
  * Callers can override via `assembleContext({ budgetBytes })`.
  */
-export const CONTEXT_BUDGET_BYTES = 32 * 1024;
+export const CONTEXT_BUDGET_BYTES = 128 * 1024;
 
 /**
  * Stable shape returned by a registered context builder.

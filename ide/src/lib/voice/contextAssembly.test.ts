@@ -73,10 +73,11 @@ describe('contextAssembly framework', () => {
 		expect(result.context.trimmable.visibleTasks.length).toBeLessThan(bigList.length);
 	});
 
-	it('default 32 KB budget accommodates rich descriptions without trim', async () => {
-		// A realistic JAT-shaped context: 19 projects with ~200-char descriptions,
-		// 30 visible tasks with 200-char descriptions, 10 sessions, 10 recent
-		// closed. Should fit comfortably under 32 KB with no trim needed.
+	it('default 128 KB budget accommodates a full rich JAT-shaped context without trim', async () => {
+		// Realistic JAT volume: 19 projects with 300-char bios, 100 visible tasks
+		// with 600-char descriptions, 100 recent tasks, 30 memories with 600-char
+		// summaries, 30 active sessions, 15 recent closed. Should fit comfortably
+		// under 128 KB with no trim needed.
 		registerContextBuilder(() => ({
 			pinned: {
 				route: '/tasks',
@@ -87,25 +88,40 @@ describe('contextAssembly framework', () => {
 			trimmable: {
 				projects: Array.from({ length: 19 }, (_, i) => ({
 					name: `project${i}`,
-					description: 'A '.repeat(100) + 'description.',
+					description: 'A '.repeat(150) + 'description.',
 					path: `/home/jw/code/project${i}`
 				})),
-				visibleTasks: Array.from({ length: 30 }, (_, i) => ({
+				// Description sizes calibrated to realistic JAT data: most tasks
+				// have 100-300 char descriptions, only a few are book-length.
+				visibleTasks: Array.from({ length: 100 }, (_, i) => ({
 					id: `jat-${i}`,
 					title: `Task ${i} title`,
 					status: 'open',
 					priority: 1,
-					description: 'B '.repeat(100) + 'task body.',
+					description: 'B '.repeat(150) + 'task body.',
 					labels: ['voice', 'phase2']
 				})),
-				activeSessions: Array.from({ length: 10 }, (_, i) => ({
+				recentTasks: Array.from({ length: 100 }, (_, i) => ({
+					id: `jat-recent-${i}`,
+					title: `Recent ${i}`,
+					status: 'open',
+					priority: 2,
+					description: 'C '.repeat(100) + 'desc.'
+				})),
+				memories: Array.from({ length: 30 }, (_, i) => ({
+					project: 'jat',
+					taskId: `jat-mem-${i}`,
+					agent: 'PastAgent',
+					summary: 'D '.repeat(200) + 'lesson learned.'
+				})),
+				activeSessions: Array.from({ length: 30 }, (_, i) => ({
 					name: `jat-Agent${i}`,
 					agentName: `Agent${i}`,
 					taskId: `jat-${i}`,
 					taskTitle: `Task ${i}`,
 					state: 'working'
 				})),
-				recentlyClosedTasks: Array.from({ length: 10 }, (_, i) => ({
+				recentlyClosedTasks: Array.from({ length: 15 }, (_, i) => ({
 					id: `jat-closed-${i}`,
 					title: `Closed task ${i}`,
 					closedByAgent: 'TestAgent'
@@ -117,7 +133,9 @@ describe('contextAssembly framework', () => {
 		expect(result.truncated).toBe(false);
 		expect(result.sizeBytes).toBeLessThanOrEqual(CONTEXT_BUDGET_BYTES);
 		expect(result.context.trimmable.projects).toHaveLength(19);
-		expect(result.context.trimmable.visibleTasks).toHaveLength(30);
+		expect(result.context.trimmable.visibleTasks).toHaveLength(100);
+		expect(result.context.trimmable.recentTasks).toHaveLength(100);
+		expect(result.context.trimmable.memories).toHaveLength(30);
 	});
 
 	it('preserves description text when budget is generous', async () => {

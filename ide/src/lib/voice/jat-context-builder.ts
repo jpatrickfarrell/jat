@@ -27,15 +27,21 @@ import { workSessionsState, type WorkSession } from '$lib/stores/workSessions.sv
 import { getProjects } from '$lib/stores/configStore.svelte';
 import type { AssembledContext, ContextBuilder } from './contextAssembly';
 
-const MAX_VISIBLE_TASKS = 80;
+const MAX_VISIBLE_TASKS = 100;
 const MAX_ACTIVE_SESSIONS = 30;
-const MAX_RECENT_CLOSED = 10;
+const MAX_RECENT_CLOSED = 15;
+const MAX_RECENT_TASKS = 100;
+const MAX_MEMORIES = 30;
 /** Per-field truncation: keep enough text to disambiguate without sending bodies. */
-const TASK_DESCRIPTION_MAX = 400;
-const PROJECT_DESCRIPTION_MAX = 320;
+const TASK_DESCRIPTION_MAX = 600;
+const PROJECT_DESCRIPTION_MAX = 400;
+const MEMORY_SUMMARY_MAX = 600;
 /** Output snippet from active sessions — last few non-empty lines. */
-const SESSION_OUTPUT_LINES = 4;
-const SESSION_OUTPUT_LINE_MAX = 140;
+const SESSION_OUTPUT_LINES = 6;
+const SESSION_OUTPUT_LINE_MAX = 160;
+/** How often to refresh server-backed caches (recent tasks, memories). */
+const CACHE_REFRESH_MS = 60_000;
+const CACHE_FETCH_TIMEOUT_MS = 4_000;
 
 /** Rich task reference published by route components for context use. */
 export interface VisibleTaskRef {
@@ -78,6 +84,32 @@ interface RecentClosedRef {
 	closedAt?: string;
 }
 
+/** Recent task pulled from /api/tasks (server-backed; cached client-side). */
+interface RecentTaskRef {
+	id: string;
+	title: string;
+	status: string;
+	priority?: number;
+	type?: string;
+	project?: string;
+	assignee?: string | null;
+	updatedAt?: string;
+	description?: string;
+	labels?: string[];
+}
+
+/** Recent agent-memory file (the per-task notes saved by past agents). */
+interface MemoryRef {
+	project: string;
+	taskId?: string;
+	agent?: string;
+	title?: string;
+	summary?: string;
+	type?: string;
+	priority?: string;
+	completedAt?: string;
+}
+
 /**
  * Module-local bridge state. Route components that own a task list call
  * `publishVisibleTasks()` / `publishSelectedTask()` so the builder can pick
@@ -106,11 +138,136 @@ export function publishLastMatchedAction(action: string | null): void {
 	publishedLastMatchedAction = action;
 }
 
+/**
+ * Server-backed caches refreshed every CACHE_REFRESH_MS. The builder reads
+ * from these synchronously so dispatch latency stays at "store-read speed";
+ * the first dispatch after page load may see empty caches, subsequent calls
+ * benefit from a warm window.
+ */
+let recentTasksCache: RecentTaskRef[] = [];
+let memoriesCache: MemoryRef[] = [];
+let cacheStarted = false;
+let cacheTimer: ReturnType<typeof setInterval> | null = null;
+
 /** For tests — reset module state. */
 export function _resetJatContextBridge(): void {
 	publishedVisibleTasks = [];
 	publishedSelectedTaskId = null;
 	publishedLastMatchedAction = null;
+	recentTasksCache = [];
+	memoriesCache = [];
+	if (cacheTimer) clearInterval(cacheTimer);
+	cacheTimer = null;
+	cacheStarted = false;
+}
+
+/** Lazy-start the background cache refresh on the first dispatch. */
+function ensureCacheStarted(): void {
+	if (cacheStarted || !browser) return;
+	cacheStarted = true;
+	void refreshCaches();
+	cacheTimer = setInterval(() => void refreshCaches(), CACHE_REFRESH_MS);
+}
+
+async function refreshCaches(): Promise<void> {
+	const project = inferActiveProjectName();
+	const [tasks, memories] = await Promise.all([
+		fetchRecentTasks(project),
+		fetchRecentMemories(project)
+	]);
+	if (tasks) recentTasksCache = tasks;
+	if (memories) memoriesCache = memories;
+}
+
+function inferActiveProjectName(): string | null {
+	const sessions = workSessionsState.sessions;
+	const hovered = get(hoveredSessionName);
+	const hoveredProj = sessions.find((s) => s.sessionName === hovered)?.project;
+	if (hoveredProj) return hoveredProj;
+	const anyActive = sessions.find((s) => s.project)?.project;
+	if (anyActive) return anyActive;
+	return getProjects()[0]?.name ?? null;
+}
+
+async function fetchRecentTasks(project: string | null): Promise<RecentTaskRef[] | null> {
+	const params = new URLSearchParams({
+		status: 'open',
+		limit: String(MAX_RECENT_TASKS)
+	});
+	if (project) params.set('project', project);
+	const data = await fetchJson<{ tasks?: RawApiTask[] }>(`/api/tasks?${params}`);
+	if (!data?.tasks) return null;
+	return data.tasks.map(toRecentTaskRef);
+}
+
+async function fetchRecentMemories(project: string | null): Promise<MemoryRef[] | null> {
+	if (!project) return [];
+	const data = await fetchJson<{ files?: RawApiMemory[] }>(
+		`/api/memory?action=browse&project=${encodeURIComponent(project)}`
+	);
+	if (!data?.files) return null;
+	return data.files.slice(0, MAX_MEMORIES).map((f) => ({
+		project: f.project,
+		taskId: f.task,
+		agent: f.agent,
+		title: f.title,
+		summary: truncate(f.summary, MEMORY_SUMMARY_MAX),
+		type: f.type,
+		priority: f.priority,
+		completedAt: f.completed
+	}));
+}
+
+interface RawApiTask {
+	id: string;
+	title: string;
+	status: string;
+	priority?: number;
+	issue_type?: string;
+	project?: string;
+	assignee?: string | null;
+	description?: string;
+	labels?: string[];
+	updated_at?: string;
+}
+interface RawApiMemory {
+	project: string;
+	task?: string;
+	agent?: string;
+	title?: string;
+	summary?: string;
+	type?: string;
+	priority?: string;
+	completed?: string;
+}
+
+function toRecentTaskRef(t: RawApiTask): RecentTaskRef {
+	return {
+		id: t.id,
+		title: t.title,
+		status: t.status,
+		priority: t.priority,
+		type: t.issue_type,
+		project: t.project,
+		assignee: t.assignee ?? null,
+		updatedAt: t.updated_at,
+		description: truncate(t.description, TASK_DESCRIPTION_MAX),
+		labels: t.labels?.slice(0, 5)
+	};
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+	if (!browser) return null;
+	try {
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => ctrl.abort(), CACHE_FETCH_TIMEOUT_MS);
+		const res = await fetch(url, { signal: ctrl.signal });
+		clearTimeout(timer);
+		if (!res.ok) return null;
+		return (await res.json()) as T;
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -122,6 +279,8 @@ export function _resetJatContextBridge(): void {
  * the speaking user is.
  */
 export const buildJatContext: ContextBuilder = ({ route }): AssembledContext => {
+	if (browser) ensureCacheStarted();
+
 	const hoveredSession = browser ? get(hoveredSessionName) : null;
 	const sessions: WorkSession[] = browser ? workSessionsState.sessions : [];
 	const projects = browser ? buildProjectRefs(sessions, hoveredSession) : [];
@@ -136,6 +295,13 @@ export const buildJatContext: ContextBuilder = ({ route }): AssembledContext => 
 		(t) => t.id === publishedSelectedTaskId
 	);
 
+	// Recent tasks from /api/tasks (open + sorted by updated_at). Dedupe against
+	// visibleTasks so the same task doesn't appear twice; shipping both lists
+	// is still useful since `visibleTasks` is route-aware (filtered/sorted by
+	// the user's current view) while `recentTasks` is the global activity view.
+	const visibleIds = new Set(visibleTasks.map((t) => t.id));
+	const recentTasks = recentTasksCache.filter((t) => !visibleIds.has(t.id));
+
 	const recentlyClosedTasks = collectRecentlyClosedTasks(sessions);
 
 	return {
@@ -146,7 +312,12 @@ export const buildJatContext: ContextBuilder = ({ route }): AssembledContext => 
 			lastMatchedAction: publishedLastMatchedAction
 		},
 		trimmable: {
+			// Order matters for trim priority — when over budget the framework
+			// drops from the largest array each pass. Memory comes first since
+			// agent learnings are usually the highest signal-per-byte.
+			memories: memoriesCache,
 			visibleTasks,
+			recentTasks,
 			activeSessions,
 			projects,
 			recentlyClosedTasks

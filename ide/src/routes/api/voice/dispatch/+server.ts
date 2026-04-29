@@ -8,7 +8,7 @@
  * `assembleContext()` (see `lib/voice/contextAssembly.ts`). It is opaque to
  * the server: we cap size as defence-in-depth and append it to the system
  * prompt as the dynamic suffix. The client trims to its configured budget
- * (default 32 KB — see CONTEXT_BUDGET_BYTES); the server's 128 KB cap is a
+ * (default 128 KB — see CONTEXT_BUDGET_BYTES); the server's 1 MB cap is a
  * guardrail against abuse, not a meaningful limit on legitimate traffic.
  *
  * Returns:
@@ -308,8 +308,8 @@ export const ALL_VOICE_TOOLS = VOICE_TOOLS;
 // System prompt builder
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Server-side cap on the context blob (defence-in-depth above the 4 KB client trim). */
-const MAX_CONTEXT_BYTES = 8 * 1024;
+/** Server-side cap on the context blob (defence-in-depth; client default is 128 KB). */
+const MAX_CONTEXT_BYTES = 1024 * 1024;
 
 function buildSystemPrompt(
 	entries: ReturnType<typeof filterByRoute>,

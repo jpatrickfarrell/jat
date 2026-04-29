@@ -46,6 +46,10 @@
 	import { voice } from '$lib/voice/voiceSubsystem.svelte';
 	import type { Component } from 'svelte';
 	import { registerVoiceActionHandlers } from '$lib/voice/voiceActionRegistry';
+	// Side-effect import: wires JAT's resolvers + context builder into the
+	// generic voice framework. Per PRD §7.4 this is the only seam between the
+	// framework and the app — must run once at boot.
+	import '$lib/voice/jat';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import {
 		loadMarksFromStorage,

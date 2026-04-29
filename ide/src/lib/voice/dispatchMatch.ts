@@ -16,7 +16,7 @@
  */
 
 import type { VoiceVocabularyEntry } from '$lib/stores/voiceVocabulary.svelte';
-import { parseShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+import { parseShortcut } from '$lib/utils/shortcutParser';
 import { getVoiceActionHandler } from './voiceActionRegistry';
 
 export type DispatchResult = 'action-handler' | 'keyboard-event' | 'none';

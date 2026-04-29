@@ -25,16 +25,21 @@ const GLOBAL_STORAGE_KEY = 'global-keyboard-shortcuts';
  */
 export type ShortcutMap = Record<string, string>;
 
-/**
- * Parsed keyboard shortcut for matching
- */
-export interface ParsedShortcut {
-	key: string;        // The main key (lowercase)
-	alt: boolean;
-	ctrl: boolean;
-	shift: boolean;
-	meta: boolean;      // Command key on Mac
-}
+// Pure shortcut-parsing primitives live in $lib/utils/shortcutParser so that
+// framework code (e.g. the voice dispatcher) can consume them without pulling
+// Svelte stores into the bundle. Re-exported here for backwards compatibility.
+export {
+	parseShortcut,
+	formatShortcut,
+	normalizeShortcut,
+	type ParsedShortcut
+} from '$lib/utils/shortcutParser';
+
+import {
+	parseShortcut,
+	formatShortcut,
+	type ParsedShortcut
+} from '$lib/utils/shortcutParser';
 
 /**
  * Global shortcut definition with metadata
@@ -323,80 +328,8 @@ export function resetAllGlobalShortcuts(): void {
 // =============================================================================
 // SHORTCUT PARSING & NORMALIZATION
 // =============================================================================
-
-/**
- * Normalize a shortcut string to consistent format
- * e.g., "alt+c" -> "Alt+C", "Ctrl+Shift+s" -> "Ctrl+Shift+S"
- */
-export function normalizeShortcut(shortcut: string): string {
-	const parsed = parseShortcut(shortcut);
-	return formatShortcut(parsed);
-}
-
-/**
- * Parse a shortcut string into components
- */
-export function parseShortcut(shortcut: string): ParsedShortcut {
-	const parts = shortcut.toLowerCase().split('+').map(p => p.trim());
-
-	const result: ParsedShortcut = {
-		key: '',
-		alt: false,
-		ctrl: false,
-		shift: false,
-		meta: false
-	};
-
-	for (const part of parts) {
-		switch (part) {
-			case 'alt':
-			case 'option':
-				result.alt = true;
-				break;
-			case 'ctrl':
-			case 'control':
-				result.ctrl = true;
-				break;
-			case 'shift':
-				result.shift = true;
-				break;
-			case 'meta':
-			case 'cmd':
-			case 'command':
-			case 'win':
-			case 'windows':
-				result.meta = true;
-				break;
-			default:
-				// This is the main key; normalize space character to 'space'
-				result.key = part === ' ' ? 'space' : part;
-		}
-	}
-
-	return result;
-}
-
-/**
- * Format a parsed shortcut back to string
- */
-export function formatShortcut(parsed: ParsedShortcut): string {
-	const parts: string[] = [];
-
-	if (parsed.ctrl) parts.push('Ctrl');
-	if (parsed.alt) parts.push('Alt');
-	if (parsed.shift) parts.push('Shift');
-	if (parsed.meta) parts.push('Meta');
-
-	if (parsed.key) {
-		// Capitalize single letter keys, otherwise keep as-is
-		const displayKey = parsed.key.length === 1
-			? parsed.key.toUpperCase()
-			: parsed.key.charAt(0).toUpperCase() + parsed.key.slice(1);
-		parts.push(displayKey);
-	}
-
-	return parts.join('+');
-}
+// parseShortcut, formatShortcut, normalizeShortcut, and ParsedShortcut now
+// live in $lib/utils/shortcutParser (re-exported above).
 
 /**
  * Check if a keyboard event matches a shortcut string

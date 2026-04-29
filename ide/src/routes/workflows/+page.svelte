@@ -1635,7 +1635,7 @@
 	// Keyboard nav for list view — j/k walk the filtered workflow rows.
 	let shortcutsOpen = $state(false);
 	const listNavController = createListNav({
-		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('div[data-nav-id]')),
 		onSelect: (el) => {
 			const id = el.dataset.navId;
 			if (id) loadWorkflow(id);

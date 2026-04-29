@@ -154,6 +154,10 @@
 			return () => document.removeEventListener('mousedown', handleClickOutside);
 		}
 	});
+
+	export function openDropdown() {
+		open = true;
+	}
 </script>
 
 <div class="search-dropdown" class:sd-chip-wrap={variant === 'chip'} bind:this={containerRef}>

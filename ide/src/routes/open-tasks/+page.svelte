@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -21,6 +21,7 @@
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
 	import { STATUS_OPTIONS, type TaskStatus } from '$lib/config/task-statuses';
 	import { createListNav } from '$lib/actions/listNav';
+	import KeyboardShortcutsOverlay from '$lib/components/KeyboardShortcutsOverlay.svelte';
 
 	interface Task {
 		id: string;
@@ -94,8 +95,7 @@
 	let projects = $state<string[]>([]);
 	let searchInputEl = $state<HTMLInputElement | null>(null);
 
-	// Auto-focus search on mount
-	$effect(() => { if (searchInputEl) searchInputEl.focus(); });
+	let initialFocusDone = false;
 
 	// Power view filter state
 	const DEFAULT_STATUSES: TaskStatus[] = ['open', 'in_progress', 'waiting', 'blocked', 'submitted', 'accepted'];
@@ -215,6 +215,20 @@
 			groups.push({ label: title, options: items.map(m => ({ value: m.id, label: m.name })) });
 		}
 		return groups;
+	});
+
+	// Flat milestone list for bulk-action dropdown — combines task-observed + API milestones
+	const bulkMilestoneOptions = $derived.by<Array<{id: string, name: string}>>(() => {
+		const seen = new Map<string, string>();
+		for (const t of tasks) {
+			if (t.milestone_id) seen.set(t.milestone_id, t.milestone_name || t.milestone_id);
+		}
+		for (const m of availableMilestones) {
+			if (!seen.has(m.id)) seen.set(m.id, m.name);
+		}
+		return [...seen.entries()]
+			.map(([id, name]) => ({ id, name }))
+			.sort((a, b) => a.name.localeCompare(b.name));
 	});
 
 	const requesterGroups = $derived.by<SearchDropdownGroup[]>(() => {
@@ -339,11 +353,25 @@
 
 	// j/k nav with full selection layer (x = toggle, V = visual, * = select all, Shift+J/K = range)
 	const nav = createListNav({
-		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('tr[data-nav-id]')),
 		onSelect: (_el) => { const id = _el.dataset.navId; if (id) openTaskDrawer(id); },
 		selectable: true,
 		onSelectionChange: (ids) => { selectedTasks = ids; },
 		wraparound: true,
+	});
+
+	// Keyboard-first focus: focus first row when tasks first load, re-sync on every list change.
+	// requestAnimationFrame (not tick) for initial focus — guarantees the browser has painted
+	// the rows before we try to apply the focused class.
+	$effect(() => {
+		const items = filteredTasks; // track
+		if (items.length === 0) return;
+		if (!initialFocusDone) {
+			initialFocusDone = true;
+			requestAnimationFrame(() => nav.focus(0));
+		} else {
+			tick().then(() => nav.refresh());
+		}
 	});
 
 	function handlePageKeydown(e: KeyboardEvent) {
@@ -352,18 +380,83 @@
 		const target = e.target as HTMLElement;
 		// Don't steal keys when typing in inputs or contenteditables (e.g. PromptInput)
 		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable) {
+			if (e.key === 'Escape' && target === searchInputEl) {
+				e.preventDefault();
+				searchQuery = '';
+				searchInputEl?.blur();
+				return;
+			}
 			if (e.key === 'Tab' && !e.shiftKey && target === searchInputEl) {
 				e.preventDefault();
 				nav.focus(0);
 			}
 			return;
 		}
-		if (e.key === '/' || e.key === 'f') {
+		if (e.key === '?' || e.key === '/') {
+			e.preventDefault();
+			if (e.key === '?') { shortcutsOpen = true; return; }
+			searchInputEl?.focus();
+			return;
+		}
+		if (e.key === 'f') {
 			e.preventDefault();
 			searchInputEl?.focus();
 			return;
 		}
 		if (nav.handleKeydown(e)) return;
+
+		// Single-key shortcuts (no modifier) — dual mode:
+		//   no selection  → open the corresponding FILTER dropdown
+		//   with selection → open the corresponding BULK ACTION dropdown
+		if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+			const hasSel = selectedTasks.size > 0;
+			switch (e.key) {
+				case 'p':
+					e.preventDefault();
+					if (hasSel) { closeBulkDropdowns(); priorityDropdownOpen = true; }
+					else priorityFilterRef?.openDropdown();
+					break;
+				case 's':
+					e.preventDefault();
+					if (hasSel) { closeBulkDropdowns(); statusDropdownOpen = true; }
+					else if (statusFilterEl) { statusFilterEl.open = true; }
+					break;
+				case 'a':
+					e.preventDefault();
+					if (hasSel) { closeBulkDropdowns(); assignDropdownOpen = true; }
+					else assigneeFilterRef?.openDropdown();
+					break;
+				case 'm':
+					e.preventDefault();
+					if (hasSel) { closeBulkDropdowns(); milestoneDropdownOpen = true; }
+					else milestoneFilterRef?.openDropdown();
+					break;
+				case 't':
+					e.preventDefault();
+					if (hasSel) { closeBulkDropdowns(); typeDropdownOpen = true; }
+					else typeFilterRef?.openDropdown();
+					break;
+				case 'l':
+					e.preventDefault();
+					labelFilterRef?.openDropdown();
+					break;
+				case 'e':
+					if (hasSel) { e.preventDefault(); closeBulkDropdowns(); loadEpics(); bulkEpicOpen = true; }
+					break;
+				case 'c':
+					if (hasSel) { e.preventDefault(); handleBulkClose(); }
+					break;
+				case 'h':
+					if (hasSel) { e.preventDefault(); handleBulkHide(); }
+					break;
+				case 'P':
+					if (hasSel) { e.preventDefault(); handleBulkPromote(); }
+					break;
+				case 'Escape':
+					closeBulkDropdowns();
+					break;
+			}
+		}
 	}
 
 	// Sort chips
@@ -544,6 +637,48 @@
 	let spawnProgress = $state('');
 	let priorityDropdownOpen = $state(false);
 	let harnessDropdownOpen = $state(false);
+	let typeDropdownOpen = $state(false);
+	let statusDropdownOpen = $state(false);
+	let assignDropdownOpen = $state(false);
+	let milestoneDropdownOpen = $state(false);
+	let bulkEpicOpen = $state(false);
+
+	// Filter dropdown refs (keyboard-triggered)
+	let priorityFilterRef = $state<{ openDropdown: () => void } | null>(null);
+	let typeFilterRef = $state<{ openDropdown: () => void } | null>(null);
+	let assigneeFilterRef = $state<{ openDropdown: () => void } | null>(null);
+	let labelFilterRef = $state<{ openDropdown: () => void } | null>(null);
+	let milestoneFilterRef = $state<{ openDropdown: () => void } | null>(null);
+	let statusFilterEl = $state<HTMLDetailsElement | null>(null);
+
+	let shortcutsOpen = $state(false);
+
+	// Column header context menu
+	let colCtxCol = $state<string | null>(null);
+	let colCtxX = $state(0);
+	let colCtxY = $state(0);
+	let colCtxVisible = $state(false);
+
+	function openColCtxMenu(e: MouseEvent, colId: string) {
+		if (!['status', 'priority', 'type', 'assignee', 'milestone'].includes(colId)) return;
+		e.preventDefault();
+		colCtxCol = colId;
+		colCtxX = e.clientX;
+		colCtxY = e.clientY;
+		colCtxVisible = true;
+	}
+
+	function closeColCtxMenu() { colCtxVisible = false; }
+
+	function colCtxApply(action: () => void) {
+		// Select all filtered tasks first, then run action
+		selectedTasks = new Set(filteredTasks.map(t => t.id));
+		closeColCtxMenu();
+		// Defer so selectedTasks is committed before handler reads it
+		setTimeout(action, 0);
+	}
+	let deleteArmed = $state(false);
+	let deleteArmTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Column drag-reorder state
 	let colDraggedIndex = $state<number | null>(null);
@@ -822,7 +957,6 @@
 
 			if (loading) {
 				loading = false;
-				// Fetch project colors
 				fetchAndGetProjectColors(tasks);
 			}
 		} catch (e: any) {
@@ -1123,12 +1257,12 @@
 
 	// Close floating bar dropdowns on click outside
 	$effect(() => {
-		if (!priorityDropdownOpen && !harnessDropdownOpen) return;
+		const anyOpen = priorityDropdownOpen || harnessDropdownOpen || typeDropdownOpen || statusDropdownOpen || assignDropdownOpen || milestoneDropdownOpen;
+		if (!anyOpen) return;
 		function handleClickOutside(e: MouseEvent) {
 			const target = e.target as HTMLElement;
 			if (!target.closest('.floating-dropdown-wrapper')) {
-				priorityDropdownOpen = false;
-				harnessDropdownOpen = false;
+				closeBulkDropdowns();
 			}
 		}
 		const timer = setTimeout(() => {
@@ -1310,18 +1444,112 @@
 		}
 	}
 
+	async function loadEpics() {
+		try {
+			const projects = new Set<string>(
+				[...selectedTasks].map(id => id.includes('-') ? id.split('-')[0] : '').filter(Boolean)
+			);
+			if (selectedProject && selectedProject !== 'all') projects.add(selectedProject);
+			const fetches = projects.size > 0
+				? [...projects].map(p => fetch(`/api/tasks?status=open&limit=200&project=${encodeURIComponent(p)}`))
+				: [fetch('/api/tasks?status=open&limit=200')];
+			const results = await Promise.all(fetches);
+			const all: typeof epics = [];
+			for (const res of results) {
+				if (res.ok) {
+					const data = await res.json();
+					for (const t of data.tasks || []) {
+						if (t.issue_type === 'epic' && !all.find(e => e.id === t.id)) all.push(t);
+					}
+				}
+			}
+			epics = all;
+		} catch { /* silent */ }
+	}
+
+	async function bulkAssignToEpic(epicId: string) {
+		const ids = [...selectedTasks];
+		if (!ids.length || bulkActionLoading) return;
+		bulkActionLoading = true;
+		const snap = ids.map(id => ({
+			id,
+			body: { parent_id: tasks.find(t => t.id === id)?.parent_id ?? null },
+			endpoint: `/api/tasks/${id}/deps`
+		}));
+		let success = 0;
+		try {
+			for (const id of ids) {
+				try {
+					const res = await fetch(`/api/tasks/${id}/deps`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ parentId: epicId, childId: id })
+					});
+					if (res.ok) success++;
+				} catch { /* continue */ }
+			}
+			showUndoToast(
+				`Assigned ${success} task${success === 1 ? '' : 's'} to epic`,
+				() => revertTasks(snap)
+			);
+			clearSelection();
+			fetchTasks();
+		} finally {
+			bulkActionLoading = false;
+			bulkEpicOpen = false;
+		}
+	}
+
+	function closeBulkDropdowns() {
+		priorityDropdownOpen = false;
+		harnessDropdownOpen = false;
+		typeDropdownOpen = false;
+		statusDropdownOpen = false;
+		assignDropdownOpen = false;
+		milestoneDropdownOpen = false;
+		bulkEpicOpen = false;
+	}
+
 	function clearSelection() {
 		selectedTasks = new Set();
 		lastClickedTaskId = null;
-		priorityDropdownOpen = false;
-		harnessDropdownOpen = false;
+		closeBulkDropdowns();
+		if (deleteArmTimeout) clearTimeout(deleteArmTimeout);
+		deleteArmed = false;
+	}
+
+	// === Undo helpers ===
+	function showUndoToast(message: string, undoFn: () => Promise<void>) {
+		addToast({
+			message,
+			type: 'success',
+			duration: 6000,
+			action: { label: 'Undo', onClick: () => { undoFn().catch(() => {}); } }
+		});
+	}
+
+	async function revertTasks(items: Array<{ id: string; body: Record<string, unknown>; endpoint?: string }>) {
+		await bulkApiOperation(items.map(i => i.id), async (taskId) => {
+			const item = items.find(x => x.id === taskId);
+			if (!item) return;
+			const url = item.endpoint ?? `/api/tasks/${taskId}`;
+			const res = await fetchWithTimeout(url, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(item.body)
+			});
+			if (!res.ok) throw new Error(await handleApiError(res, `undo ${taskId}`));
+		});
+		fetchTasks();
 	}
 
 	// === Bulk Actions ===
 	async function handleBulkDelete() {
 		const ids = [...selectedTasks];
 		if (ids.length === 0) return;
-		if (!confirm(`Delete ${ids.length} task${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+		if (!deleteArmed) { armDelete(); return; }
+		deleteArmed = false;
+		if (deleteArmTimeout) { clearTimeout(deleteArmTimeout); deleteArmTimeout = null; }
 		bulkActionLoading = true;
 		bulkActionError = '';
 		try {
@@ -1346,7 +1574,7 @@
 	async function handleBulkClose() {
 		const ids = [...selectedTasks];
 		if (ids.length === 0) return;
-		if (!confirm(`Close ${ids.length} task${ids.length > 1 ? 's' : ''}?`)) return;
+		const snap = ids.map(id => ({ id, body: { status: tasks.find(t => t.id === id)?.status || 'open' } }));
 		bulkActionLoading = true;
 		bulkActionError = '';
 		try {
@@ -1356,15 +1584,12 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ status: 'closed' })
 				});
-				if (!response.ok) {
-					throw new Error(await handleApiError(response, `close task ${taskId}`));
-				}
+				if (!response.ok) throw new Error(await handleApiError(response, `close task ${taskId}`));
 			});
-			if (!result.success) {
-				bulkActionError = formatBulkResultMessage(result, 'task');
-			}
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
 			clearSelection();
 			fetchTasks();
+			showUndoToast(`Closed ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
 		} catch (err) {
 			bulkActionError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -1413,6 +1638,7 @@
 		const ids = [...selectedTasks];
 		if (ids.length === 0) return;
 		priorityDropdownOpen = false;
+		const snap = ids.map(id => ({ id, body: { priority: tasks.find(t => t.id === id)?.priority ?? 2 } }));
 		bulkActionLoading = true;
 		bulkActionError = '';
 		try {
@@ -1422,15 +1648,12 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ priority })
 				});
-				if (!response.ok) {
-					throw new Error(await handleApiError(response, `update priority for ${taskId}`));
-				}
+				if (!response.ok) throw new Error(await handleApiError(response, `update priority for ${taskId}`));
 			});
-			if (!result.success) {
-				bulkActionError = formatBulkResultMessage(result, 'task');
-			}
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
 			clearSelection();
 			fetchTasks();
+			showUndoToast(`Set ${ids.length} task${ids.length !== 1 ? 's' : ''} to P${priority}`, () => revertTasks(snap));
 		} catch (err) {
 			bulkActionError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -1465,6 +1688,211 @@
 		} finally {
 			bulkActionLoading = false;
 		}
+	}
+
+	async function handleBulkType(issueType: string) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		typeDropdownOpen = false;
+		const snap = ids.map(id => ({ id, body: { type: tasks.find(t => t.id === id)?.issue_type || 'task' } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ type: issueType })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `update type for ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			showUndoToast(`Set ${ids.length} task${ids.length !== 1 ? 's' : ''} to ${issueType}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkStatus(status: string) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		statusDropdownOpen = false;
+		const snap = ids.map(id => ({ id, body: { status: tasks.find(t => t.id === id)?.status || 'open' } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `update status for ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			showUndoToast(`Set ${ids.length} task${ids.length !== 1 ? 's' : ''} to ${status}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkAssign(assignee: string | null) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		assignDropdownOpen = false;
+		const snap = ids.map(id => ({ id, body: { assignee: tasks.find(t => t.id === id)?.assignee || '' } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ assignee: assignee || '' })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `assign ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			const label = assignee || 'unassigned';
+			showUndoToast(`${ids.length} task${ids.length !== 1 ? 's' : ''} → ${label}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkMilestone(milestoneId: string | null) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		milestoneDropdownOpen = false;
+		const snap = ids.map(id => ({
+			id,
+			body: { milestone_id: tasks.find(t => t.id === id)?.milestone_id ?? null },
+			endpoint: `/api/tasks/${id}/milestone`
+		}));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}/milestone`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ milestone_id: milestoneId })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `set milestone for ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			const mName = milestoneId ? (bulkMilestoneOptions.find(m => m.id === milestoneId)?.name || milestoneId) : 'no milestone';
+			showUndoToast(`${ids.length} task${ids.length !== 1 ? 's' : ''} → ${mName}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkPromote() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		const snap = ids.map(id => ({ id, body: { status: tasks.find(t => t.id === id)?.status || 'open' } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status: 'open' })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `promote ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			showUndoToast(`Promoted ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkHide() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		const snap = ids.map(id => ({ id, body: { status: tasks.find(t => t.id === id)?.status || 'open' } }));
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status: 'dev' })
+				});
+				if (!response.ok) throw new Error(await handleApiError(response, `hide ${taskId}`));
+			});
+			if (!result.success) bulkActionError = formatBulkResultMessage(result, 'task');
+			clearSelection();
+			fetchTasks();
+			showUndoToast(`Hidden ${ids.length} task${ids.length !== 1 ? 's' : ''}`, () => revertTasks(snap));
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	function copyTaskIds() {
+		const ids = [...selectedTasks].join(' ');
+		navigator.clipboard.writeText(ids).then(() => {
+			addToast({ message: `Copied ${selectedTasks.size} task ID${selectedTasks.size !== 1 ? 's' : ''}`, type: 'info', duration: 3000 });
+		});
+	}
+
+	function exportCSV() {
+		const selected = tasks.filter(t => selectedTasks.has(t.id));
+		const headers = ['ID', 'Title', 'Status', 'Priority', 'Type', 'Project', 'Assignee', 'Milestone', 'Due Date', 'Labels'];
+		const rows = selected.map(t => [
+			t.id,
+			`"${(t.title || '').replace(/"/g, '""')}"`,
+			t.status,
+			`P${t.priority}`,
+			t.issue_type,
+			t.project,
+			t.assignee || '',
+			t.milestone_name || '',
+			t.due_date || '',
+			(t.labels || []).join(';')
+		].join(','));
+		const csv = [headers.join(','), ...rows].join('\n');
+		const blob = new Blob([csv], { type: 'text/csv' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `tasks-${new Date().toISOString().slice(0, 10)}.csv`;
+		a.click();
+		URL.revokeObjectURL(url);
+		addToast({ message: `Exported ${selected.length} task${selected.length !== 1 ? 's' : ''} as CSV`, type: 'success', duration: 3000 });
+	}
+
+	function armDelete() {
+		if (deleteArmTimeout) clearTimeout(deleteArmTimeout);
+		deleteArmed = true;
+		deleteArmTimeout = setTimeout(() => { deleteArmed = false; }, 4000);
 	}
 
 	onMount(() => {
@@ -1530,7 +1958,7 @@
 
 			<!-- Status multi-select dropdown -->
 			<div class="status-dropdown-wrapper">
-				<details class="status-dropdown">
+				<details class="status-dropdown" bind:this={statusFilterEl}>
 					<summary class="status-dropdown-trigger">
 						<span class="status-dropdown-label">
 							{#if selectedStatuses.size === STATUS_OPTIONS.length}
@@ -1591,6 +2019,7 @@
 
 			<!-- Priority -->
 			<SearchDropdown
+				bind:this={priorityFilterRef}
 				value={selectedPriority}
 				groups={priorityGroups}
 				placeholder="All Priorities"
@@ -1599,6 +2028,7 @@
 
 			<!-- Type -->
 			<SearchDropdown
+				bind:this={typeFilterRef}
 				value={selectedType}
 				groups={typeDropdownGroups}
 				placeholder="All Types"
@@ -1608,6 +2038,7 @@
 			<!-- Conditional: Assignee -->
 			{#if hasAssignees}
 				<SearchDropdown
+					bind:this={assigneeFilterRef}
 					value={selectedAssignee}
 					groups={assigneeGroups}
 					placeholder="All Assignees"
@@ -1618,6 +2049,7 @@
 			<!-- Conditional: Labels -->
 			{#if hasLabels}
 				<SearchDropdown
+					bind:this={labelFilterRef}
 					value={selectedLabel}
 					groups={labelGroups}
 					placeholder="All Labels"
@@ -1627,6 +2059,7 @@
 
 			<!-- Milestone (always shown — postgres projects always have milestones) -->
 			<SearchDropdown
+				bind:this={milestoneFilterRef}
 				value={selectedMilestone}
 				groups={milestoneGroups}
 				placeholder="All Milestones"
@@ -1797,6 +2230,7 @@
 								ondragend={handleColDragEnd}
 								ondrop={(e) => handleColDrop(i, e)}
 								onclick={() => { if (col.sortable && col.sortField) toggleSort(col.sortField); }}
+								oncontextmenu={(e) => openColCtxMenu(e, col.id)}
 								style={col.id === 'type' ? 'text-align: center;' : ''}
 								use:columnResize={{
 									disabled: col.id === 'actions',
@@ -2329,84 +2763,269 @@
 
 <!-- Floating Bulk Action Bar -->
 {#if selectionCount > 0}
-	<div class="floating-action-bar" transition:fade={{ duration: 150 }}>
-		<span class="floating-count">{selectionCount} selected</span>
-		<div class="floating-divider"></div>
-		<button type="button" class="floating-btn floating-btn-spawn" onclick={handleBulkSpawn} disabled={bulkActionLoading}>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-				<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
-				<circle cx="12" cy="10" r="2" />
-			</svg>
-			{spawnProgress || 'Spawn'}
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="floating-action-bar" transition:fade={{ duration: 150 }} onclick={(e) => { if (!(e.target as HTMLElement).closest('.floating-dropdown-wrapper')) closeBulkDropdowns(); }} onkeydown={(e) => { if (e.key === 'Escape') closeBulkDropdowns(); }}>
+	<span class="floating-count">{selectionCount} selected</span>
+	<div class="floating-divider"></div>
+
+	<!-- Type dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn" onclick={() => { closeBulkDropdowns(); typeDropdownOpen = !typeDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+			Type
 		</button>
-		<button type="button" class="floating-btn floating-btn-close" onclick={handleBulkClose} disabled={bulkActionLoading}>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-				<circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-			</svg>
-			Close
+		{#if typeDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				{#each [
+					{ value: 'bug', label: '🐛 Bug' },
+					{ value: 'feature', label: '✨ Feature' },
+					{ value: 'task', label: '📋 Task' },
+					{ value: 'epic', label: '⚡ Epic' },
+					{ value: 'chore', label: '🔄 Chore' },
+					{ value: 'chat', label: '💬 Chat' },
+				] as opt}
+					<button class="floating-dropdown-item" onclick={() => handleBulkType(opt.value)}>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Status dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn" onclick={() => { closeBulkDropdowns(); statusDropdownOpen = !statusDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+			Status
 		</button>
-		<button type="button" class="floating-btn floating-btn-delete" onclick={handleBulkDelete} disabled={bulkActionLoading}>
+		{#if statusDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				{#each STATUS_OPTIONS as opt}
+					<button class="floating-dropdown-item" onclick={() => handleBulkStatus(opt.value)}>
+						<span class="floating-priority-dot" style="background: {opt.color};"></span>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Priority dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn floating-btn-priority" onclick={() => { closeBulkDropdowns(); priorityDropdownOpen = !priorityDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+				<path d="M3 3v18h18" /><path d="M18 9l-5-6-4 4-4 2" />
+			</svg>
+			Priority
+		</button>
+		{#if priorityDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				{#each [
+					{ p: 0, label: 'P0 Critical', color: 'oklch(0.75 0.18 25)' },
+					{ p: 1, label: 'P1 High', color: 'oklch(0.80 0.15 85)' },
+					{ p: 2, label: 'P2 Medium', color: 'oklch(0.75 0.12 200)' },
+					{ p: 3, label: 'P3 Low', color: 'oklch(0.65 0.02 250)' },
+					{ p: 4, label: 'P4 Lowest', color: 'oklch(0.55 0.02 250)' }
+				] as item}
+					<button class="floating-dropdown-item" onclick={() => handleBulkPriority(item.p)}>
+						<span class="floating-priority-dot" style="background: {item.color};"></span>
+						{item.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Assign dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn" onclick={() => { closeBulkDropdowns(); assignDropdownOpen = !assignDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+			Assign
+		</button>
+		{#if assignDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				<button class="floating-dropdown-item" onclick={() => handleBulkAssign(null)}>
+					<span style="opacity:0.5">— Unassigned</span>
+				</button>
+				{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].filter(isHumanAssignee).sort() as name}
+					<button class="floating-dropdown-item" onclick={() => handleBulkAssign(name)}>
+						{name}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Milestone dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn" onclick={() => { closeBulkDropdowns(); milestoneDropdownOpen = !milestoneDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 3v18M3 9l9-6 9 6"/></svg>
+			Milestone
+		</button>
+		{#if milestoneDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				<button class="floating-dropdown-item" onclick={() => handleBulkMilestone(null)}>
+					<span style="opacity:0.5">— No milestone</span>
+				</button>
+				{#each bulkMilestoneOptions as m}
+					<button class="floating-dropdown-item" onclick={() => handleBulkMilestone(m.id)}>
+						{m.name}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Epic dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn" onclick={() => { closeBulkDropdowns(); loadEpics(); bulkEpicOpen = !bulkEpicOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+			Epic
+		</button>
+		{#if bulkEpicOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				{#if epics.length === 0}
+					<span class="floating-dropdown-item" style="opacity:0.5; pointer-events:none;">No open epics</span>
+				{:else}
+					{#each epics as epic}
+						<button class="floating-dropdown-item" onclick={() => bulkAssignToEpic(epic.id)}>
+							⚡ {epic.title}
+						</button>
+					{/each}
+				{/if}
+			</div>
+		{/if}
+	</div>
+
+	<div class="floating-divider"></div>
+
+	<!-- Promote / Hide / Close -->
+	<button type="button" class="floating-btn floating-btn-promote" onclick={handleBulkPromote} disabled={bulkActionLoading} title="Set status=open (promote to active queue)">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
+		Promote
+	</button>
+	<button type="button" class="floating-btn floating-btn-hide" onclick={handleBulkHide} disabled={bulkActionLoading} title="Set status=dev (hidden from clients)">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+		Hide
+	</button>
+	<button type="button" class="floating-btn floating-btn-close" onclick={handleBulkClose} disabled={bulkActionLoading}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+			<circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+		</svg>
+		Close
+	</button>
+
+	<div class="floating-divider"></div>
+
+	<!-- Spawn + Harness -->
+	<button type="button" class="floating-btn floating-btn-spawn" onclick={handleBulkSpawn} disabled={bulkActionLoading}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+			<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
+			<circle cx="12" cy="10" r="2" />
+		</svg>
+		{spawnProgress || 'Spawn'}
+	</button>
+	<!-- Harness dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<button type="button" class="floating-btn floating-btn-harness" onclick={() => { closeBulkDropdowns(); harnessDropdownOpen = !harnessDropdownOpen; }} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+				<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+				<circle cx="12" cy="12" r="3" />
+			</svg>
+			Harness
+		</button>
+		{#if harnessDropdownOpen}
+			<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+				{#each AGENT_PRESETS as preset}
+					<button class="floating-dropdown-item" onclick={() => handleBulkHarness(preset.id)}>
+						<ProviderLogo agentId={preset.id} size={14} />
+						<span>{preset.name}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<div class="floating-divider"></div>
+
+	<!-- Copy IDs / Export CSV -->
+	<button type="button" class="floating-btn floating-btn-copy" onclick={copyTaskIds} disabled={bulkActionLoading} title="Copy task IDs to clipboard">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+		Copy IDs
+	</button>
+	<button type="button" class="floating-btn floating-btn-export" onclick={exportCSV} disabled={bulkActionLoading} title="Export selection as CSV">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+		CSV
+	</button>
+
+	<div class="floating-divider"></div>
+
+	<!-- Delete (two-click arm) -->
+	{#if deleteArmed}
+		<button type="button" class="floating-btn floating-btn-delete floating-btn-delete-armed" onclick={handleBulkDelete} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+			Delete {selectionCount}?
+		</button>
+	{:else}
+		<button type="button" class="floating-btn floating-btn-delete" onclick={handleBulkDelete} disabled={bulkActionLoading} title="Click to arm, then click again to confirm delete">
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
 				<polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
 			</svg>
 			Delete
 		</button>
-		<div class="floating-divider"></div>
-		<!-- Priority dropdown -->
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-			<button type="button" class="floating-btn floating-btn-priority" onclick={() => { priorityDropdownOpen = !priorityDropdownOpen; harnessDropdownOpen = false; }} disabled={bulkActionLoading}>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-					<path d="M3 3v18h18" /><path d="M18 9l-5-6-4 4-4 2" />
-				</svg>
-				Priority
-			</button>
-			{#if priorityDropdownOpen}
-				<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
-					{#each [
-						{ p: 0, label: 'P0 Critical', color: 'oklch(0.75 0.18 25)' },
-						{ p: 1, label: 'P1 High', color: 'oklch(0.80 0.15 85)' },
-						{ p: 2, label: 'P2 Medium', color: 'oklch(0.75 0.12 200)' },
-						{ p: 3, label: 'P3 Low', color: 'oklch(0.65 0.02 250)' },
-						{ p: 4, label: 'P4 Lowest', color: 'oklch(0.55 0.02 250)' }
-					] as item}
-						<button class="floating-dropdown-item" onclick={() => handleBulkPriority(item.p)}>
-							<span class="floating-priority-dot" style="background: {item.color};"></span>
-							{item.label}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-		<!-- Harness dropdown -->
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-			<button type="button" class="floating-btn floating-btn-harness" onclick={() => { harnessDropdownOpen = !harnessDropdownOpen; priorityDropdownOpen = false; }} disabled={bulkActionLoading}>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-					<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
-					<circle cx="12" cy="12" r="3" />
-				</svg>
-				Harness
-			</button>
-			{#if harnessDropdownOpen}
-				<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
-					{#each AGENT_PRESETS as preset}
-						<button class="floating-dropdown-item" onclick={() => handleBulkHarness(preset.id)}>
-							<ProviderLogo agentId={preset.id} size={14} />
-							<span>{preset.name}</span>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-		<div class="floating-divider"></div>
-		<button type="button" class="floating-btn floating-btn-clear" onclick={clearSelection} disabled={bulkActionLoading}>
-			Clear
-		</button>
-		{#if bulkActionLoading}
-			<div class="floating-spinner"></div>
-		{/if}
-	</div>
+	{/if}
+
+	<button type="button" class="floating-btn floating-btn-clear" onclick={clearSelection} disabled={bulkActionLoading}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+		Clear
+	</button>
+	{#if bulkActionLoading}
+		<div class="floating-spinner"></div>
+	{/if}
+</div>
+{/if}
+
+<!-- Column header context menu -->
+{#if colCtxCol}
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="col-ctx-menu"
+	class:col-ctx-menu-hidden={!colCtxVisible}
+	style="left: {colCtxX}px; top: {colCtxY}px;"
+	onmouseleave={closeColCtxMenu}
+>
+	<div class="col-ctx-header">Set all {filteredTasks.length} visible to…</div>
+	{#if colCtxCol === 'priority'}
+		{#each [0,1,2,3,4] as p}
+			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkPriority(p))}>P{p}</button>
+		{/each}
+	{:else if colCtxCol === 'status'}
+		{#each STATUS_OPTIONS as s}
+			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkStatus(s.value))}>{s.label}</button>
+		{/each}
+	{:else if colCtxCol === 'type'}
+		{#each ['bug','feature','task','chore','epic'] as t}
+			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkType(t))}>{t}</button>
+		{/each}
+	{:else if colCtxCol === 'assignee'}
+		<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkAssign(null))}>— Unassigned</button>
+		{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].filter(isHumanAssignee).sort() as name}
+			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkAssign(name))}>{name}</button>
+		{/each}
+	{:else if colCtxCol === 'milestone'}
+		<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkMilestone(null))}>— No milestone</button>
+		{#each bulkMilestoneOptions as m}
+			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkMilestone(m.id))}>{m.name}</button>
+		{/each}
+	{/if}
+</div>
 {/if}
 
 <!-- Task Detail Drawer -->
@@ -3375,6 +3994,44 @@
 	}
 
 	/* Context Menu */
+	.col-ctx-menu {
+		position: fixed;
+		z-index: 100;
+		min-width: 200px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem;
+		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
+		animation: contextMenuIn 0.1s ease;
+	}
+	.col-ctx-menu-hidden { display: none; }
+	.col-ctx-header {
+		padding: 0.25rem 0.5rem 0.375rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.55 0.05 250);
+		border-bottom: 1px solid oklch(0.28 0.02 250);
+		margin-bottom: 0.25rem;
+	}
+	.col-ctx-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.375rem 0.625rem;
+		font-size: 0.8rem;
+		color: oklch(0.80 0.05 250);
+		border-radius: 0.25rem;
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+	.col-ctx-item:hover {
+		background: oklch(0.28 0.04 250);
+		color: oklch(0.95 0.03 250);
+	}
 	.task-context-menu {
 		position: fixed;
 		z-index: 100;
@@ -3689,6 +4346,44 @@
 	.floating-btn-harness:hover {
 		background: oklch(0.55 0.15 300 / 0.25);
 	}
+	.floating-btn-promote {
+		background: oklch(0.55 0.18 145 / 0.15);
+		color: oklch(0.75 0.18 145);
+		border-color: oklch(0.55 0.18 145 / 0.3);
+	}
+	.floating-btn-promote:hover {
+		background: oklch(0.55 0.18 145 / 0.25);
+	}
+	.floating-btn-hide {
+		background: oklch(0.65 0.15 85 / 0.15);
+		color: oklch(0.80 0.15 85);
+		border-color: oklch(0.65 0.15 85 / 0.3);
+	}
+	.floating-btn-hide:hover {
+		background: oklch(0.65 0.15 85 / 0.25);
+	}
+	.floating-btn-copy {
+		background: oklch(0.55 0.10 250 / 0.15);
+		color: oklch(0.75 0.12 250);
+		border-color: oklch(0.55 0.10 250 / 0.3);
+	}
+	.floating-btn-copy:hover { background: oklch(0.55 0.10 250 / 0.25); }
+	.floating-btn-export {
+		background: oklch(0.55 0.12 190 / 0.15);
+		color: oklch(0.75 0.12 190);
+		border-color: oklch(0.55 0.12 190 / 0.3);
+	}
+	.floating-btn-export:hover { background: oklch(0.55 0.12 190 / 0.25); }
+	.floating-btn-delete-armed {
+		background: oklch(0.65 0.20 25 / 0.30) !important;
+		color: oklch(0.85 0.15 25) !important;
+		border-color: oklch(0.65 0.20 25 / 0.6) !important;
+		animation: armed-pulse 0.8s ease-in-out infinite;
+	}
+	@keyframes armed-pulse {
+		0%, 100% { box-shadow: 0 0 0 0 oklch(0.65 0.20 25 / 0.4); }
+		50% { box-shadow: 0 0 0 4px oklch(0.65 0.20 25 / 0); }
+	}
 	.floating-spinner {
 		width: 14px;
 		height: 14px;
@@ -3742,3 +4437,54 @@
 		flex-shrink: 0;
 	}
 </style>
+
+<KeyboardShortcutsOverlay
+	bind:open={shortcutsOpen}
+	title="Open Tasks Shortcuts"
+	sections={[
+		{
+			title: 'Navigation',
+			shortcuts: [
+				{ key: 'j / ↓', description: 'Focus next task' },
+				{ key: 'k / ↑', description: 'Focus previous task' },
+				{ key: 'Enter', description: 'Open task detail drawer' },
+				{ key: '/ or f', description: 'Focus search input' },
+				{ key: '?', description: 'Show this help overlay' },
+				{ key: 'Esc', description: 'Clear focus / close dropdowns' },
+			],
+		},
+		{
+			title: 'Filter shortcuts (no selection)',
+			shortcuts: [
+				{ key: 'p', description: 'Open Priority filter' },
+				{ key: 's', description: 'Open Status filter' },
+				{ key: 'a', description: 'Open Assignee filter' },
+				{ key: 'm', description: 'Open Milestone filter' },
+				{ key: 't', description: 'Open Type filter' },
+				{ key: 'l', description: 'Open Label filter' },
+			],
+		},
+		{
+			title: 'Bulk actions (with selection)',
+			shortcuts: [
+				{ key: 'p', description: 'Bulk: set priority' },
+				{ key: 's', description: 'Bulk: set status' },
+				{ key: 'a', description: 'Bulk: assign' },
+				{ key: 'm', description: 'Bulk: set milestone' },
+				{ key: 't', description: 'Bulk: set type' },
+				{ key: 'e', description: 'Bulk: assign to epic' },
+				{ key: 'c', description: 'Bulk: close tasks' },
+				{ key: 'h', description: 'Bulk: hide (set dev status)' },
+				{ key: 'P', description: 'Bulk: promote (set open status)' },
+				{ key: 'Esc', description: 'Clear selection / close bulk dropdowns' },
+			],
+		},
+		{
+			title: 'Selection',
+			shortcuts: [
+				{ key: 'x', description: 'Toggle select focused task' },
+				{ key: 'Click', description: 'Select task (Shift+click for range)' },
+			],
+		},
+	]}
+/>

@@ -440,7 +440,7 @@
 				{ key: "x", description: "Toggle select focused task" },
 				{ key: "Shift+J / Shift+K", description: "Select + move down / up" },
 				{ key: "*", description: "Select / deselect all visible" },
-				{ key: "a (with selection)", description: "Add selected to epic" },
+				{ key: "e (with selection)", description: "Add selected to epic" },
 				{ key: "Esc (with selection)", description: "Clear selection" },
 			],
 		},
@@ -591,7 +591,7 @@
 
 		// Bulk action shortcuts — only when selection is non-empty
 		if (selectedTaskIds.size > 0) {
-			if (e.key === 'a') {
+			if (e.key === 'e') {
 				e.preventDefault();
 				loadEpics();
 				bulkEpicOpen = true;
@@ -2247,7 +2247,7 @@
 				{ key: 't', label: 'Type', onAction: () => { bulkTypeOpen = !bulkTypeOpen; bulkStatusOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking || bulkSpawning },
 				{ key: 's', label: 'Status', onAction: () => { bulkStatusOpen = !bulkStatusOpen; bulkTypeOpen = false; bulkPriorityOpen = false; }, disabled: bulkWorking || bulkSpawning },
 				{ key: 'p', label: 'Priority', onAction: () => { bulkPriorityOpen = !bulkPriorityOpen; bulkTypeOpen = false; bulkStatusOpen = false; }, disabled: bulkWorking || bulkSpawning },
-				{ key: 'a', label: 'Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking || bulkSpawning },
+				{ key: 'e', label: 'Epic', onAction: () => { loadEpics(); bulkEpicOpen = true; }, disabled: bulkWorking || bulkSpawning },
 				{ key: 'S', label: 'Spawn', onAction: bulkSpawn, disabled: bulkWorking || bulkSpawning },
 				{ key: 'o', label: 'Promote', onAction: bulkPromote, disabled: bulkWorking || bulkSpawning },
 				{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking || bulkSpawning },

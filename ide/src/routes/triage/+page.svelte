@@ -151,7 +151,7 @@
 	// selection layer (V, x, *, Shift+J/K, Esc cascade) is owned by listNav;
 	// the page only wires onSelectionChange and the per-route bulk actions.
 	const nav = createListNav({
-		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav-id]')),
+		getItems: () => Array.from(document.querySelectorAll<HTMLElement>('button[data-nav-id]')),
 		onSelect: (_el, idx) => {
 			selectedIdx = idx;
 			if (filteredTasks[idx]) openTaskDetailDrawer(filteredTasks[idx].id);
@@ -560,7 +560,7 @@
 			switch (e.key) {
 				case 'c':
 					e.preventDefault(); bulkClose(); return;
-				case 'a':
+				case 'e':
 					e.preventDefault();
 					if (epics.length > 0) bulkAssignOpen = true;
 					else addToast({ message: 'No epics available to assign to', type: 'info' });
@@ -991,7 +991,7 @@
 		{ key: 'e', description: 'Edit task' },
 		{ key: 'r', description: 'Close task' },
 		{ key: 'c', description: 'Bulk: close selected' },
-		{ key: 'a', description: 'Bulk: assign to epic' },
+		{ key: 'e', description: 'Bulk: assign to epic' },
 		{ key: 'd', description: 'Delete task / bulk: delete selected' },
 		{ key: '/', description: 'Focus search' },
 		{ key: 'Esc', description: 'Clear selection / cancel edit' },
@@ -1004,7 +1004,7 @@
 	actions={[
 		{ key: 's', label: 'Open', onAction: () => bulkSetStatus('open'), disabled: bulkWorking },
 		{ key: 'c', label: 'Close', onAction: bulkClose, disabled: bulkWorking },
-		{ key: 'a', label: 'Assign to Epic', onAction: () => { if (epics.length > 0) bulkAssignOpen = true; }, disabled: bulkWorking || epics.length === 0 },
+		{ key: 'e', label: 'Assign to Epic', onAction: () => { if (epics.length > 0) bulkAssignOpen = true; }, disabled: bulkWorking || epics.length === 0 },
 		{ key: 'd', label: 'Delete', onAction: bulkDelete, danger: true, disabled: bulkWorking }
 	]}
 	onClear={() => nav.clearSelection()}

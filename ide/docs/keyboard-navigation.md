@@ -70,7 +70,7 @@ A half-typed motion (`5`, `g`, `z`) is cancelled by:
 
 ## Universal Bulk Selection
 
-Routes that have j/k navigation over task lists support a consistent bulk selection pattern layered on top of single-item navigation. Currently implemented on `/inbox` and `/triage`.
+Routes that have j/k navigation over task lists support a consistent bulk selection pattern layered on top of single-item navigation. Currently implemented on `/inbox`, `/triage`, and `/open-tasks`.
 
 | Shortcut | Action |
 |----------|--------|
@@ -78,7 +78,7 @@ Routes that have j/k navigation over task lists support a consistent bulk select
 | `Shift+J` | Select focused task + move down (hold to sweep) |
 | `Shift+K` | Select focused task + move up |
 | `*` | Toggle select / deselect all visible tasks |
-| `a` _(with selection)_ | Add selected tasks to an epic |
+| `e` _(with selection)_ | Add selected tasks to an epic |
 | `Esc` _(with selection)_ | Clear selection (before clearing nav focus) |
 
 **Mouse:** click the status indicator (inbox) or left accent bar (triage) to toggle individual items.
@@ -87,7 +87,7 @@ Routes that have j/k navigation over task lists support a consistent bulk select
 
 **Adding to a new route:**
 1. Add `let selectedIds = $state<Set<string>>(new Set())` alongside existing nav state.
-2. Add `x`, `J`, `K`, `*`, `a`/`Esc` (with selection guard) cases to the page's keydown handler.
+2. Add `x`, `J`, `K`, `*`, `e`/`Esc` (with selection guard) cases to the page's keydown handler.
 3. Wire each list item's click-indicator with `e.stopPropagation()` + `toggleSelect(task.id)`.
 4. Add `<BulkActionBar>` and an epic-picker modal (see `/inbox` or `/triage` for the canonical copy).
 5. The route needs j/k navigation first — `x` toggles `filteredTasks[selectedIdx]`.
@@ -113,7 +113,7 @@ Split-panel layout: left task list, right detail panel.
 | `x` | Toggle select focused task |
 | `Shift+J` / `Shift+K` | Select + move down / up |
 | `*` | Select / deselect all visible |
-| `a` _(with selection)_ | Add selected to epic |
+| `e` _(with selection)_ | Add selected to epic |
 | `Esc` _(with selection)_ | Clear selection |
 | `Esc` | Close panel / exit filter |
 
@@ -153,10 +153,46 @@ Split-panel layout: left task list, right detail panel.
 | `e` | Edit task |
 | `r` | Close task |
 | `c` | Bulk: close selected |
-| `a` | Bulk: assign to epic |
+| `e` | Bulk: assign to epic |
 | `d` | Delete task / bulk: delete selected |
 | `/` | Focus search input |
 | `Esc` | Clear selection / cancel edit / clear focus |
+
+---
+
+### /open-tasks
+
+Power task list with dual-mode single-key shortcuts: the same key opens the **filter** dropdown when nothing is selected, and opens the **bulk action** dropdown when tasks are selected.
+
+#### Filter shortcuts (no selection)
+
+| Shortcut | Action |
+|----------|--------|
+| `p` | Open Priority filter |
+| `s` | Open Status filter |
+| `a` | Open Assignee filter |
+| `m` | Open Milestone filter |
+| `t` | Open Type filter |
+| `l` | Open Label filter |
+| `/` or `f` | Focus text search input |
+| `?` | Open shortcuts overlay |
+
+#### Bulk actions (with selection)
+
+| Shortcut | Action |
+|----------|--------|
+| `p` | Set priority on selected tasks |
+| `s` | Set status on selected tasks |
+| `a` | Assign selected tasks |
+| `m` | Set milestone on selected tasks |
+| `t` | Set type on selected tasks |
+| `e` | Assign selected tasks to an epic |
+| `c` | Close selected tasks (with undo toast) |
+| `h` | Hide selected tasks (set dev status) |
+| `P` | Promote selected tasks (set open status) |
+| `Esc` | Clear selection / close bulk dropdowns |
+
+**Selection:** checkbox column (click), shift-click range, `x` on focused row, select-all header checkbox.
 
 ---
 
@@ -509,7 +545,7 @@ Require a hovered session on the /sessions (Work) page.
 
 The canonical implementation lives in `/inbox` (`src/routes/inbox/+page.svelte`). `/triage` is a second reference implementation. Both use the same keyboard shortcuts documented in the "Universal Bulk Selection" section above.
 
-**`/open-tasks`** — has a mouse-first checkbox selection (shift-click range, select-all header checkbox) but no j/k navigation, so `x`/`Shift+J`/`Shift+K` are not yet wired. Adding j/k nav to `/open-tasks` would unlock keyboard bulk selection there too.
+**`/open-tasks`** — uses checkbox-based selection (click, shift-click range, select-all header) with j/k navigation. Dual-mode single keys open filter dropdowns when nothing is selected and bulk action dropdowns when tasks are selected. See route section above for full shortcut table.
 
 ---
 

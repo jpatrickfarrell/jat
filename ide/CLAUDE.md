@@ -3029,6 +3029,7 @@ All routes with lists support `j`/`k` (or `↓`/`↑`) to navigate, `Enter` to s
 
 | Route | j/k Target | Enter Action | Extra Shortcuts |
 |-------|-----------|--------------|-----------------|
+| `/open-tasks` | Task rows | Open task detail drawer | `p/s/a/m/t/l` open filter (no sel) or bulk action (with sel); `e` epic; `c` close; `h` hide; `P` promote; `/` or `f` search; `?` help |
 | `/triage` | Queue items | Open task detail drawer | `s` spawn, `p` promote, `e` edit, `r` close, `d` delete, `/` search |
 | `/chores` | Scheduled task rows | Open chore detail | — |
 | `/automation` | Rule rows | Edit focused rule | `n` new rule |

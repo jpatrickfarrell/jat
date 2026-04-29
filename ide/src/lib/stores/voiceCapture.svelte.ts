@@ -29,6 +29,7 @@ import { getVocabularyForRoute } from '$lib/stores/voiceVocabulary.svelte';
 import { dispatchMatch } from '$lib/voice/dispatchMatch';
 import { recordMatch } from '$lib/voice/matchDebugBuffer';
 import { voice } from '$lib/voice/voiceSubsystem.svelte';
+import { assembleContext } from '$lib/voice';
 
 export type VoiceState = 'idle' | 'listening' | 'transcribing' | 'preview' | 'executing' | 'matched' | 'no-match';
 export type MicPermission = 'unknown' | 'granted' | 'denied';
@@ -526,10 +527,21 @@ async function llmDispatch(transcript: string, route: string): Promise<LlmDispat
 	try {
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), 12000);
+
+		// Assemble the framework-managed context blob (PRD §5.4). Failures here
+		// must never block dispatch — the endpoint treats `context` as optional.
+		let context: string | undefined;
+		try {
+			const assembled = await assembleContext({ route });
+			if (assembled.serialized.length > 0) context = assembled.serialized;
+		} catch {
+			// Builder threw — proceed without context.
+		}
+
 		const res = await fetch('/api/voice/dispatch', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ transcript, route }),
+			body: JSON.stringify({ transcript, route, ...(context ? { context } : {}) }),
 			signal: controller.signal
 		});
 		clearTimeout(timer);

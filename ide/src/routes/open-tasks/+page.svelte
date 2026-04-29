@@ -860,6 +860,20 @@
 	let milestoneFilterRef = $state<{ openDropdown: () => void } | null>(null);
 	let statusFilterEl = $state<HTMLDetailsElement | null>(null);
 
+	// Close status <details> dropdown when clicking outside
+	$effect(() => {
+		if (!statusFilterEl) return;
+		function handlePointerDown(e: PointerEvent) {
+			if (!statusFilterEl?.open) return;
+			const target = e.target as HTMLElement;
+			if (!target.closest('.status-dropdown-wrapper')) {
+				statusFilterEl!.open = false;
+			}
+		}
+		document.addEventListener('pointerdown', handlePointerDown);
+		return () => document.removeEventListener('pointerdown', handlePointerDown);
+	});
+
 	let shortcutsOpen = $state(false);
 
 	// Column header context menu
@@ -2705,6 +2719,7 @@
 							class:selected-row={isSelected}
 							data-nav-id={task.id}
 							tabindex="-1"
+							onmousedown={(e) => { if (e.shiftKey) e.preventDefault(); }}
 							oncontextmenu={(e) => handleContextMenu(task, e)}
 							onclick={(e) => {
 								const t = e.target as HTMLElement;

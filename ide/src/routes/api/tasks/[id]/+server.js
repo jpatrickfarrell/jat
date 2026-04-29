@@ -211,6 +211,9 @@ export async function PUT({ params, request }) {
 		if (updates.due_date !== undefined) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
 		}
+		if (updates.internal !== undefined) {
+			updateFields.internal = Boolean(updates.internal);
+		}
 
 		// Task identity (jat-9e5tc): requester/approver are mutable overrides.
 		// Accept string (email/name — backends normalize) or TaskActor object.
@@ -425,6 +428,9 @@ export async function PATCH({ params, request }) {
 		}
 		if (updates.due_date !== undefined) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
+		}
+		if (updates.internal !== undefined) {
+			updateFields.internal = Boolean(updates.internal);
 		}
 
 		// Task identity (jat-9e5tc): requester/approver are mutable overrides.

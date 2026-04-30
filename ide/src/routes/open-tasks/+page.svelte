@@ -150,15 +150,12 @@
 	}
 
 	const assigneeGroups = $derived.by<SearchDropdownGroup[]>(() => {
-		const names = [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])]
-			.filter(isHumanAssignee)
-			.sort();
 		return [{
 			label: 'Assignee',
 			options: [
 				{ value: '', label: 'All Assignees' },
 				{ value: '__unassigned__', label: 'Unassigned' },
-				...names.map(n => ({ value: n, label: n }))
+				...humanAssignees.map(n => ({ value: n, label: n }))
 			]
 		}];
 	});
@@ -166,6 +163,8 @@
 	const allLabels = $derived([...new Set(tasks.flatMap(t => t.labels ?? []))].sort());
 	const allAssignees = $derived([...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort());
 	const humanAssignees = $derived(allAssignees.filter(isHumanAssignee));
+	const allApprovers = $derived([...new Set(tasks.map(t => t.approver?.name || t.approver?.email).filter(Boolean) as string[])].sort());
+	const allRequesters = $derived([...new Set(tasks.map(t => t.requester?.name || t.requester?.email).filter(Boolean) as string[])].sort());
 
 	const labelGroups = $derived.by<SearchDropdownGroup[]>(() => {
 		return [{
@@ -238,27 +237,21 @@
 	});
 
 	const requesterGroups = $derived.by<SearchDropdownGroup[]>(() => {
-		const names = [...new Set(
-			tasks.map(t => t.requester?.name || t.requester?.email).filter(Boolean) as string[]
-		)].sort();
 		return [{
 			label: 'Requester',
 			options: [
 				{ value: '', label: 'All Requesters' },
-				...names.map(n => ({ value: n, label: n }))
+				...allRequesters.map(n => ({ value: n, label: n }))
 			]
 		}];
 	});
 
 	const approverGroups = $derived.by<SearchDropdownGroup[]>(() => {
-		const names = [...new Set(
-			tasks.map(t => t.approver?.name || t.approver?.email).filter(Boolean) as string[]
-		)].sort();
 		return [{
 			label: 'Approver',
 			options: [
 				{ value: '', label: 'All Approvers' },
-				...names.map(n => ({ value: n, label: n }))
+				...allApprovers.map(n => ({ value: n, label: n }))
 			]
 		}];
 	});

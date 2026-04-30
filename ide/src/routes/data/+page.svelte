@@ -92,7 +92,7 @@
 
 	// State — selectedProject synced from URL ?project= param (set by TopBar ProjectSelector)
 	let selectedProject = $state<string | null>(null);
-	let tables = $state<TableInfo[]>([]);
+	let tables = $state.raw<TableInfo[]>([]);
 	let tableSortMode = $state<TableSortMode>('name-asc');
 	// Favorite views (persisted per project in localStorage)
 	let favoriteViews = $state<Set<string>>(new Set());
@@ -136,7 +136,7 @@
 		return t?.display_name || selectedTable;
 	});
 	let schema = $state<ColumnInfo[]>([]);
-	let rows = $state<any[]>([]);
+	let rows = $state.raw<any[]>([]);
 	let totalRows = $state(0);
 
 	// Relation column display lookups: { colName: { rowid: displayValue } }
@@ -263,6 +263,11 @@
 	let tableConditionalFormat = $state<TableConditionalFormat | null>(null);
 	let savedConditionalFormat = $state<TableConditionalFormat | null>(null); // snapshot for cancel-restore
 	let showConditionalFormatPanel = $state(false);
+
+	// Precomputed semantic type groups (avoid inline filter calls in template)
+	const semanticBasic = $derived(SEMANTIC_TYPE_INFO.filter(t => t.group === 'basic'));
+	const semanticRich = $derived(SEMANTIC_TYPE_INFO.filter(t => t.group === 'rich'));
+	const semanticAdvanced = $derived(SEMANTIC_TYPE_INFO.filter(t => t.group === 'advanced'));
 
 	// Precompute column ranges for color scales
 	const columnRanges = $derived.by(() => {
@@ -574,6 +579,23 @@
 	// Column resize state (guide line only — resize logic is in the columnResize action)
 	let resizeGuideX = $state<number | null>(null);
 	let dataTableContainerEl: HTMLDivElement | undefined = $state();
+
+	// Virtual scroll for data table rows
+	const VIRT_ROW_HEIGHT = 36;
+	const VIRT_BUFFER = 8;
+	let virtScrollTop = $state(0);
+	let virtContainerHeight = $state(600);
+	const virtualWindow = $derived.by(() => {
+		const start = Math.max(0, Math.floor(virtScrollTop / VIRT_ROW_HEIGHT) - VIRT_BUFFER);
+		const end = Math.min(rows.length, Math.ceil((virtScrollTop + virtContainerHeight) / VIRT_ROW_HEIGHT) + VIRT_BUFFER);
+		return {
+			start,
+			end,
+			items: rows.slice(start, end),
+			topPad: start * VIRT_ROW_HEIGHT,
+			bottomPad: Math.max(0, (rows.length - end) * VIRT_ROW_HEIGHT),
+		};
+	});
 
 	// Export dropdown
 	let showExportDropdown = $state(false);
@@ -3987,21 +4009,21 @@
 													{#if mcAddColOpen}
 														<div class="mc-add-col-submenu">
 															<div class="submenu-group-label">basic</div>
-															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'basic') as typeInfo}
+															{#each semanticBasic as typeInfo}
 																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
 																	<span class="type-icon">{typeInfo.icon}</span>
 																	{typeInfo.label}
 																</button>
 															{/each}
 															<div class="submenu-group-label">rich</div>
-															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'rich') as typeInfo}
+															{#each semanticRich as typeInfo}
 																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
 																	<span class="type-icon">{typeInfo.icon}</span>
 																	{typeInfo.label}
 																</button>
 															{/each}
 															<div class="submenu-group-label">advanced</div>
-															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'advanced') as typeInfo}
+															{#each semanticAdvanced as typeInfo}
 																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
 																	<span class="type-icon">{typeInfo.icon}</span>
 																	{typeInfo.label}
@@ -4102,7 +4124,7 @@
 
 					<!-- Data table + conditional format panel -->
 					<div class="data-table-with-panel" class:has-cf-panel={showConditionalFormatPanel}>
-					<div class="data-table-container" bind:this={dataTableContainerEl}>
+					<div class="data-table-container" bind:this={dataTableContainerEl} bind:clientHeight={virtContainerHeight} onscroll={(e) => virtScrollTop = e.currentTarget.scrollTop}>
 						{#if resizeGuideX !== null}
 							<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
 						{/if}
@@ -4183,7 +4205,11 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each rows as row, rowIdx}
+									{#if virtualWindow.topPad > 0}
+										<tr style="height: {virtualWindow.topPad}px; line-height: 0;"><td colspan={orderedColumns.length + 2}></td></tr>
+									{/if}
+									{#each virtualWindow.items as row, i}
+									{@const rowIdx = virtualWindow.start + i}
 									{@const isSelectedRow = selectedCell?.rowIdx === rowIdx}
 										<tr class:row-has-selection={isSelectedRow} oncontextmenu={(e) => handleRowContextMenu(row, rowIdx, e)}>
 											<td class="row-id-col">{row.rowid}</td>
@@ -4228,6 +4254,9 @@
 											{/if}
 										</tr>
 									{/each}
+									{#if virtualWindow.bottomPad > 0}
+										<tr style="height: {virtualWindow.bottomPad}px; line-height: 0;"><td colspan={orderedColumns.length + 2}></td></tr>
+									{/if}
 									<!-- Pseudo add-row button (Coda/Excel style) -->
 									{#if !addingRow && !isSystemTableSelected}
 										<tr class="add-row-hint" onclick={() => startAddRow()}>
@@ -5265,21 +5294,21 @@
 		{#if insertSubmenuOpen === 'before'}
 			<div class="col-context-submenu">
 				<div class="submenu-group-label">basic</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'basic') as typeInfo}
+				{#each semanticBasic as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'before')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}
 					</button>
 				{/each}
 				<div class="submenu-group-label">rich</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'rich') as typeInfo}
+				{#each semanticRich as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'before')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}
 					</button>
 				{/each}
 				<div class="submenu-group-label">advanced</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'advanced') as typeInfo}
+				{#each semanticAdvanced as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'before')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}
@@ -5304,21 +5333,21 @@
 		{#if insertSubmenuOpen === 'after'}
 			<div class="col-context-submenu">
 				<div class="submenu-group-label">basic</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'basic') as typeInfo}
+				{#each semanticBasic as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'after')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}
 					</button>
 				{/each}
 				<div class="submenu-group-label">rich</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'rich') as typeInfo}
+				{#each semanticRich as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'after')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}
 					</button>
 				{/each}
 				<div class="submenu-group-label">advanced</div>
-				{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'advanced') as typeInfo}
+				{#each semanticAdvanced as typeInfo}
 					<button class="col-context-menu-item" onclick={() => handleCtxInsertColumn(typeInfo.type, typeInfo.sqliteType, 'after')}>
 						<span class="type-icon">{typeInfo.icon}</span>
 						{typeInfo.label}

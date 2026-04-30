@@ -122,7 +122,7 @@
 		body: string;
 	}
 
-	let projects = $state<ProjectData[]>([]);
+	let projects = $state.raw<ProjectData[]>([]);
 	let summary = $state<Summary | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -199,7 +199,7 @@
 	let contractNotes = $state('');
 
 	// Milestone state
-	let templates = $state<MilestoneTemplate[]>([]);
+	let templates = $state.raw<MilestoneTemplate[]>([]);
 	let selectedTemplateId = $state<string | null>(null);
 	let milestones = $state<MilestoneRow[]>([]);
 	let loadingTemplates = $state(false);
@@ -208,7 +208,7 @@
 	let contractTerms = $state<TermRow[]>([]);
 
 	// Task picker state
-	let projectTasks = $state<ProjectTask[]>([]);
+	let projectTasks = $state.raw<ProjectTask[]>([]);
 	let loadingTasks = $state(false);
 	let taskSearchTerm = $state('');
 	let taskPickerMilestoneIndex = $state<number | null>(null);
@@ -379,6 +379,19 @@
 	const projectsWithContracts = $derived(projects.filter(p => p.contracts.length > 0));
 	const projectsWithoutContracts = $derived(projects.filter(p => p.contracts.length === 0 && !p.error));
 	const projectsWithErrors = $derived(projects.filter(p => p.error));
+
+	// Per-project contract totals (avoids inline .reduce() inside {#each} in template)
+	const projectContractTotals = $derived(
+		new Map(projects.map(p => [
+			p.projectKey,
+			p.contracts.reduce((sum, c) => sum + c.total_amount, 0)
+		]))
+	);
+
+	// Comma-separated names for projects without contracts
+	const projectsWithoutContractsNames = $derived(
+		projectsWithoutContracts.map(p => p.name).join(', ')
+	);
 
 	// Contract creation functions
 	async function openCreateModal() {
@@ -1212,7 +1225,7 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<span class="font-semibold text-sm sm:text-base">
-										{formatCents(project.contracts.reduce((sum, c) => sum + c.total_amount, 0))}
+										{formatCents(projectContractTotals.get(project.projectKey) ?? 0)}
 									</span>
 									<svg
 										class="w-4 h-4 transition-transform shrink-0 opacity-50"
@@ -2200,7 +2213,7 @@
 				{#if projectsWithoutContracts.length > 0}
 					<div class="text-sm opacity-40 mt-2">
 						{projectsWithoutContracts.length} project{projectsWithoutContracts.length !== 1 ? 's' : ''} connected with no contracts:
-						{projectsWithoutContracts.map(p => p.name).join(', ')}
+						{projectsWithoutContractsNames}
 					</div>
 				{/if}
 			</div>

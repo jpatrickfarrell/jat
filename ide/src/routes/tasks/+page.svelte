@@ -144,15 +144,15 @@
 	];
 
 	// Sessions state
-	let sessions = $state<TmuxSession[]>([]);
+	let sessions = $state.raw<TmuxSession[]>([]);
 	let sessionsLoading = $state(true);
 	let sessionsError = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let recoveryPollInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Open tasks state
-	let openTasks = $state<Task[]>([]);
-	let allTasks = $state<Task[]>([]); // For epic mapping (includes closed)
+	let openTasks = $state.raw<Task[]>([]);
+	let allTasks = $state.raw<Task[]>([]); // For epic mapping (includes closed)
 	let tasksLoading = $state(true);
 	let tasksError = $state<string | null>(null);
 
@@ -224,7 +224,7 @@
 		project: string;
 		lastActivity?: string;
 	}
-	let recoverableSessions = $state<RecoverableSession[]>([]);
+	let recoverableSessions = $state.raw<RecoverableSession[]>([]);
 
 	// Spawn loading state
 	let spawningTaskId = $state<string | null>(null);
@@ -235,7 +235,7 @@
 	let swarmAutoExpandedEpicId = $state<string | null>(null); // epic expanded by hover (collapse on leave)
 
 	// Completed tasks state (loaded day-by-day from API)
-	let completedDayGroups = $state<DayGroup[]>([]);
+	let completedDayGroups = $state.raw<DayGroup[]>([]);
 	let completedLoading = $state(false);
 	let completedLoadingMore = $state(false);
 	let completedDaysSearched = $state(0); // how many days back we've searched
@@ -595,6 +595,68 @@
 
 		return grouped;
 	});
+
+	// Per-project derived slices (avoids repeating .filter() in the template)
+	const selectedProjectSessions = $derived(
+		selectedProject ? (sessionsByProject.get(selectedProject) ?? []) : []
+	);
+	const selectedProjectTasks = $derived(
+		selectedProject ? (tasksByProject.get(selectedProject) ?? []) : []
+	);
+	const selectedProjectPausedSessions = $derived(
+		selectedProject
+			? recoverableSessions.filter(s => s.project.toLowerCase() === selectedProject.toLowerCase())
+			: []
+	);
+	const selectedProjectWorkPaused = $derived(
+		selectedProjectPausedSessions.filter(s => s.taskType !== 'chat')
+	);
+	const selectedProjectChatSessions = $derived(
+		selectedProjectPausedSessions.filter(s => s.taskType === 'chat')
+	);
+	const selectedProjectWaitingTasks = $derived(
+		selectedProject
+			? waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'))
+			: []
+	);
+
+	// Sorted epic entries for the Sessions subsection (computed once per render cycle, not per template pass)
+	const sortedSessionEpicEntries = $derived.by(() => {
+		if (!selectedProject) return [] as [string | null, TmuxSession[]][];
+		const byEpic = getSessionsByEpic(selectedProjectSessions);
+		return Array.from(byEpic.entries()).sort((a, b) => {
+			const [epicIdA] = a;
+			const [epicIdB] = b;
+			if (epicIdA === null) return 1;
+			if (epicIdB === null) return -1;
+			const epicA = getEpicTask(epicIdA);
+			const epicB = getEpicTask(epicIdB);
+			return (epicA?.priority ?? 99) - (epicB?.priority ?? 99);
+		});
+	});
+
+	// Grouped tasks by epic for the selected project (Map, used for .size checks)
+	const selectedTasksByEpic = $derived(
+		selectedProject ? getTasksByEpic(selectedProjectTasks) : new Map<string | null, Task[]>()
+	);
+
+	// Sorted epic entries for the Open Tasks subsection
+	const sortedTaskEpicEntries = $derived.by(() => {
+		return Array.from(selectedTasksByEpic.entries()).sort((a, b) => {
+			const [epicIdA] = a;
+			const [epicIdB] = b;
+			if (epicIdA === null) return 1;
+			if (epicIdB === null) return -1;
+			const epicA = getEpicTask(epicIdA);
+			const epicB = getEpicTask(epicIdB);
+			return (epicA?.priority ?? 99) - (epicB?.priority ?? 99);
+		});
+	});
+
+	// Total open task count across all epic groups (used in subsection badge)
+	const openTasksCount = $derived(
+		sortedTaskEpicEntries.reduce((sum, [, tasks]) => sum + tasks.length, 0)
+	);
 
 	// Group tasks by epic within a project (only open tasks)
 	function getTasksByEpic(projectTasks: Task[]): Map<string | null, Task[]> {
@@ -2093,16 +2155,10 @@
 	{:else}
 		<!-- Selected Project Content -->
 		{#if selectedProject}
-			{@const projectSessions =
-				sessionsByProject.get(selectedProject) || []}
-			{@const projectTasks = tasksByProject.get(selectedProject) || []}
-			{@const allPausedSessions =
-				getProjectPausedSessions(selectedProject)}
-			{@const projectPausedSessions = allPausedSessions.filter(s => s.taskType !== 'chat')}
-			{@const projectChatSessions = allPausedSessions.filter(s => s.taskType === 'chat')}
-			{@const projectWaitingTasks = waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'))}
-			{@const sessionsByEpic = getSessionsByEpic(projectSessions)}
-			{@const tasksByEpic = getTasksByEpic(projectTasks)}
+			{@const projectSessions = selectedProjectSessions}
+			{@const projectPausedSessions = selectedProjectWorkPaused}
+			{@const projectChatSessions = selectedProjectChatSessions}
+			{@const projectWaitingTasks = selectedProjectWaitingTasks}
 			{@const projectColor =
 				projectColors[selectedProject] || "oklch(0.70 0.15 200)"}
 
@@ -2199,22 +2255,7 @@
 
 						{#if !isSubsectionCollapsed(selectedProject!, "sessions")}
 							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
-							{@const sortedSessionEntries = Array.from(
-								sessionsByEpic.entries(),
-							).sort((a, b) => {
-								const [epicIdA] = a;
-								const [epicIdB] = b;
-								// Standalone (null) always goes last
-								if (epicIdA === null) return 1;
-								if (epicIdB === null) return -1;
-								// Sort epics by priority (lower = higher priority)
-								const epicA = getEpicTask(epicIdA);
-								const epicB = getEpicTask(epicIdB);
-								const priorityA = epicA?.priority ?? 99;
-								const priorityB = epicB?.priority ?? 99;
-								return priorityA - priorityB;
-							})}
-							{#each sortedSessionEntries as [epicId, epicSessions] (epicId ?? "standalone")}
+							{#each sortedSessionEpicEntries as [epicId, epicSessions] (epicId ?? "standalone")}
 								{@const epic = epicId
 									? getEpicTask(epicId)
 									: null}
@@ -2540,7 +2581,7 @@
 				{/if}
 
 				<!-- Open Tasks Section (show if filtered tasks exist OR unfiltered tasks exist but filter hides them) -->
-				{#if tasksByEpic.size > 0 || (dueDateFilter !== "all" && filterCounts.all > 0)}
+				{#if selectedTasksByEpic.size > 0 || (dueDateFilter !== "all" && filterCounts.all > 0)}
 					<div class="subsection open-tasks-subsection">
 						<div class="subsection-header-row">
 							<button
@@ -2576,10 +2617,7 @@
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.70 0.15 200);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" /></svg>
 								<span>Open Tasks</span>
 								<span class="subsection-count"
-									>{Array.from(tasksByEpic.values()).reduce(
-										(sum, tasks) => sum + tasks.length,
-										0,
-									)}</span
+									>{openTasksCount}</span
 								>
 							</button>
 							<!-- Due Date Filter Chips (visible when section expanded) -->
@@ -2606,31 +2644,16 @@
 							{/if}
 						</div>
 
-						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && tasksByEpic.size === 0 && dueDateFilter !== "all"}
+						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && selectedTasksByEpic.size === 0 && dueDateFilter !== "all"}
 							<div class="filter-empty-state">
 								<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
 								<button class="filter-reset-btn" onclick={() => (dueDateFilter = "all")}>Show all tasks</button>
 							</div>
 						{/if}
 
-						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && tasksByEpic.size > 0}
+						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && selectedTasksByEpic.size > 0}
 							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
-							{@const sortedTaskEntries = Array.from(
-								tasksByEpic.entries(),
-							).sort((a, b) => {
-								const [epicIdA] = a;
-								const [epicIdB] = b;
-								// Standalone (null) always goes last
-								if (epicIdA === null) return 1;
-								if (epicIdB === null) return -1;
-								// Sort epics by priority (lower = higher priority)
-								const epicA = getEpicTask(epicIdA);
-								const epicB = getEpicTask(epicIdB);
-								const priorityA = epicA?.priority ?? 99;
-								const priorityB = epicB?.priority ?? 99;
-								return priorityA - priorityB;
-							})}
-							{#each sortedTaskEntries as [epicId, epicTasks] (epicId ?? "standalone")}
+							{#each sortedTaskEpicEntries as [epicId, epicTasks] (epicId ?? "standalone")}
 								{@const epic = epicId
 									? getEpicTask(epicId)
 									: null}
@@ -3044,7 +3067,7 @@
 				/>
 
 				<!-- Empty state for selected project -->
-				{#if projectSessions.length === 0 && tasksByEpic.size === 0 && filterCounts.all === 0 && projectPausedSessions.length === 0 && projectChatSessions.length === 0 && completedCount === 0}
+				{#if projectSessions.length === 0 && selectedTasksByEpic.size === 0 && filterCounts.all === 0 && projectPausedSessions.length === 0 && projectChatSessions.length === 0 && completedCount === 0}
 					<div class="project-empty-state">
 						<span
 							>No active sessions or open tasks for {selectedProject}</span

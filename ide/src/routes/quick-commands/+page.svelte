@@ -87,9 +87,9 @@
 	}
 
 	// --- State ---
-	let templates = $state<Template[]>([]);
-	let projects = $state<Project[]>([]);
-	let history = $state<ExecutionResult[]>([]);
+	let templates = $state.raw<Template[]>([]);
+	let projects = $state.raw<Project[]>([]);
+	let history = $state.raw<ExecutionResult[]>([]);
 	let isLoading = $state(true);
 
 	// Command input state
@@ -149,7 +149,7 @@
 	let templateSchedules = $state<Record<string, { taskId: string; cron: string; nextRun: string; project: string; runMode: string }>>({});
 
 	// Pipeline state
-	let pipelines = $state<Pipeline[]>([]);
+	let pipelines = $state.raw<Pipeline[]>([]);
 	let showPipelineEditor = $state(false);
 	let editingPipeline = $state<Pipeline | null>(null);
 	let pipelineEditorName = $state('');
@@ -171,6 +171,17 @@
 
 	// Active tab
 	let activeTab = $state<'templates' | 'history' | 'pipelines'>('templates');
+
+	// --- Derived values ---
+	const SCHEDULE_CRON_PRESETS = $derived(
+		CRON_PRESETS.filter(p =>
+			['0 * * * *', '0 9 * * *', '0 9 * * 1-5', '0 */6 * * *', '*/30 * * * *', '0 0 * * 0'].includes(p.cron)
+		)
+	);
+
+	const pipelineRunDoneCount = $derived(
+		pipelineRunSteps.filter(s => s.status === 'done').length
+	);
 
 	const OUTPUT_ACTIONS: Array<{ id: OutputAction; label: string; icon: string; desc: string }> = [
 		{ id: 'display', label: 'Display', icon: 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z', desc: 'Show result inline' },
@@ -1881,7 +1892,7 @@
 				</div>
 				<!-- Progress indicator -->
 				<span class="text-xs px-2 py-1 rounded" style="background: oklch(0.25 0.06 270); color: oklch(0.75 0.10 270);">
-					{pipelineRunSteps.filter(s => s.status === 'done').length}/{pipelineRunSteps.length} steps
+					{pipelineRunDoneCount}/{pipelineRunSteps.length} steps
 				</span>
 			</div>
 
@@ -2350,7 +2361,7 @@
 						style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.90 0.01 250);"
 					/>
 					<div class="flex flex-wrap gap-1 mt-1.5">
-						{#each CRON_PRESETS.filter(p => ['0 * * * *', '0 9 * * *', '0 9 * * 1-5', '0 */6 * * *', '*/30 * * * *', '0 0 * * 0'].includes(p.cron)) as preset}
+						{#each SCHEDULE_CRON_PRESETS as preset}
 							<button
 								onclick={() => scheduleCron = preset.cron}
 								class="px-2 py-0.5 rounded text-xs transition-colors"

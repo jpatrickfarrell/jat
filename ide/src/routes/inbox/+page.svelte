@@ -97,7 +97,7 @@
 	let bulkWorking = $state(false);
 	let bulkSpawning = $state(false);
 	let bulkSpawnProgress = $state<{ done: number; total: number } | null>(null);
-	let epics = $state<Task[]>([]);
+	let epics = $state.raw<Task[]>([]);
 	let bulkEpicShowCreate = $state(false);
 	let bulkEpicNewTitle = $state('');
 	let bulkEpicCreating = $state(false);
@@ -132,8 +132,8 @@
 	// Using sorted string arrays instead of Sets because Svelte 5.41 does not
 	// track SvelteSet/Set method calls (.has, .size) from $derived.by across
 	// mutations. Plain arrays with $state work reliably.
-	let filterStatuses = $state<string[]>([...DEFAULT_STATUSES]);
-	let filterPriorities = $state<number[]>([]);
+	let filterStatuses = $state.raw<string[]>([...DEFAULT_STATUSES]);
+	let filterPriorities = $state.raw<number[]>([]);
 	let filterProject = $state<string>("");
 	type SortBy = "priority" | "age" | "updated" | "status" | "type";
 	type SortDir = "asc" | "desc";
@@ -148,10 +148,10 @@
 	};
 	let sortBy = $state<SortBy>("priority");
 	let sortDir = $state<SortDir>(DEFAULT_SORT_DIR.priority);
-	let filterTypes = $state<string[]>([]);
+	let filterTypes = $state.raw<string[]>([]);
 	let filterAssignee = $state<string>("");
 	let filterSearch = $state<string>("");
-	let filterMilestones = $state<string[]>([]);
+	let filterMilestones = $state.raw<string[]>([]);
 	let hydrated = $state(false);
 
 	// Milestones are Supabase-backed and project-scoped. We load them on-demand
@@ -1583,6 +1583,12 @@
 		});
 	});
 
+	// Milestones sorted by sort_order for the filter chip group. Extracted from
+	// the template so the sort doesn't run on every render cycle.
+	const sortedMilestones = $derived(
+		[...milestoneList].sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
+	);
+
 	// Reverse index: taskId → milestone (the first milestone it appears in —
 	// a task should only belong to one, but we take the earliest sort_order
 	// just in case). Recomputed when milestoneList changes. Used by the task
@@ -2094,7 +2100,7 @@
 						{:else if milestoneList.length === 0}
 							<!-- Empty case suppressed — nothing to show. -->
 						{:else}
-							{#each [...milestoneList].sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity)) as m, i (m.id)}
+							{#each sortedMilestones as m, i (m.id)}
 								{@const active = filterMilestones.includes(m.id)}
 								{@const done = m.status === "paid" || m.status === "closed"}
 								{@const n = m.sort_order ?? i}

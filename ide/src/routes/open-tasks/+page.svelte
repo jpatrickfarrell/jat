@@ -165,6 +165,7 @@
 
 	const allLabels = $derived([...new Set(tasks.flatMap(t => t.labels ?? []))].sort());
 	const allAssignees = $derived([...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort());
+	const humanAssignees = $derived(allAssignees.filter(isHumanAssignee));
 
 	const labelGroups = $derived.by<SearchDropdownGroup[]>(() => {
 		return [{
@@ -3603,7 +3604,7 @@
 				<button class="floating-dropdown-item" onclick={() => handleBulkAssign(null)}>
 					<span style="opacity:0.5">— Unassigned</span>
 				</button>
-				{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].filter(isHumanAssignee).sort() as name}
+				{#each humanAssignees as name}
 					<button class="floating-dropdown-item" onclick={() => handleBulkAssign(name)}>
 						{name}
 					</button>
@@ -3772,7 +3773,7 @@
 		{/each}
 	{:else if colCtxCol === 'assignee'}
 		<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkAssign(null))}>— Unassigned</button>
-		{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].filter(isHumanAssignee).sort() as name}
+		{#each humanAssignees as name}
 			<button class="col-ctx-item" onclick={() => colCtxApply(() => handleBulkAssign(name))}>{name}</button>
 		{/each}
 	{:else if colCtxCol === 'milestone'}

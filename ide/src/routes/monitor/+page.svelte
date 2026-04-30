@@ -7,6 +7,9 @@
 	import { fade } from 'svelte/transition';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 
+	// Maximum lines rendered in expanded (hover) view before "show all" toggle appears.
+	const MAX_VISIBLE_LINES = 200;
+
 	interface AgentCard {
 		sessionName: string;
 		agentName: string;
@@ -15,13 +18,16 @@
 		taskTitle?: string;
 		taskPriority?: number;
 		outputTail: string[];   // last 3 lines for compact view
-		outputFull: string[];   // last 12 lines for hover/expanded view
+		outputFull: string[];   // all filtered lines for hover/expanded view
 		tokens?: number;
 	}
 
-	let agents = $state<AgentCard[]>([]);
+	// $state.raw: agents is always fully replaced on each fetch, never mutated in place.
+	let agents = $state.raw<AgentCard[]>([]);
 	let loading = $state(true);
 	let hoveredAgent = $state<string | null>(null);
+	// Per-session "show all" toggle — key is sessionName, value is whether all lines are shown.
+	let showAllLines = $state<Record<string, boolean>>({});
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 	const REFRESH_MS = 3000;
@@ -72,6 +78,50 @@
 		return lines.slice(-n);
 	}
 
+	// All filtered lines without a tail cap — used for outputFull so we have the full buffer
+	// available but rendering is capped via MAX_VISIBLE_LINES / showAllLines.
+	function allLines(output: string): string[] {
+		return stripAnsi(output || '')
+			.split('\n')
+			.map(l => l.trimEnd())
+			.filter(l => l.length > 0 && !isStatusLine(l));
+	}
+
+	// Derived: for each agent, compute the lines currently visible in the terminal tail.
+	// Runs once when hoveredAgent or showAllLines changes, NOT on every render tick.
+	const visibleLines = $derived(
+		Object.fromEntries(
+			agents.map(agent => {
+				const isHovered = hoveredAgent === agent.sessionName;
+				if (!isHovered) return [agent.sessionName, agent.outputTail];
+				const full = agent.outputFull;
+				const showAll = showAllLines[agent.sessionName];
+				const lines = showAll ? full : full.slice(-MAX_VISIBLE_LINES);
+				return [agent.sessionName, lines];
+			})
+		)
+	);
+
+	// Derived: true when the expanded view is capped and the user can unlock "show all".
+	const isCapped = $derived(
+		Object.fromEntries(
+			agents.map(agent => [
+				agent.sessionName,
+				agent.outputFull.length > MAX_VISIBLE_LINES && !showAllLines[agent.sessionName],
+			])
+		)
+	);
+
+	// Derived: truncated task titles (avoids inline .slice() in the template).
+	const truncatedTitles = $derived(
+		Object.fromEntries(
+			agents.map(agent => {
+				const t = agent.taskTitle ?? '';
+				return [agent.sessionName, t.length > 60 ? t.slice(0, 60) + '…' : t];
+			})
+		)
+	);
+
 	async function fetchAgents() {
 		try {
 			const workRes = await fetch('/api/work?capture_all=true');
@@ -92,7 +142,7 @@
 					taskTitle: task?.title,
 					taskPriority: task?.priority,
 					outputTail: tailLines(output, 3),
-					outputFull: tailLines(output, 12),
+					outputFull: allLines(output),
 					tokens: ws.tokens,
 				});
 			}
@@ -128,6 +178,10 @@
 	function getPriorityColor(p?: number) {
 		const colors = ['oklch(0.65 0.20 25)', 'oklch(0.70 0.18 50)', 'oklch(0.65 0.15 200)', 'oklch(0.50 0.04 250)', 'oklch(0.40 0.02 250)'];
 		return colors[p ?? 2] ?? colors[2];
+	}
+
+	function toggleShowAll(sessionName: string) {
+		showAllLines = { ...showAllLines, [sessionName]: !showAllLines[sessionName] };
 	}
 </script>
 
@@ -182,12 +236,13 @@
 
 					<!-- Task title -->
 					{#if agent.taskTitle}
+						{@const displayTitle = isHovered ? agent.taskTitle : truncatedTitles[agent.sessionName]}
 						<div class="card-task">
 							{#if agent.taskPriority !== undefined}
 								<span class="task-priority" style="color: {getPriorityColor(agent.taskPriority)}">P{agent.taskPriority}</span>
 							{/if}
 							<span class="task-title" title={agent.taskTitle}>
-								{isHovered && agent.taskTitle.length > 60 ? agent.taskTitle : agent.taskTitle.slice(0, 60) + (agent.taskTitle.length > 60 ? '…' : '')}
+								{displayTitle}
 							</span>
 						</div>
 						{#if agent.taskId}
@@ -198,12 +253,18 @@
 					{/if}
 
 					<!-- Terminal output tail -->
+					{@const lines = visibleLines[agent.sessionName] ?? []}
 					<div class="terminal-tail" class:tail-expanded={isHovered}>
-						{#each (isHovered ? agent.outputFull : agent.outputTail) as line}
+						{#each lines as line}
 							<div class="tail-line">{line || ' '}</div>
 						{/each}
-						{#if (!isHovered ? agent.outputTail : agent.outputFull).length === 0}
+						{#if lines.length === 0}
 							<div class="tail-line tail-empty">no output</div>
+						{/if}
+						{#if isHovered && isCapped[agent.sessionName]}
+							<button class="show-all-btn" onclick={() => toggleShowAll(agent.sessionName)}>
+								show all {agent.outputFull.length} lines
+							</button>
 						{/if}
 					</div>
 
@@ -426,4 +487,20 @@
 		background: oklch(0.20 0.03 220 / 0.4);
 	}
 	.action-link:hover { background: oklch(0.24 0.05 220 / 0.6); }
+
+	.show-all-btn {
+		display: block;
+		width: 100%;
+		margin-top: 0.25rem;
+		padding: 0.15rem 0;
+		font-size: 0.60rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.50 0.08 220);
+		background: transparent;
+		border: none;
+		border-top: 1px solid oklch(0.20 0.02 250);
+		cursor: pointer;
+		text-align: center;
+	}
+	.show-all-btn:hover { color: oklch(0.65 0.10 220); }
 </style>

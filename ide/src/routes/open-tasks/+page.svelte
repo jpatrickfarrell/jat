@@ -163,13 +163,15 @@
 		}];
 	});
 
+	const allLabels = $derived([...new Set(tasks.flatMap(t => t.labels ?? []))].sort());
+	const allAssignees = $derived([...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort());
+
 	const labelGroups = $derived.by<SearchDropdownGroup[]>(() => {
-		const all = [...new Set(tasks.flatMap(t => t.labels ?? []))].sort();
 		return [{
 			label: 'Label',
 			options: [
 				{ value: '', label: 'All Labels' },
-				...all.map(l => ({ value: l, label: l }))
+				...allLabels.map(l => ({ value: l, label: l }))
 			]
 		}];
 	});
@@ -2347,13 +2349,13 @@
 </svelte:head>
 
 <datalist id="opentasks-assignee-suggestions">
-	{#each [...new Set(tasks.map(t => t.assignee).filter(Boolean) as string[])].sort() as name}
+	{#each allAssignees as name}
 		<option value={name}></option>
 	{/each}
 </datalist>
 
 <datalist id="opentasks-label-suggestions">
-	{#each [...new Set(tasks.flatMap(t => t.labels || []))].sort() as label}
+	{#each allLabels as label}
 		<option value={label}></option>
 	{/each}
 </datalist>

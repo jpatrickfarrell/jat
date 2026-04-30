@@ -82,8 +82,8 @@
 		contract_title: string | null;
 	}
 
-	// Data state
-	let tasks = $state<Task[]>([]);
+	// Data state — $state.raw: mutations always replace the full array, deep proxy tracking buys nothing
+	let tasks = $state.raw<Task[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -871,6 +871,23 @@
 	let resizeGuideX = $state<number | null>(null);
 	let tableContainerEl: HTMLElement | undefined = $state();
 
+	// Virtual scroll
+	const VIRT_ROW_HEIGHT = 40;
+	const VIRT_BUFFER = 8;
+	let virtScrollTop = $state(0);
+	let virtContainerHeight = $state(600);
+	const virtualWindow = $derived.by(() => {
+		const start = Math.max(0, Math.floor(virtScrollTop / VIRT_ROW_HEIGHT) - VIRT_BUFFER);
+		const end = Math.min(renderItems.length, Math.ceil((virtScrollTop + virtContainerHeight) / VIRT_ROW_HEIGHT) + VIRT_BUFFER);
+		return {
+			start,
+			end,
+			items: renderItems.slice(start, end),
+			topPad: start * VIRT_ROW_HEIGHT,
+			bottomPad: Math.max(0, (renderItems.length - end) * VIRT_ROW_HEIGHT),
+		};
+	});
+
 	// Bulk selection
 	let selectedTasks = $state<Set<string>>(new Set());
 	let lastClickedTaskId = $state<string | null>(null);
@@ -1202,11 +1219,7 @@
 		return filteredTasks.map(t => ({ type: 'task' as const, task: t }));
 	});
 
-	// Unique types for filter
-	const taskTypes = $derived.by(() => {
-		const types = new Set(tasks.map(t => t.issue_type));
-		return [...types].sort();
-	});
+	const taskTypes = $derived([...new Set(tasks.map(t => t.issue_type))].sort());
 
 	// Stats
 	const stats = $derived.by(() => {
@@ -2786,7 +2799,13 @@
 				</button>
 			</div>
 		{/if}
-		<div class="table-container" class:has-selection={selectionCount > 0} bind:this={tableContainerEl}>
+		<div
+			class="table-container"
+			class:has-selection={selectionCount > 0}
+			bind:this={tableContainerEl}
+			bind:clientHeight={virtContainerHeight}
+			onscroll={(e) => virtScrollTop = e.currentTarget.scrollTop}
+		>
 			{#if resizeGuideX !== null}
 				<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
 			{/if}
@@ -2848,7 +2867,10 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each renderItems as item (item.type === 'header' ? `__group_${item.group.key}` : item.task.id)}
+					{#if virtualWindow.topPad > 0}
+						<tr style="height: {virtualWindow.topPad}px; line-height: 0;"><td colspan={visibleColumns.length + 1}></td></tr>
+					{/if}
+					{#each virtualWindow.items as item (item.type === 'header' ? `__group_${item.group.key}` : item.task.id)}
 						{#if item.type === 'header'}
 							{@const isCollapsed = collapsedGroups.has(item.group.key)}
 							<tr class="group-header-row">
@@ -3171,6 +3193,9 @@
 						</tr>
 						{/if}
 					{/each}
+					{#if virtualWindow.bottomPad > 0}
+						<tr style="height: {virtualWindow.bottomPad}px; line-height: 0;"><td colspan={visibleColumns.length + 1}></td></tr>
+					{/if}
 				</tbody>
 			</table>
 		</div>

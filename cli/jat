@@ -76,6 +76,9 @@ to_upper() {
     printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
+# SSH / no-browser mode (set by --host flag)
+JAT_SSH_MODE=false
+
 # Detect platform
 IS_MACOS=false
 [[ "$(uname)" == "Darwin" ]] && IS_MACOS=true
@@ -1008,10 +1011,15 @@ launch_ide() {
 
     echo -e "${DIM}  → IDE ${ide_protocol}://localhost:$ide_port${NC}"
 
-    # Headless (VPS): build once and run the production server — uses ~150MB vs ~800MB for dev
+    # SSH mode (--host): always use dev server, skip browser open
+    # Headless (VPS, no display): build once and run production server — ~150MB vs ~800MB for dev
     # GUI (local): use dev server for hot reload
     local ide_cmd
-    if [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+    if [[ "$JAT_SSH_MODE" == "true" ]]; then
+        # Clear Vite cache to prevent stale chunk errors
+        rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
+        ide_cmd="npm run dev -- --port $ide_port --host"
+    elif [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
         if [[ ! -d "$ide_path/build" ]] || [[ "$ide_path/package.json" -nt "$ide_path/build/index.js" ]]; then
             echo -e "${DIM}  → Building IDE for production (headless mode)...${NC}"
             (cd "$ide_path" && npm run build 2>&1) || {
@@ -1045,7 +1053,16 @@ launch_ide() {
     # Open browser after delay for server to start
     (
         sleep 3
-        if command -v xdg-open &>/dev/null; then
+        if [[ "$JAT_SSH_MODE" == "true" ]]; then
+            # SSH tunnel mode — print connection instructions instead of opening browser
+            local hostname
+            hostname=$(hostname -f 2>/dev/null || hostname)
+            echo ""
+            echo -e "${GREEN}  ✓ JAT IDE running${NC}"
+            echo -e "  ${BOLD}SSH tunnel:${NC}  ssh -L ${ide_port}:localhost:${ide_port} ${USER}@${hostname}"
+            echo -e "  ${BOLD}Then open:${NC}   ${ide_protocol}://localhost:${ide_port}${ide_start_path}"
+            echo ""
+        elif command -v xdg-open &>/dev/null; then
             xdg-open "${ide_protocol}://localhost:${ide_port}${ide_start_path}" &>/dev/null
         elif command -v open &>/dev/null; then
             open "${ide_protocol}://localhost:${ide_port}${ide_start_path}"
@@ -2920,6 +2937,16 @@ scheduler_cmd() {
 
 main() {
     ensure_config
+
+    # Pre-parse global flags before any subcommand dispatch
+    local filtered_args=()
+    for arg in "$@"; do
+        case "$arg" in
+            --host) JAT_SSH_MODE=true ;;
+            *)      filtered_args+=("$arg") ;;
+        esac
+    done
+    set -- "${filtered_args[@]}"
 
     if [[ $# -eq 0 ]]; then
         # No arguments - launch IDE

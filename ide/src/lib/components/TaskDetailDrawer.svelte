@@ -46,6 +46,8 @@
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
 	import {
 		TaskFieldLabel,
+		TaskFieldGrid,
+		TaskFieldCell,
 		TaskHeaderBlock,
 		TaskMetaRow,
 		TaskLabelsList,
@@ -5084,6 +5086,22 @@
 						<!-- Dates - Industrial -->
 						<div class="border-t border-base-300/50 pt-3 mt-1">
 							<TaskDatesPair createdAt={task.created_at} updatedAt={task.updated_at} />
+							{#if actorDisplayName(task.creator) || resolveReplyTo(task)}
+								{@const creatorName = actorDisplayName(task.creator)}
+								{@const replyTo = resolveReplyTo(task)}
+								{@const replyName = actorDisplayName(replyTo)}
+								{@const replyRole = actorRole(replyTo)}
+								<div class="mt-2">
+									<TaskFieldGrid>
+										{#if creatorName}
+											<TaskFieldCell label="Creator">{creatorName}</TaskFieldCell>
+										{/if}
+										{#if replyName}
+											<TaskFieldCell label="Requester">{replyName}{#if replyRole} <span class="text-[0.6rem] text-base-content/50 font-normal ml-0.5">{replyRole}</span>{/if}</TaskFieldCell>
+										{/if}
+									</TaskFieldGrid>
+								</div>
+							{/if}
 						</div>
 
 						<!-- Epic Children Section (only for epic tasks) -->

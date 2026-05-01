@@ -1429,8 +1429,17 @@
 		if (get(isMobileFullscreenOpen)) return;
 
 		const _t = event.target as HTMLElement | null;
-		const _tag = _t?.tagName ?? '';
-		const _isEditing = _tag === 'INPUT' || _tag === 'TEXTAREA' || _tag === 'SELECT' || !!_t?.isContentEditable;
+		const _ae = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null;
+		const _isEditingEl = (el: HTMLElement | null) => {
+			if (!el) return false;
+			const tag = el.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+			if (el.isContentEditable) return true;
+			// Monaco redispatches keys; check for editor ancestor.
+			if (typeof el.closest === 'function' && el.closest('.monaco-editor')) return true;
+			return false;
+		};
+		const _isEditing = _isEditingEl(_t) || _isEditingEl(_ae);
 
 		// Vim-style marks & jumps. Skip while editing. Chord keys are
 		// consumed with stopImmediatePropagation so page-level window

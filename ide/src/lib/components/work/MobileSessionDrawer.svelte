@@ -576,9 +576,10 @@
 		previewUrl: string | null;
 		path: string;
 		uploading: boolean;
+		error?: boolean;
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
-	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
+	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading && !a.error));
 	let sentFlash = $state(false);      // full flash: recede + close
 	let sentStayFlash = $state(false);  // brief flash: button+row only, stay open
 	let escapeFlash = $state(false);    // red flash on escape/clear
@@ -765,8 +766,10 @@
 		try {
 			const res = await fetch('/api/work/upload-image', { method: 'POST', body: formData });
 			if (!res.ok) {
-				pendingAttachments = pendingAttachments.filter(a => a.id !== id);
-				if (previewUrl) URL.revokeObjectURL(previewUrl);
+				console.warn('[MobileSessionDrawer] Upload failed with status:', res.status);
+				pendingAttachments = pendingAttachments.map(a =>
+					a.id === id ? { ...a, uploading: false, error: true } : a
+				);
 				return;
 			}
 			const { filePath } = await res.json();
@@ -776,8 +779,9 @@
 			);
 		} catch (e) {
 			console.warn('[MobileSessionDrawer] Failed to upload file:', e);
-			pendingAttachments = pendingAttachments.filter(a => a.id !== id);
-			if (previewUrl) URL.revokeObjectURL(previewUrl);
+			pendingAttachments = pendingAttachments.map(a =>
+				a.id === id ? { ...a, uploading: false, error: true } : a
+			);
 		}
 	}
 
@@ -1745,15 +1749,19 @@
 				{#if pendingAttachments.length > 0}
 					<div class="flex flex-wrap gap-1.5 px-3 pt-1.5 pb-1 bg-base-200">
 						{#each pendingAttachments as att (att.id)}
-							<div class="flex items-center gap-1 px-1.5 py-1 bg-base-300/60 border border-base-300 rounded-md max-w-[160px] transition-opacity {att.uploading ? 'opacity-60' : 'opacity-100'}">
-								{#if att.previewUrl}
+							<div class="flex items-center gap-1 px-1.5 py-1 rounded-md max-w-[160px] transition-opacity {att.uploading ? 'opacity-60' : 'opacity-100'} {att.error ? 'bg-error/10 border border-error/30' : 'bg-base-300/60 border border-base-300'}">
+								{#if att.error}
+									<svg class="text-error flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+									</svg>
+								{:else if att.previewUrl}
 									<img src={att.previewUrl} alt={att.name} class="w-7 h-7 object-cover rounded flex-shrink-0" />
 								{:else}
-									<svg class="text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+									<svg class="text-info flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
 									</svg>
 								{/if}
-								<span class="text-[0.7rem] text-base-content/70 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{att.name}</span>
+								<span class="text-[0.7rem] overflow-hidden text-ellipsis whitespace-nowrap min-w-0 {att.error ? 'text-error/70' : 'text-base-content/70'}">{att.error ? 'Upload failed' : att.name}</span>
 								{#if att.uploading}
 									<span class="text-[0.7rem] text-base-content/50 flex-shrink-0">…</span>
 								{:else}

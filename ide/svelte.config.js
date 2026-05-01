@@ -9,7 +9,13 @@ const config = {
 
 	kit: {
 		// Using adapter-node for server-side SQLite database queries
-		adapter: adapter()
+		adapter: adapter(),
+		// Disable CSRF origin check: adapter-node defaults to https:// protocol when
+		// determining url.origin, but the IDE is served over HTTP (Tailscale, localhost).
+		// This causes multipart/form-data uploads (file attachments) to fail with 403
+		// because the browser sends Origin: http://... but the server expects https://.
+		// Safe to disable for a local dev tool behind Tailscale.
+		csrf: { checkOrigin: false }
 	},
 
 	vitePlugin: {

@@ -369,15 +369,61 @@
 	]);
 
 	// Assignee dropdown groups — mirrors /inbox InboxActionBar.assigneeGroups
-	// pattern: "Me" group (current user), "People" group (existing assignees),
-	// "Clear" group (unassign).
+	// pattern: "Roles" group (creator/requester/approver), "People" group
+	// (existing assignees), "Clear" group (unassign). Roles surface task
+	// identity actors so a dev reassigning a task can see who's who at a glance
+	// (jat-tns0g).
 	const assigneeGroups = $derived.by(() => {
+		// Snapshot reactive deps up front to avoid nested-read tracking gotchas.
+		const t = task;
+		const list = assigneeList;
 		const groups: { label: string; options: { value: string; label: string }[] }[] = [];
-		// Dedup by display name (case-insensitive). Prefer entries that have a
-		// UUID `id` over plain text/email rows, since postgres assignment is
-		// keyed by id and falling back to a name-only row would lose the link.
+
+		// 1. Build a role map from creator / requester / approver actors. A
+		// single person holding multiple roles collapses into one entry whose
+		// label lists all roles (e.g. "Joe · creator, approver"). The `value`
+		// prefers an existing assigneeList match (id/email) so handleAssigneeChange
+		// can persist a UUID where one is available.
+		interface RoleEntry { name: string; email: string | null; value: string; roles: string[] }
+		const roleEntries = new Map<string, RoleEntry>();
+		function addRole(actor: TaskActorLike | null | undefined, role: string) {
+			const name = actorDisplayName(actor);
+			if (!name) return;
+			const email = typeof actor === 'object' && actor ? (actor.email ?? null) : null;
+			const matchKey = (email || name).trim().toLowerCase();
+			const emailLower = email ? email.trim().toLowerCase() : '';
+			const nameLower = name.trim().toLowerCase();
+			const aliased = list.find((a) => {
+				const aEmail = (a.email || '').trim().toLowerCase();
+				const aName = (a.name || '').trim().toLowerCase();
+				return (emailLower && aEmail === emailLower) || (aName && aName === nameLower);
+			});
+			const value = aliased?.id || aliased?.email || aliased?.name || email || name;
+			const existing = roleEntries.get(matchKey);
+			if (existing) {
+				if (!existing.roles.includes(role)) existing.roles.push(role);
+			} else {
+				roleEntries.set(matchKey, { name, email, value, roles: [role] });
+			}
+		}
+		if (t) {
+			addRole(t.creator, 'creator');
+			addRole(t.requester, 'requester');
+			addRole(t.approver, 'approver');
+		}
+		if (roleEntries.size > 0) {
+			const roleOptions = Array.from(roleEntries.values()).map((r) => ({
+				value: r.value,
+				label: `${r.name} · ${r.roles.join(', ')}`
+			}));
+			groups.push({ label: 'Roles', options: roleOptions });
+		}
+
+		// 2. Existing People dedup (case-insensitive by display name). Prefer
+		// entries with a UUID `id` over plain text/email rows. Annotate matching
+		// rows with role suffixes so the role context is visible inline too.
 		const byName = new Map<string, AssigneeItem>();
-		for (const a of assigneeList) {
+		for (const a of list) {
 			const nameKey = (a.name || a.email || '').trim().toLowerCase();
 			if (!nameKey) continue;
 			const existing = byName.get(nameKey);
@@ -385,10 +431,25 @@
 				byName.set(nameKey, a);
 			}
 		}
-		const people = Array.from(byName.values()).map((a) => ({
-			value: a.id || a.email || a.name,
-			label: a.name
-		}));
+		const people = Array.from(byName.values()).map((a) => {
+			const aEmail = (a.email || '').trim().toLowerCase();
+			const aName = (a.name || '').trim().toLowerCase();
+			const matched: string[] = [];
+			for (const r of roleEntries.values()) {
+				const rEmail = (r.email || '').trim().toLowerCase();
+				const rName = r.name.trim().toLowerCase();
+				if ((rEmail && rEmail === aEmail) || (rName && rName === aName)) {
+					for (const role of r.roles) {
+						if (!matched.includes(role)) matched.push(role);
+					}
+				}
+			}
+			const suffix = matched.length > 0 ? ` · ${matched.join(', ')}` : '';
+			return {
+				value: a.id || a.email || a.name,
+				label: a.name + suffix
+			};
+		});
 		people.sort((a, b) => a.label.localeCompare(b.label));
 		if (people.length > 0) {
 			groups.push({ label: 'People', options: people });

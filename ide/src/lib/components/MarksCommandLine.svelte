@@ -21,11 +21,25 @@
 	let inputEl: HTMLInputElement | null = null;
 	let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-	function isEditingTarget(target: EventTarget | null): boolean {
-		if (!(target instanceof HTMLElement)) return false;
-		const tag = target.tagName;
+	function isEditingElement(el: Element | null): boolean {
+		if (!(el instanceof HTMLElement)) return false;
+		const tag = el.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-		return target.isContentEditable;
+		if (el.isContentEditable) return true;
+		// Monaco redispatches keys, so event.target may be a wrapper div rather
+		// than the underlying textarea. Bail if the focus is anywhere inside
+		// a Monaco editor instance.
+		if (el.closest('.monaco-editor')) return true;
+		return false;
+	}
+
+	function isEditingTarget(target: EventTarget | null): boolean {
+		// Check both the event target and document.activeElement — Monaco's
+		// internal key handling can leave event.target pointing at body while
+		// the textarea remains the focused element.
+		if (target instanceof HTMLElement && isEditingElement(target)) return true;
+		if (typeof document !== 'undefined' && isEditingElement(document.activeElement)) return true;
+		return false;
 	}
 
 	function showFeedback(kind: 'ok' | 'err', text: string) {
@@ -87,6 +101,20 @@
 		if (open) return;
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (e.key !== ':') return;
+		const t = e.target as HTMLElement | null;
+		const ae = document.activeElement as HTMLElement | null;
+		// eslint-disable-next-line no-console
+		console.log('[MarksCommandLine] : pressed', {
+			targetTag: t?.tagName,
+			targetCls: (t?.className || '').toString().slice(0, 80),
+			targetCE: t?.isContentEditable,
+			targetMonacoAncestor: !!t?.closest?.('.monaco-editor'),
+			activeTag: ae?.tagName,
+			activeCls: (ae?.className || '').toString().slice(0, 80),
+			activeCE: ae?.isContentEditable,
+			activeMonacoAncestor: !!ae?.closest?.('.monaco-editor'),
+			isEditing: isEditingTarget(e.target),
+		});
 		if (isEditingTarget(e.target)) return;
 		e.preventDefault();
 		openPrompt();

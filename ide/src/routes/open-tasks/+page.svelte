@@ -2368,27 +2368,9 @@
 </datalist>
 
 <div class="open-tasks-page">
-	<!-- Header -->
-	<div class="page-header">
+	<!-- Header + Saved Views combined row -->
+	<div class="page-header" role="tablist" aria-label="Saved views">
 		<h1 class="page-title">Tasks</h1>
-		{#if !loading}
-			<div class="stats-row">
-				<span class="stat">{stats.total} tasks</span>
-				{#if stats.p0p1 > 0}
-					<span class="stat stat-urgent">{stats.p0p1} high priority</span>
-				{/if}
-				{#if stats.overdue > 0}
-					<span class="stat stat-overdue">{stats.overdue} overdue</span>
-				{/if}
-				{#if stats.withDueDate > 0}
-					<span class="stat">{stats.withDueDate} with due dates</span>
-				{/if}
-			</div>
-		{/if}
-	</div>
-
-	<!-- Saved Views — quick-switch tabs for named filter combos -->
-	<div class="saved-views-bar" role="tablist" aria-label="Saved views">
 		<button
 			type="button"
 			class="view-tab"
@@ -2488,6 +2470,21 @@
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 				Save current
 			</button>
+		{/if}
+
+		{#if !loading}
+			<div class="stats-row">
+				<span class="stat">{stats.total} tasks</span>
+				{#if stats.p0p1 > 0}
+					<span class="stat stat-urgent">{stats.p0p1} high priority</span>
+				{/if}
+				{#if stats.overdue > 0}
+					<span class="stat stat-overdue">{stats.overdue} overdue</span>
+				{/if}
+				{#if stats.withDueDate > 0}
+					<span class="stat">{stats.withDueDate} with due dates</span>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
@@ -3821,29 +3818,34 @@
 		overflow: hidden;
 	}
 
-	/* Header */
+	/* Header + Saved Views — merged into one row */
 	.page-header {
 		display: flex;
-		align-items: baseline;
-		gap: 1rem;
-		margin-bottom: 0.75rem;
+		gap: 0.25rem;
+		align-items: center;
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid oklch(0.30 0.02 250 / 0.5);
 		flex-shrink: 0;
 	}
 	.page-title {
-		font-size: 1.25rem;
+		font-size: 0.9375rem;
 		font-weight: 600;
-		color: oklch(0.90 0.02 250);
+		color: oklch(0.65 0.02 250);
 		margin: 0;
+		margin-right: 0.25rem;
 		white-space: nowrap;
 	}
 	.stats-row {
 		display: flex;
-		gap: 0.75rem;
+		gap: 0.625rem;
 		margin-left: auto;
+		align-items: center;
 	}
 	.stat {
 		font-size: 0.75rem;
-		color: oklch(0.60 0.02 250);
+		color: oklch(0.55 0.02 250);
 		white-space: nowrap;
 	}
 	.stat-urgent {
@@ -3851,18 +3853,6 @@
 	}
 	.stat-overdue {
 		color: oklch(0.70 0.20 25);
-	}
-
-	/* Saved Views — quick-switch tabs */
-	.saved-views-bar {
-		display: flex;
-		gap: 0.25rem;
-		align-items: center;
-		flex-wrap: wrap;
-		margin-bottom: 0.625rem;
-		padding-bottom: 0.5rem;
-		border-bottom: 1px solid oklch(0.30 0.02 250 / 0.5);
-		flex-shrink: 0;
 	}
 	.view-tab-wrapper {
 		display: inline-flex;

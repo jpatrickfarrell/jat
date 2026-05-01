@@ -2078,8 +2078,9 @@
 												aria-label="Copy path"
 											>
 												{#if isImg && attachment.path}
+													{@const isRemote = attachment.path.startsWith('http')}
 													<img
-														src={`/api/work/image${attachment.path}`}
+														src={isRemote ? attachment.path : `/api/work/image${attachment.path}`}
 														alt={displayName}
 														class="flex-shrink-0 w-10 h-10 object-cover rounded border border-base-300/60 bg-base-200"
 														loading="lazy"

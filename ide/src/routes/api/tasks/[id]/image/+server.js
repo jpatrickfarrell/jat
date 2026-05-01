@@ -179,8 +179,62 @@ export async function GET({ params }) {
 }
 
 /**
+ * Map a storage path prefix to the bucket it lives in.
+ *
+ * Storage paths are stored without a bucket prefix (Supabase quirk), so the
+ * IDE has to infer the bucket from the path shape:
+ *  - `reports/<file>` — uploaded by the public bug-widget into the *private*
+ *    `feedback-screenshots` bucket. Needs a signed URL because <img> tags
+ *    can't carry the service-role auth header.
+ *  - `tasks/<file>`   — uploaded by the IDE itself into the *public*
+ *    `screenshots` bucket. Plain public URL is fine.
+ *
+ * @param {string} storagePath
+ * @returns {{ bucket: string; isPublic: boolean }}
+ */
+function bucketForPath(storagePath) {
+	if (storagePath.startsWith('reports/')) {
+		return { bucket: 'feedback-screenshots', isPublic: false };
+	}
+	return { bucket: 'screenshots', isPublic: true };
+}
+
+/**
+ * Generate a signed URL for an object in a private bucket.
+ *
+ * @param {{ supabaseUrl: string; serviceRoleKey: string }} supabase
+ * @param {string} bucket
+ * @param {string} storagePath
+ * @param {number} [expiresIn=3600]
+ * @returns {Promise<string|null>}  Full signed URL or null on failure.
+ */
+async function createSignedStorageUrl(supabase, bucket, storagePath, expiresIn = 3600) {
+	try {
+		const res = await fetch(
+			`${supabase.supabaseUrl}/storage/v1/object/sign/${bucket}/${storagePath}`,
+			{
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${supabase.serviceRoleKey}`,
+					apikey: supabase.serviceRoleKey,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ expiresIn })
+			}
+		);
+		if (!res.ok) return null;
+		const { signedURL, signedUrl } = await res.json();
+		const rel = signedURL || signedUrl;
+		if (!rel) return null;
+		return `${supabase.supabaseUrl}/storage/v1${rel.startsWith('/') ? '' : '/'}${rel}`;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Fetch screenshot_paths from Supabase for postgres-backed projects and
- * convert each storage path to a public URL so the client can display it.
+ * convert each storage path to a viewable URL so the client can display it.
  *
  * @param {string} taskId
  * @returns {Promise<Array<{id: string, path: string, uploadedAt: string}>>}
@@ -210,12 +264,22 @@ async function fetchSupabaseAttachments(taskId) {
 		const { screenshot_paths, updated_at } = rows[0];
 		const uploadedAt = updated_at ? new Date(updated_at).toISOString() : new Date().toISOString();
 
-		return screenshot_paths.map((/** @type {string} */ storagePath, /** @type {number} */ i) => ({
-			id: `remote-${taskId}-${i}-${storagePath.replace(/[^a-z0-9]/gi, '_')}`,
-			// Full public URL — TaskDetailDrawer renders paths starting with 'http' directly.
-			path: `${supabase.supabaseUrl}/storage/v1/object/public/screenshots/${storagePath}`,
-			uploadedAt
-		}));
+		const results = await Promise.all(
+			screenshot_paths.map(async (/** @type {string} */ storagePath, /** @type {number} */ i) => {
+				const { bucket, isPublic } = bucketForPath(storagePath);
+				const path = isPublic
+					? `${supabase.supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}`
+					: await createSignedStorageUrl(supabase, bucket, storagePath);
+				if (!path) return null;
+				return {
+					id: `remote-${taskId}-${i}-${storagePath.replace(/[^a-z0-9]/gi, '_')}`,
+					path,
+					uploadedAt
+				};
+			})
+		);
+
+		return results.filter(/** @returns {x is {id: string, path: string, uploadedAt: string}} */ (x) => x !== null);
 	} catch {
 		return [];
 	}

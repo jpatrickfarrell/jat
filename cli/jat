@@ -465,9 +465,16 @@ do_update() {
     # Refresh IDE npm dependencies if package.json changed
     local ide_path="$JAT_SOURCE_DIR/ide"
     if [[ -d "$ide_path/node_modules" ]]; then
-        # Check if package.json was modified in the pulled commits
+        # Use ORIG_HEAD (set by git pull/merge) for reliable before-pull comparison.
+        # Fall back to HEAD@{1} if ORIG_HEAD doesn't exist (e.g. first-ever pull).
+        local base_ref
+        if git -C "$JAT_SOURCE_DIR" rev-parse --verify ORIG_HEAD &>/dev/null; then
+            base_ref="ORIG_HEAD"
+        else
+            base_ref="HEAD@{1}"
+        fi
         local pkg_changed
-        pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only HEAD@{1}..HEAD -- ide/package.json 2>/dev/null)
+        pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only "${base_ref}"..HEAD -- ide/package.json 2>/dev/null)
         if [[ -n "$pkg_changed" ]]; then
             echo -e "${DIM}IDE dependencies changed, running npm install...${NC}"
             (cd "$ide_path" && npm install --legacy-peer-deps 2>&1) || {
@@ -479,8 +486,14 @@ do_update() {
     # Refresh ingest service npm dependencies if package.json changed
     local ingest_path="$JAT_SOURCE_DIR/tools/ingest"
     if [[ -d "$ingest_path/node_modules" ]]; then
+        local base_ref_ingest
+        if git -C "$JAT_SOURCE_DIR" rev-parse --verify ORIG_HEAD &>/dev/null; then
+            base_ref_ingest="ORIG_HEAD"
+        else
+            base_ref_ingest="HEAD@{1}"
+        fi
         local ingest_pkg_changed
-        ingest_pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only HEAD@{1}..HEAD -- tools/ingest/package.json 2>/dev/null)
+        ingest_pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only "${base_ref_ingest}"..HEAD -- tools/ingest/package.json 2>/dev/null)
         if [[ -n "$ingest_pkg_changed" ]]; then
             echo -e "${DIM}Ingest dependencies changed, running npm install...${NC}"
             (cd "$ingest_path" && npm install 2>&1) || {

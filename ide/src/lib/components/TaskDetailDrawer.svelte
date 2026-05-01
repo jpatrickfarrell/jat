@@ -47,12 +47,10 @@
 	import {
 		TaskFieldLabel,
 		TaskFieldGrid,
-		TaskFieldCell,
 		TaskHeaderBlock,
 		TaskMetaRow,
 		TaskLabelsList,
-		DependencyList,
-		TaskDatesPair
+		DependencyList
 	} from '$lib/components/task';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 	import CommentsThread from '$lib/components/comments/CommentsThread.svelte';
@@ -98,6 +96,9 @@
 		creator?: TaskActorLike | null;
 		requester?: TaskActorLike | null;
 		approver?: TaskActorLike | null;
+		// Auto-populated by trigger on every UPDATE (jat-t5pvg)
+		updated_by_id?: string | null;
+		updated_by?: TaskActorLike | null;
 	}
 
 	// Task identity actor — postgres returns an object; SQLite returns a string.
@@ -3117,7 +3118,7 @@
 						<!-- Row 2: Assignee / Actions + save indicator -->
 						<div class="flex items-center gap-2 flex-wrap">
 						<!-- Assignee / Actions -->
-						<span class="flex items-center gap-1.5">
+						<span class="inline-flex items-center gap-1.5">
 								{#if actionMode === 'spawn'}
 									<!-- Unassigned: Show Launch button + Resume if previous sessions exist -->
 									{#if uniqueSessions.length > 0}
@@ -3562,7 +3563,7 @@
 						{/if}
 						<!-- Feedback Context (JST app feedback: page URL, recording, selected elements) -->
 						{#if task.page_url || task.recording_url || task.selected_elements?.length}
-							<div role="region" aria-label="Feedback Context" class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.70 0.18 200 / 0.20); border-left: 3px solid oklch(0.70 0.18 200); background: oklch(0.16 0.01 250);">
+							<div role="region" aria-label="Feedback Context" class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.70 0.18 200 / 0.35); background: oklch(0.16 0.02 200);">
 								<div class="px-3 py-2.5 flex flex-col gap-2">
 									<!-- Section label -->
 									<div class="text-[10px] font-mono uppercase tracking-widest text-base-content/30">Feedback Context</div>
@@ -3662,28 +3663,33 @@
 							/>
 						</div>
 
-						<!-- Origin (creator read-only, reply-to derived) - jat-9e5tc -->
-						{#if actorDisplayName(task.creator) || resolveReplyTo(task)}
-							{@const replyTo = resolveReplyTo(task)}
-							{@const creatorName = actorDisplayName(task.creator)}
-							{@const creatorSrc = actorSource(task.creator)}
-							{@const replyName = actorDisplayName(replyTo)}
-							{@const replyRole = actorRole(replyTo)}
-							{@const showSplit = !!task.requester && !!task.approver && !actorsEqual(task.requester, task.approver)}
-							<div class="mt-4">
-								<TaskFieldLabel>Origin</TaskFieldLabel>
-								<div class="flex flex-col gap-1.5">
-									{#if creatorName}
-										{@const creatorRole = actorRole(task.creator)}
-										<div class="flex items-center gap-2 text-sm">
-											<span class="text-xs text-base-content/50 w-20 shrink-0">Creator</span>
-											<span class="font-mono text-base-content">{creatorName}</span>
-											<RoleChip role={creatorRole} />
-											{#if creatorSrc}
-												<span class="badge badge-xs bg-base-300 text-base-content/70 normal-case">via {creatorSrc}</span>
-											{/if}
-										</div>
-									{/if}
+						<!-- Origin + Dates (jat-9e5tc, jat-t5pvg) -->
+						<div class="mt-4">
+							<TaskFieldLabel>Origin</TaskFieldLabel>
+							<TaskFieldGrid>
+								{#if task.created_at}
+									{@const creatorName = actorDisplayName(task.creator)}
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Created</span>
+										<span class="text-sm font-medium text-base-content">{formatDate(task.created_at)}</span>
+										{#if creatorName}<span class="text-xs text-base-content/55 font-mono mt-0.5">{creatorName}</span>{/if}
+									</div>
+								{/if}
+								{#if task.updated_at}
+									{@const updatedByName = actorDisplayName(task.updated_by)}
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Updated</span>
+										<span class="text-sm font-medium text-base-content">{formatDate(task.updated_at)}</span>
+										{#if updatedByName}<span class="text-xs text-base-content/55 font-mono mt-0.5">{updatedByName}</span>{/if}
+									</div>
+								{/if}
+							</TaskFieldGrid>
+							{#if resolveReplyTo(task)}
+								{@const replyTo = resolveReplyTo(task)}
+								{@const replyName = actorDisplayName(replyTo)}
+								{@const replyRole = actorRole(replyTo)}
+								{@const showSplit = !!task.requester && !!task.approver && !actorsEqual(task.requester, task.approver)}
+								<div class="flex flex-col gap-1.5 mt-2">
 									{#if replyName}
 										<div class="flex items-center gap-2 text-sm">
 											<span class="text-xs text-base-content/50 w-20 shrink-0">Reply to</span>
@@ -3702,8 +3708,8 @@
 										</div>
 									{/if}
 								</div>
-							</div>
-						{/if}
+							{/if}
+						</div>
 
 						<!-- Status / Assignee / Milestone (postgres-backed projects) - jat-fkyj6 -->
 						{#if isPostgresProject}
@@ -4795,7 +4801,7 @@
 									{#each logsExpanded ? sessionLogs : sessionLogs.slice(0, 3) as log (log.filename)}
 										<div class="flex gap-2">
 											<button
-												class="flex-1 text-left p-3 rounded group transition-colors industrial-hover bg-base-200 border-l-2 border-info"
+												class="flex-1 text-left p-3 rounded group transition-colors industrial-hover bg-base-200"
 												onclick={() => fetchLogContent(log.filename)}
 											>
 												<div class="flex items-center justify-between mb-1">
@@ -5145,27 +5151,6 @@
 							</div>
 						</details>
 
-						<!-- Dates - Industrial -->
-						<div class="border-t border-base-300/50 pt-3 mt-1">
-							<TaskDatesPair createdAt={task.created_at} updatedAt={task.updated_at} />
-							{#if actorDisplayName(task.creator) || resolveReplyTo(task)}
-								{@const creatorName = actorDisplayName(task.creator)}
-								{@const replyTo = resolveReplyTo(task)}
-								{@const replyName = actorDisplayName(replyTo)}
-								{@const replyRole = actorRole(replyTo)}
-								<div class="mt-2">
-									<TaskFieldGrid>
-										{#if creatorName}
-											<TaskFieldCell label="Creator">{creatorName}</TaskFieldCell>
-										{/if}
-										{#if replyName}
-											<TaskFieldCell label="Requester">{replyName}{#if replyRole} <span class="text-[0.6rem] text-base-content/50 font-normal ml-0.5">{replyRole}</span>{/if}</TaskFieldCell>
-										{/if}
-									</TaskFieldGrid>
-								</div>
-							{/if}
-						</div>
-
 						<!-- Epic Children Section (only for epic tasks) -->
 						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}
 							<details class="group border-t border-base-300/50 pt-3 mt-1" open>
@@ -5218,7 +5203,7 @@
 										{#each epicChildren as child}
 											{@const isChildClosed = child.status === 'closed'}
 											<button
-												class="group flex items-center gap-2 text-sm p-2 rounded w-full text-left transition-colors bg-base-200 border-l-2 {child.isBlocked ? 'border-error/50' : isChildClosed ? 'border-success/50' : child.status === 'in_progress' ? 'border-warning/50' : 'border-info/50'} hover:bg-base-300"
+												class="group flex items-center gap-2 text-sm p-2 rounded w-full text-left transition-colors bg-base-200 hover:bg-base-300"
 												onclick={() => { if (taskId !== undefined) taskId = child.id; }}
 												title="Open {child.id}"
 											>
@@ -5620,12 +5605,12 @@
 		border-color: oklch(0.30 0.02 250);
 	}
 	.cmd-item-selected {
-		background: oklch(0.20 0.02 250);
-		border-left: 2px solid oklch(0.65 0.15 250);
+		background: oklch(0.22 0.03 250);
+		border: 1px solid oklch(0.65 0.15 250 / 0.35);
 	}
 	.cmd-item-default {
 		background: transparent;
-		border-left: 2px solid transparent;
+		border: 1px solid transparent;
 	}
 	.cmd-item-default:hover {
 		background: oklch(0.19 0.01 250);

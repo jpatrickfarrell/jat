@@ -3,7 +3,7 @@
 // VOICE_TOOLS without requiring a real LLM provider.
 
 import { describe, it, expect } from 'vitest';
-import { isValidToolCall, ALL_VOICE_TOOLS } from './+server';
+import { _isValidToolCall as isValidToolCall, _ALL_VOICE_TOOLS } from './+server';
 import { PARAMETERIZED_VERBS, PHASE_2_VERB_NAMES } from '$lib/voice/parameterizedVerbs';
 
 const ctx = {
@@ -16,14 +16,14 @@ const ok = (name: string, input: Record<string, unknown> = {}) =>
 
 describe('VOICE_TOOLS catalog', () => {
 	it('exposes the Phase 1 tools', () => {
-		const names = ALL_VOICE_TOOLS.map((t) => t.name);
+		const names = _ALL_VOICE_TOOLS.map((t) => t.name);
 		expect(names).toEqual(
 			expect.arrayContaining(['create_task', 'navigate', 'search', 'vocab', 'view_task', 'spawn_agent'])
 		);
 	});
 
 	it('exposes the Phase 2 parameterized verbs', () => {
-		const names = ALL_VOICE_TOOLS.map((t) => t.name);
+		const names = _ALL_VOICE_TOOLS.map((t) => t.name);
 		expect(names).toEqual(
 			expect.arrayContaining([
 				'close_task',
@@ -37,8 +37,8 @@ describe('VOICE_TOOLS catalog', () => {
 	});
 
 	it('declares required taskId on close_task and update_task', () => {
-		const close = ALL_VOICE_TOOLS.find((t) => t.name === 'close_task');
-		const update = ALL_VOICE_TOOLS.find((t) => t.name === 'update_task');
+		const close = _ALL_VOICE_TOOLS.find((t) => t.name === 'close_task');
+		const update = _ALL_VOICE_TOOLS.find((t) => t.name === 'update_task');
 		expect(close?.input_schema.required).toEqual(['taskId']);
 		expect(update?.input_schema.required).toEqual(['taskId']);
 	});
@@ -54,7 +54,7 @@ describe('PARAMETERIZED_VERBS user-facing catalog', () => {
 	});
 
 	it('every PARAMETERIZED_VERBS entry has a matching tool in VOICE_TOOLS', () => {
-		const toolNames = new Set(ALL_VOICE_TOOLS.map((t) => t.name));
+		const toolNames = new Set(_ALL_VOICE_TOOLS.map((t) => t.name));
 		for (const verb of PARAMETERIZED_VERBS) {
 			expect(toolNames.has(verb.toolName), `${verb.toolName} missing from VOICE_TOOLS`).toBe(true);
 		}

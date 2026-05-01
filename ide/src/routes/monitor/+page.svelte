@@ -253,12 +253,11 @@
 					{/if}
 
 					<!-- Terminal output tail -->
-					{@const lines = visibleLines[agent.sessionName] ?? []}
 					<div class="terminal-tail" class:tail-expanded={isHovered}>
-						{#each lines as line}
+						{#each visibleLines[agent.sessionName] ?? [] as line}
 							<div class="tail-line">{line || ' '}</div>
 						{/each}
-						{#if lines.length === 0}
+						{#if (visibleLines[agent.sessionName] ?? []).length === 0}
 							<div class="tail-line tail-empty">no output</div>
 						{/if}
 						{#if isHovered && isCapped[agent.sessionName]}

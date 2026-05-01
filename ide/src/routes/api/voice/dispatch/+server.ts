@@ -252,7 +252,7 @@ const TYPE_ENUM = new Set(['task', 'bug', 'feature', 'chore', 'epic']);
 const isNonEmptyString = (v: unknown): v is string =>
 	typeof v === 'string' && v.trim().length > 0;
 
-export function isValidToolCall(
+export function _isValidToolCall(
 	call: { name: string; input: Record<string, unknown> },
 	ctx: { validShortcuts: Set<string>; allowedRoutes: readonly string[] }
 ): boolean {
@@ -302,7 +302,7 @@ export function isValidToolCall(
 	return true; // create_task, search, view_task, spawn_agent always pass through (Phase 1 backwards-compat)
 }
 
-export const ALL_VOICE_TOOLS = VOICE_TOOLS;
+export const _ALL_VOICE_TOOLS = VOICE_TOOLS;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // System prompt builder
@@ -535,7 +535,7 @@ export async function POST({ request }: { request: Request }) {
 	// constraints declared in the tool schemas above.
 	const validShortcuts = new Set(vocabulary.map((e) => e.shortcut));
 	const validatedCalls = dispatchResult.toolCalls.filter((call) =>
-		isValidToolCall(call, { validShortcuts, allowedRoutes: ALL_ROUTES })
+		_isValidToolCall(call, { validShortcuts, allowedRoutes: ALL_ROUTES })
 	);
 
 	void recordCloudCall({

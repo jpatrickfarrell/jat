@@ -3863,9 +3863,20 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 			case "attach":
 				if (sessionName) {
 					try {
-						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+						const attachResp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
 							method: "POST",
 						});
+						if (attachResp.ok) {
+							const attachData = await attachResp.json();
+							if (attachData.method === 'tmux-switch-client') {
+								addToast({ message: '⎊ Switched your terminal to the session', type: 'success' });
+							} else if (attachData.method === 'tmux-window') {
+								addToast({ message: '⎊ Opened in tmux window', type: 'success' });
+							} else if (attachData.method === 'command') {
+								navigator.clipboard.writeText(attachData.command).catch(() => {});
+								addToast({ message: `📋 Copied: ${attachData.command}`, type: 'info' });
+							}
+						}
 					} catch (e) {
 						console.error("[SessionCard] Failed to attach terminal:", e);
 					}
@@ -4214,9 +4225,20 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 			case "attach":
 				if (sessionName) {
 					try {
-						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+						const attachResp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
 							method: "POST",
 						});
+						if (attachResp.ok) {
+							const attachData = await attachResp.json();
+							if (attachData.method === 'tmux-switch-client') {
+								addToast({ message: '⎊ Switched your terminal to the session', type: 'success' });
+							} else if (attachData.method === 'tmux-window') {
+								addToast({ message: '⎊ Opened in tmux window', type: 'success' });
+							} else if (attachData.method === 'command') {
+								navigator.clipboard.writeText(attachData.command).catch(() => {});
+								addToast({ message: `📋 Copied: ${attachData.command}`, type: 'info' });
+							}
+						}
 					} catch (e) {
 						console.error("[SessionCard:server] Failed to attach terminal:", e);
 					}
@@ -7395,12 +7417,21 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 							onclick={async () => {
 								if (sessionName) {
 									try {
-										await fetch(
+										const attachResp = await fetch(
 											`/api/work/${encodeURIComponent(sessionName)}/attach`,
-											{
-												method: "POST",
-											},
+											{ method: "POST" },
 										);
+										if (attachResp.ok) {
+											const attachData = await attachResp.json();
+											if (attachData.method === 'tmux-switch-client') {
+												addToast({ message: '⎊ Switched your terminal to the session', type: 'success' });
+											} else if (attachData.method === 'tmux-window') {
+												addToast({ message: '⎊ Opened in tmux window', type: 'success' });
+											} else if (attachData.method === 'command') {
+												navigator.clipboard.writeText(attachData.command).catch(() => {});
+												addToast({ message: `📋 Copied: ${attachData.command}`, type: 'info' });
+											}
+										}
 									} catch (e) {
 										console.error(
 											"[SessionCard] Failed to attach terminal:",

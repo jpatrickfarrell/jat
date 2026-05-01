@@ -559,11 +559,16 @@
 			if (!response.ok) {
 				throw new Error(data.error || 'Failed to attach session');
 			}
-			attachMessage = {
-				session: sessionName,
-				message: `Opened in ${data.terminal?.split('/').pop() || 'terminal'}`,
-				method: 'terminal'
-			};
+			if (data.method === 'tmux-switch-client') {
+				attachMessage = { session: sessionName, message: '⎊ Switched your terminal to the session', method: 'terminal' };
+			} else if (data.method === 'tmux-window') {
+				attachMessage = { session: sessionName, message: '⎊ Opened in tmux window', method: 'terminal' };
+			} else if (data.method === 'command') {
+				navigator.clipboard.writeText(data.command).catch(() => {});
+				attachMessage = { session: sessionName, message: `📋 Copied: ${data.command}`, method: 'terminal' };
+			} else {
+				attachMessage = { session: sessionName, message: `Opened in ${data.terminal?.split('/').pop() || 'terminal'}`, method: 'terminal' };
+			}
 		} catch (err) {
 			attachMessage = {
 				session: sessionName,

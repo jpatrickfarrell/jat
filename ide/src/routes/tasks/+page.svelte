@@ -1491,14 +1491,22 @@
 		try {
 			const response = await fetch(
 				`/api/work/${encodeURIComponent(sessionName)}/attach`,
-				{
-					method: "POST",
-				},
+				{ method: "POST" },
 			);
 			if (!response.ok) {
 				const data = await response.json();
 				throw new Error(data.error || "Failed to attach session");
 			}
+			const data = await response.json();
+			if (data.method === 'tmux-switch-client') {
+				addToast({ message: '⎊ Switched your terminal to the session', type: 'success' });
+			} else if (data.method === 'tmux-window') {
+				addToast({ message: '⎊ Opened in tmux window', type: 'success' });
+			} else if (data.method === 'command') {
+				navigator.clipboard.writeText(data.command).catch(() => {});
+				addToast({ message: `📋 Copied: ${data.command}`, type: 'info' });
+			}
+			// 'terminal' method: window opens locally, no toast needed
 		} catch (err) {
 			console.error("Failed to attach session:", err);
 		}

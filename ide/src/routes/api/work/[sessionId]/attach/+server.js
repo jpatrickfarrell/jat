@@ -1,7 +1,10 @@
 /**
  * POST /api/work/[sessionId]/attach
- * Opens a new terminal window attached to the tmux session
- * Applies Hyprland border colors based on project configuration
+ * Attach to a tmux session, with SSH awareness:
+ *   1. Create a new window in the parent JAT tmux session (local users)
+ *   2. Use tmux switch-client to redirect the SSH user's terminal (remote/headless)
+ *   3. Return the attach command for copy-paste fallback
+ *   4. Spawn a new terminal window (local with display, no parent session)
  */
 
 import { json } from '@sveltejs/kit';
@@ -184,6 +187,75 @@ async function applyHyprlandColorsToNewWindow(windowsBefore, projectName) {
 	console.log('[work/attach] No new Hyprland window detected');
 }
 
+/**
+ * Default parent tmux sessions to look for (local users running JAT in tmux)
+ */
+const DEFAULT_PARENT_SESSIONS = ['jat-app-ide', 'server-jat', 'jat'];
+
+/**
+ * Check if a tmux session exists
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
+ */
+async function sessionExists(sessionName) {
+	try {
+		await execAsync(`tmux has-session -t "${sessionName}" 2>/dev/null`);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Find the first existing parent session from candidates
+ * @param {string[]} candidates
+ * @returns {Promise<string | null>}
+ */
+async function findParentSession(candidates) {
+	for (const name of candidates) {
+		if (await sessionExists(name)) return name;
+	}
+	return null;
+}
+
+/**
+ * Try to switch an SSH/remote tmux client to the target session.
+ * Finds clients NOT attached to JAT's own IDE session and redirects them.
+ * @param {string} targetSession - tmux session name to switch to
+ * @returns {Promise<boolean>} true if at least one client was switched
+ */
+async function trySwitchSshClient(targetSession) {
+	try {
+		const { stdout } = await execAsync(
+			'tmux list-clients -F "#{client_tty} #{client_session}" 2>/dev/null || true',
+			{ timeout: 3000 }
+		);
+		const clientLines = stdout.trim().split('\n').filter(Boolean);
+
+		// Skip clients already attached to JAT IDE sessions (jat-app-ide etc.)
+		const candidates = clientLines.filter(line => {
+			const session = line.split(' ')[1] || '';
+			return !DEFAULT_PARENT_SESSIONS.includes(session);
+		});
+
+		if (candidates.length === 0) return false;
+
+		let switched = false;
+		for (const line of candidates) {
+			const tty = line.split(' ')[0];
+			try {
+				await execAsync(`tmux switch-client -c "${tty}" -t "${targetSession}"`, { timeout: 2000 });
+				switched = true;
+			} catch {
+				// This client may not support switch-client; try next
+			}
+		}
+		return switched;
+	} catch {
+		return false;
+	}
+}
+
 export async function POST({ params }) {
 	const { sessionId } = params;
 
@@ -209,6 +281,52 @@ export async function POST({ params }) {
 		const projectName = await findProjectForAgent(agentName);
 		const displayName = projectName ? projectName.toUpperCase() : 'JAT';
 		const windowTitle = `${displayName}: ${sessionId}`;
+
+		// --- Step 1: Try parent tmux session (local users running JAT in tmux) ---
+		// Exclude the target session itself to avoid creating a self-referencing window
+		const parentCandidates = DEFAULT_PARENT_SESSIONS.filter(s => s !== sessionId);
+		const parentSession = await findParentSession(parentCandidates);
+		if (parentSession) {
+			try {
+				await execAsync(`tmux new-window -t "${parentSession}" -n "${agentName}" "bash -c 'tmux attach-session -t \\"${sessionId}\\"'"`);
+				return json({
+					success: true,
+					session: sessionId,
+					method: 'tmux-window',
+					parentSession,
+					windowTitle,
+					project: projectName
+				});
+			} catch {
+				// Parent session found but window creation failed — fall through
+			}
+		}
+
+		// --- Step 2: Headless / SSH detection ---
+		// When there's no local display, spawning a terminal emulator does nothing visible.
+		// Instead, try to redirect the user's SSH terminal via tmux switch-client.
+		const hasDisplay = process.env.DISPLAY || process.env.WAYLAND_DISPLAY;
+		if (!hasDisplay) {
+			const switched = await trySwitchSshClient(sessionId);
+			if (switched) {
+				return json({
+					success: true,
+					session: sessionId,
+					method: 'tmux-switch-client',
+					project: projectName
+				});
+			}
+			// No tmux client found — return the command for the user to run manually
+			return json({
+				success: true,
+				session: sessionId,
+				method: 'command',
+				command: `tmux attach-session -t "${sessionId}"`,
+				project: projectName
+			});
+		}
+
+		// --- Step 3: Local display available — spawn a terminal window ---
 
 		// Get terminal from config or detect platform default
 		let terminal = 'auto';
@@ -316,6 +434,7 @@ export async function POST({ params }) {
 		return json({
 			success: true,
 			session: sessionId,
+			method: 'terminal',
 			terminal,
 			windowTitle,
 			project: projectName

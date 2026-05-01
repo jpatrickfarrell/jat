@@ -1103,16 +1103,15 @@
 	async function handleAssigneeChange(value: string) {
 		if (!task) return;
 		if (!value) {
-			await autoSave('assignee_id', null);
-			await autoSave('assignee', null);
+			await autoSave('assignee', null, { assignee_id: null });
 			return;
 		}
 		const item = assigneeList.find(
 			(a) => a.id === value || a.email === value || a.name === value
 		);
 		if (item) {
-			if (item.id) await autoSave('assignee_id', item.id);
-			await autoSave('assignee', item.name || item.email || value);
+			await autoSave('assignee', item.name || item.email || value,
+				item.id ? { assignee_id: item.id } : undefined);
 		} else {
 			// Fallback for free-form (SQLite projects)
 			await autoSave('assignee', value);
@@ -1949,7 +1948,7 @@
 	}
 
 	// Debounced auto-save function
-	async function autoSave(field: string, value: any) {
+	async function autoSave(field: string, value: any, extraFields?: Record<string, any>) {
 		// Clear any pending save
 		if (saveTimeout) {
 			clearTimeout(saveTimeout);
@@ -1969,12 +1968,10 @@
 			try {
 				// Optimistic update - update UI immediately
 				if (task) {
-					task = { ...task, [field]: value };
+					task = { ...task, [field]: value, ...extraFields };
 				}
 
-				// Prepare PATCH request body (only the changed field)
-				const updateData: Record<string, any> = {};
-				updateData[field] = value;
+				const updateData: Record<string, any> = { [field]: value, ...extraFields };
 
 				// Make PATCH request
 				const response = await fetch(`/api/tasks/${taskId}`, {

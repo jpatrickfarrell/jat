@@ -5,13 +5,47 @@
 import { json } from '@sveltejs/kit';
 import { getTaskById, updateTask, deleteTask, addDependency, removeDependency } from '$lib/server/jat-tasks.js';
 import { readFile, writeFile, unlink } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { join } from 'path';
+import { homedir } from 'os';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { lookupIntegrations } from '$lib/server/integrationLookup.js';
 import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+
+/** @returns {{ name?: string, email?: string }} */
+function getServerIdentity() {
+	/** @type {{ name?: string, email?: string }} */
+	const result = {};
+	try {
+		const path = join(homedir(), '.config', 'jat', 'identity.json');
+		if (existsSync(path)) {
+			const parsed = JSON.parse(readFileSync(path, 'utf-8'));
+			if (typeof parsed.name === 'string' && parsed.name.trim()) result.name = parsed.name.trim();
+			if (typeof parsed.email === 'string' && parsed.email.trim()) result.email = parsed.email.trim();
+		}
+	} catch {
+		// ignore
+	}
+	// Fall back to git config for any missing fields
+	if (!result.name || !result.email) {
+		try {
+			if (!result.name) {
+				const n = execSync('git config --global user.name', { encoding: 'utf-8', timeout: 2000 }).trim();
+				if (n) result.name = n;
+			}
+			if (!result.email) {
+				const e = execSync('git config --global user.email', { encoding: 'utf-8', timeout: 2000 }).trim();
+				if (e) result.email = e;
+			}
+		} catch {
+			// ignore
+		}
+	}
+	return result;
+}
 
 /**
  * Detect if a task ID belongs to a postgres-backed graduated project.
@@ -455,6 +489,23 @@ export async function PATCH({ params, request }) {
 				updateFields.labels = updates.labels.trim()
 					? updates.labels.split(',').map((/** @type {string} */ l) => l.trim()).filter(Boolean)
 					: [];
+			}
+		}
+
+		// Inject updated_by from server identity for all updates.
+		// The postgres backend's update() accepts it only when the schema has the
+		// column (detected lazily); SQLite backends ignore unknown fields.
+		// We do this unconditionally because pgBackendForPatch is null even for
+		// postgres-backed projects when lib/tasks.js routes the initial lookup —
+		// the update still goes through the postgres backend via updateTask().
+		if (Object.keys(updateFields).length > 0) {
+			const identity = getServerIdentity();
+			if (identity.email || identity.name) {
+				/** @type {Record<string, string | undefined>} */
+				const updatedBy = {};
+				if (identity.email) updatedBy.email = identity.email;
+				if (identity.name) updatedBy.name = identity.name;
+				updateFields.updated_by = updatedBy;
 			}
 		}
 

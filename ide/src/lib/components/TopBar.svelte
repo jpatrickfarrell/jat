@@ -651,7 +651,6 @@
 					onfocus={() => (focusedChipProject = favProject)}
 					onkeydown={(e) => handleChipKeydown(e, favProject)}
 				>
-					<span class="fav-drag-handle" aria-hidden="true">⠿</span>
 					<ProjectSelector
 						selectedProject={favProject}
 						compact={true}
@@ -1515,26 +1514,6 @@
 	   shift on spawn is a better trade-off than permanent dead space in the topbar. */
 	.swarm-slot-hidden {
 		display: none;
-	}
-
-	/* ── Chip drag affordance ── */
-	.fav-drag-handle {
-		position: absolute;
-		left: 3px;
-		top: 50%;
-		transform: translateY(-50%);
-		font-size: 10px;
-		line-height: 1;
-		color: oklch(0.55 0.08 240 / 0.6);
-		opacity: 0.55;
-		transition: opacity 0.15s ease;
-		pointer-events: none;
-		z-index: 2;
-		user-select: none;
-	}
-
-	.fav-flip-wrapper:hover .fav-drag-handle {
-		opacity: 1;
 	}
 
 </style>

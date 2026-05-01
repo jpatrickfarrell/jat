@@ -91,8 +91,8 @@
 	let favoriteProjects = $state<Set<string>>(new Set()); // Projects marked as favorite
 	let favoriteChipOrder = $state<string[]>([]); // User-controlled chip order
 
-	// Agent count state
-	let activeAgentCount = $state(0);
+	// Agent count — derived live from the work sessions store (same source as colored dots)
+	const activeAgentCount = $derived(getWorkSessions().length);
 	let totalAgentCount = $state(0);
 	let activeAgents = $state<string[]>([]);
 
@@ -819,9 +819,8 @@
 			const data = await response.json();
 			allTasks = data.tasks || [];
 
-			// Update agent counts
+			// Update agent counts (activeAgentCount is now derived from workSessions store)
 			if (data.agent_counts) {
-				activeAgentCount = data.agent_counts.activeCount || 0;
 				totalAgentCount = data.agent_counts.totalCount || 0;
 				activeAgents = data.agent_counts.activeAgents || [];
 			}

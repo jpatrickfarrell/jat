@@ -2968,9 +2968,11 @@
 					{:else}
 						<h2 class="text-2xl font-bold text-base-content">Task Details</h2>
 					{/if}
-					<!-- Badges + Metadata row -->
-					<TaskMetaRow class="flex flex-wrap items-center gap-2 mt-1">
-						{#if task}
+					<!-- Badges + Metadata: two-row layout -->
+					<div class="mt-1 flex flex-col gap-0.5">
+					{#if task}
+						<!-- Row 1: Core metadata badges + age (never wraps) -->
+						<div class="flex items-center gap-1.5">
 							<!-- Status (editable for non-closed; distinct static badge for closed) -->
 							{#if task.status === 'closed'}
 								<div class="badge badge-sm badge-success gap-1" style="border: 1.5px solid oklch(0.65 0.18 145 / 0.6);">
@@ -3044,18 +3046,17 @@
 							</InlineSelect>
 
 							<!-- Separator -->
-							<span class="text-base-content/20">•</span>
-
-							<!-- Created timestamp -->
+							<span class="text-base-content/20 select-none">•</span>
+							<!-- Age -->
 							<span class="text-xs text-base-content/50">
 								{formatRelativeTimestamp(task.created_at)}
 							</span>
+						</div>
 
-							<!-- Separator -->
-							<span class="text-base-content/20">•</span>
-
-							<!-- Assignee / Actions -->
-							<span class="flex items-center gap-1.5">
+						<!-- Row 2: Assignee / Actions + save indicator -->
+						<div class="flex items-center gap-2 flex-wrap">
+						<!-- Assignee / Actions -->
+						<span class="flex items-center gap-1.5">
 								{#if actionMode === 'spawn'}
 									<!-- Unassigned: Show Launch button + Resume if previous sessions exist -->
 									{#if uniqueSessions.length > 0}
@@ -3413,9 +3414,7 @@
 										</button>
 									</div>
 								{/if}
-							</span>
-						{/if}
-
+						</span>
 						<!-- Save indicator -->
 						{#if isSaving}
 							<span class="text-xs text-base-content/70">
@@ -3439,7 +3438,9 @@
 								{/if}
 							</span>
 						{/if}
-					</TaskMetaRow>
+						</div>
+					{/if}
+					</div>
 				</div>
 				<!-- Close button (header) -->
 				<button

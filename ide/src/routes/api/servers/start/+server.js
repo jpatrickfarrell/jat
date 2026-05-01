@@ -182,10 +182,17 @@ export async function POST({ request }) {
 			// Use port from request, config, or nothing (let vite pick default)
 			effectivePort = port || configPort;
 
-			// Build the command with port if specified
+			// Build the command with port and host flags
 			serverCommand = command;
+			const extraArgs = [];
 			if (effectivePort && !command.includes('--port')) {
-				serverCommand = `${command} -- --port ${effectivePort}`;
+				extraArgs.push(`--port ${effectivePort}`);
+			}
+			if (!command.includes('--host')) {
+				extraArgs.push('--host');
+			}
+			if (extraArgs.length > 0) {
+				serverCommand = `${command} -- ${extraArgs.join(' ')}`;
 			}
 		}
 

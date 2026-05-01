@@ -193,9 +193,16 @@ export async function POST({ params }) {
 		}
 	}
 
-	// Add port flag if configured
+	// Add port and host flags
+	const extraArgs = [];
 	if (config.port && !startCommand.includes('--port')) {
-		startCommand = `${startCommand} -- --port ${config.port}`;
+		extraArgs.push(`--port ${config.port}`);
+	}
+	if (!startCommand.includes('--host')) {
+		extraArgs.push('--host');
+	}
+	if (extraArgs.length > 0) {
+		startCommand = `${startCommand} -- ${extraArgs.join(' ')}`;
 	}
 
 	try {

@@ -45,6 +45,13 @@
       : `<div class="spinner"></div><span>${msg}</span>`
   }
 
+  function setNotFound() {
+    if (!statusEl) return
+    statusEl.style.display = 'flex'
+    statusEl.className = 'error'
+    statusEl.innerHTML = `<span>Recording not found.</span>`
+  }
+
   function showPlayer() {
     if (statusEl) statusEl.style.display = 'none'
     if (bodyEl) bodyEl.style.display = 'flex'
@@ -177,7 +184,10 @@
     if (!res.ok) throw new Error(`Reports API: HTTP ${res.status}`)
     const data = await res.json()
     const report = (data.reports || []).find(r => r.id === taskId)
-    if (!report) throw new Error(`Report ${taskId} not found`)
+    if (!report) {
+      setNotFound()
+      return
+    }
 
     document.title = `Replay: ${report.title || taskId}`
     const reportTitleEl = document.getElementById('report-title')

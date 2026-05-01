@@ -101,20 +101,6 @@
 		if (open) return;
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (e.key !== ':') return;
-		const t = e.target as HTMLElement | null;
-		const ae = document.activeElement as HTMLElement | null;
-		// eslint-disable-next-line no-console
-		console.log('[MarksCommandLine] : pressed', {
-			targetTag: t?.tagName,
-			targetCls: (t?.className || '').toString().slice(0, 80),
-			targetCE: t?.isContentEditable,
-			targetMonacoAncestor: !!t?.closest?.('.monaco-editor'),
-			activeTag: ae?.tagName,
-			activeCls: (ae?.className || '').toString().slice(0, 80),
-			activeCE: ae?.isContentEditable,
-			activeMonacoAncestor: !!ae?.closest?.('.monaco-editor'),
-			isEditing: isEditingTarget(e.target),
-		});
 		if (isEditingTarget(e.target)) return;
 		e.preventDefault();
 		openPrompt();

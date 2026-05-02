@@ -1029,7 +1029,7 @@ launch_ide() {
         else
             echo -e "${DIM}  → Using existing production build${NC}"
         fi
-        ide_cmd="PORT=$ide_port HOST=0.0.0.0 node build"
+        ide_cmd="PORT=$ide_port HOST=0.0.0.0 BODY_SIZE_LIMIT=50M node build"
     else
         # Clear Vite cache to prevent stale chunk errors
         rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null

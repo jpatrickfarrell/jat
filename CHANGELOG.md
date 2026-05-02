@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time WebSocket/SSE updates
 - Swarm attack mode for parallel agent execution
 
+### Fixed
+- Mobile session drawer attachments now open in a full-screen lightbox when tapped (previously did nothing — only copied the path silently). The filename area still copies the path so the existing send-to-Claude workflow continues to work.
+
 ### Changed
 - `get-current-session-id` supports `--wait` flag for fresh startup retry
 - Activity state polling is more resilient to transient network errors (Content-Length mismatches)

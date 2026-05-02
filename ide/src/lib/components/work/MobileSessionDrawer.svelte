@@ -1089,7 +1089,10 @@
 
 	let viewingAttachment = $state<any | null>(null);
 
-	function openAttachment(attachment: any) {
+	function openAttachment(e: MouseEvent | undefined, attachment: any) {
+		// Stop propagation so the bubbling click doesn't immediately hit the
+		// lightbox overlay's close handler when we mount it synchronously.
+		e?.stopPropagation();
 		const path = attachment?.path;
 		if (!path) return;
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
@@ -2107,7 +2110,7 @@
 											<button
 												type="button"
 												class="flex-shrink-0 w-10 h-10 rounded border border-base-300/60 bg-base-200 overflow-hidden cursor-pointer active:opacity-70 transition-opacity p-0"
-												use:directClick={() => openAttachment(attachment)}
+												use:directClick={(e) => openAttachment(e, attachment)}
 												aria-label={isImg ? 'View image' : 'Open attachment'}
 											>
 												{#if isImg && attachment.path}

@@ -156,6 +156,10 @@
 	let tasksLoading = $state(true);
 	let tasksError = $state<string | null>(null);
 
+	// Current user identity — used to filter waiting tasks to only those relevant to this user
+	let currentUserName = $state('');
+	let currentUserEmail = $state('');
+
 	// Agent mappings
 	let agentProjects = $state<Map<string, string>>(new Map());
 	let agentTasks = $state<Map<string, AgentTask>>(new Map());
@@ -616,7 +620,22 @@
 	);
 	const selectedProjectWaitingTasks = $derived(
 		selectedProject
-			? waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'))
+			? waitingTasks.filter(t => {
+				if (!(t.id || '').startsWith(selectedProject + '-')) return false;
+				// Tasks with a human assignee (assignee_id set in postgres) are only shown to that person.
+				// Tasks assigned to agents (assignee_id=null) or SQLite tasks show to everyone.
+				const assigneeId = (t as any).assignee_id;
+				if (!assigneeId) return true;
+				if (!currentUserEmail && !currentUserName) return true; // identity not loaded yet
+				if (currentUserEmail) {
+					const taskEmail = (t as any).assignee_email;
+					if (taskEmail && taskEmail.toLowerCase() === currentUserEmail.toLowerCase()) return true;
+				}
+				if (currentUserName && t.assignee) {
+					if (t.assignee.toLowerCase() === currentUserName.toLowerCase()) return true;
+				}
+				return false;
+			})
 			: []
 	);
 
@@ -1442,6 +1461,18 @@
 		]);
 	}
 
+	async function fetchCurrentUser() {
+		try {
+			const res = await fetch('/api/config/user');
+			if (!res.ok) return;
+			const data = await res.json();
+			currentUserName = data.name || '';
+			currentUserEmail = data.email || '';
+		} catch {
+			// Silent fail — fall back to showing all waiting tasks
+		}
+	}
+
 	// Non-critical data (colors, notes, project order, recovery, completed tasks)
 	async function fetchSupplementalData() {
 		await Promise.all([
@@ -1453,6 +1484,7 @@
 			fetchBrowserSessions(),
 			fetchTaskImages(),
 			fetchResumableTasks(),
+			fetchCurrentUser(),
 		]);
 	}
 
@@ -1863,8 +1895,7 @@
 		const paused = getProjectPausedSessions(selectedProject);
 		const hasWork = paused.some(s => s.taskType !== 'chat');
 		const hasChat = paused.some(s => s.taskType === 'chat');
-		const projectWaiting = waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'));
-		const hasWaiting = projectWaiting.length > 0;
+		const hasWaiting = selectedProjectWaitingTasks.length > 0;
 		let changed = false;
 
 		const chatKey = `${selectedProject}:conversations`;

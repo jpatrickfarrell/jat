@@ -345,10 +345,12 @@
 			await onAction(action.id);
 		}
 
-		// 4. Dismiss — interrupt/escape stay open so user can type follow-up commands;
-		//    kill/cleanup show a brief recovery notice first
-		if (action.id === 'interrupt' || action.id === 'escape') {
-			// Stay open — user interrupted to fix something and needs to type next
+		// 4. Dismiss — interrupt/escape/attach stay open so user can read the
+		//    attach toast (especially over SSH where nothing else is visible)
+		//    or type follow-up commands.
+		//    kill/cleanup show a brief recovery notice first.
+		if (action.id === 'interrupt' || action.id === 'escape' || action.id === 'attach') {
+			// Stay open — user needs to see attach feedback or type next command
 		} else if (action.id === 'kill' || action.id === 'cleanup') {
 			sessionKilledNotice = action.id;
 			if (sessionKilledTimer) clearTimeout(sessionKilledTimer);
@@ -1078,6 +1080,29 @@
 	function isImageAttachment(attachment: any): boolean {
 		const path = (attachment?.path || attachment?.name || attachment?.filename || '').toLowerCase();
 		return /\.(png|jpg|jpeg|gif|webp|svg)$/.test(path);
+	}
+
+	function attachmentImageUrl(attachment: any): string {
+		const path = attachment?.path || '';
+		return path.startsWith('http') ? path : `/api/work/image${path}`;
+	}
+
+	let viewingAttachment = $state<any | null>(null);
+
+	function openAttachment(attachment: any) {
+		const path = attachment?.path;
+		if (!path) return;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		if (isImageAttachment(attachment)) {
+			viewingAttachment = attachment;
+		} else {
+			const url = path.startsWith('http') ? path : `/api/work/image${path}`;
+			window.open(url, '_blank', 'noopener,noreferrer');
+		}
+	}
+
+	function closeAttachmentViewer() {
+		viewingAttachment = null;
 	}
 
 	async function deleteAttachment(attachment: any) {
@@ -2081,27 +2106,34 @@
 										<li class="flex items-center gap-3 py-2 text-sm text-base-content/85">
 											<button
 												type="button"
-												class="flex-1 flex items-center gap-3 min-w-0 bg-transparent border-none p-0 text-left cursor-pointer active:opacity-70 transition-opacity"
-												use:directClick={() => copyAttachmentPath(attachment)}
-												aria-label="Copy path"
+												class="flex-shrink-0 w-10 h-10 rounded border border-base-300/60 bg-base-200 overflow-hidden cursor-pointer active:opacity-70 transition-opacity p-0"
+												use:directClick={() => openAttachment(attachment)}
+												aria-label={isImg ? 'View image' : 'Open attachment'}
 											>
 												{#if isImg && attachment.path}
 													{@const isRemote = attachment.path.startsWith('http')}
 													<img
 														src={isRemote ? attachment.path : `/api/work/image${attachment.path}`}
 														alt={displayName}
-														class="flex-shrink-0 w-10 h-10 object-cover rounded border border-base-300/60 bg-base-200"
+														class="w-full h-full object-cover"
 														loading="lazy"
 														onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
 													/>
 												{:else}
-													<span class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded border border-base-300/60 bg-base-200">
+													<span class="w-full h-full flex items-center justify-center">
 														<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" class="text-base-content/55">
 															<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
 														</svg>
 													</span>
 												{/if}
-												<span class="truncate flex-1 {isCopied ? 'text-success' : ''}">
+											</button>
+											<button
+												type="button"
+												class="flex-1 min-w-0 bg-transparent border-none p-0 text-left cursor-pointer active:opacity-70 transition-opacity"
+												use:directClick={() => copyAttachmentPath(attachment)}
+												aria-label="Copy path"
+											>
+												<span class="block truncate {isCopied ? 'text-success' : ''}">
 													{isCopied ? 'Copied!' : displayName}
 												</span>
 											</button>
@@ -2445,6 +2477,34 @@
 					</div>
 				{/if}
 			</div>
+		</div>
+	{/if}
+
+	{#if viewingAttachment}
+		<div
+			class="fixed inset-0 z-[65] flex items-center justify-center bg-black/90"
+			role="button"
+			tabindex="-1"
+			use:directClick={closeAttachmentViewer}
+			use:directKeydown={(e) => { if (e.key === 'Escape') closeAttachmentViewer(); }}
+			transition:fade={{ duration: 150 }}
+			aria-label="Close image viewer"
+		>
+			<img
+				src={attachmentImageUrl(viewingAttachment)}
+				alt={viewingAttachment.name || viewingAttachment.path?.split('/').pop() || 'Attachment'}
+				class="max-w-full max-h-full object-contain"
+			/>
+			<button
+				type="button"
+				class="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center bg-base-100/90 text-base-content shadow-lg cursor-pointer active:scale-95 transition-transform"
+				use:directClick={(e) => { e.stopPropagation(); closeAttachmentViewer(); }}
+				aria-label="Close"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
 	{/if}
 </div>

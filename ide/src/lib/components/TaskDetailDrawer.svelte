@@ -3565,7 +3565,7 @@
 									<!-- Section label -->
 									<div class="text-[10px] font-mono uppercase tracking-widest text-base-content/30">Feedback Context</div>
 									<!-- Recording CTA (most prominent) -->
-									{#if task.recording_url || task.db_id}
+									{#if task.recording_url}
 										{@const replayBase = (() => { try { return new URL(task.page_url || '').origin; } catch { return ''; } })()}
 										{@const replayUrl = task.db_id && replayBase ? `${replayBase}/feedback/replay?id=${task.db_id}` : task.recording_url || ''}
 										{#if replayUrl}

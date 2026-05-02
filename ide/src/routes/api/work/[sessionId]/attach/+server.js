@@ -282,7 +282,30 @@ export async function POST({ params }) {
 		const displayName = projectName ? projectName.toUpperCase() : 'JAT';
 		const windowTitle = `${displayName}: ${sessionId}`;
 
-		// --- Step 1: Try parent tmux session (local users running JAT in tmux) ---
+		// --- Headless / SSH detection ---
+		// When there's no local display, the IDE is running on a remote/headless
+		// host. In that case, try to redirect the user's SSH tmux client FIRST
+		// (`switch-client`) before creating a new window in the IDE's parent
+		// session — otherwise the new window goes into `jat-app-ide`/`server-jat`
+		// which the SSH user may not be attached to, and they see nothing happen.
+		const hasDisplay = process.env.DISPLAY || process.env.WAYLAND_DISPLAY;
+		if (!hasDisplay) {
+			const switched = await trySwitchSshClient(sessionId);
+			if (switched) {
+				return json({
+					success: true,
+					session: sessionId,
+					method: 'tmux-switch-client',
+					project: projectName
+				});
+			}
+			// No external SSH tmux client to redirect — fall through to parent
+			// session new-window (works if the user IS attached to jat-app-ide
+			// itself), then to the copy-paste command fallback.
+		}
+
+		// --- Try parent tmux session (local users running JAT in tmux, OR SSH
+		// users attached directly to jat-app-ide) ---
 		// Exclude the target session itself to avoid creating a self-referencing window
 		const parentCandidates = DEFAULT_PARENT_SESSIONS.filter(s => s !== sessionId);
 		const parentSession = await findParentSession(parentCandidates);
@@ -302,21 +325,9 @@ export async function POST({ params }) {
 			}
 		}
 
-		// --- Step 2: Headless / SSH detection ---
-		// When there's no local display, spawning a terminal emulator does nothing visible.
-		// Instead, try to redirect the user's SSH terminal via tmux switch-client.
-		const hasDisplay = process.env.DISPLAY || process.env.WAYLAND_DISPLAY;
+		// Headless and no parent session worked — return the command for the user
+		// to run manually.
 		if (!hasDisplay) {
-			const switched = await trySwitchSshClient(sessionId);
-			if (switched) {
-				return json({
-					success: true,
-					session: sessionId,
-					method: 'tmux-switch-client',
-					project: projectName
-				});
-			}
-			// No tmux client found — return the command for the user to run manually
 			return json({
 				success: true,
 				session: sessionId,

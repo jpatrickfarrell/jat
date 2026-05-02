@@ -579,6 +579,7 @@
 		path: string;
 		uploading: boolean;
 		error?: boolean;
+		errorMsg?: string;
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading && !a.error));
@@ -768,9 +769,14 @@
 		try {
 			const res = await fetch('/api/work/upload-image', { method: 'POST', body: formData });
 			if (!res.ok) {
-				console.warn('[MobileSessionDrawer] Upload failed with status:', res.status);
+				let errorMsg = `Upload failed (${res.status})`;
+				try {
+					const body = await res.json();
+					if (body.message) errorMsg = body.message;
+				} catch {}
+				console.warn('[MobileSessionDrawer] Upload failed:', errorMsg);
 				pendingAttachments = pendingAttachments.map(a =>
-					a.id === id ? { ...a, uploading: false, error: true } : a
+					a.id === id ? { ...a, uploading: false, error: true, errorMsg } : a
 				);
 				return;
 			}
@@ -1789,7 +1795,7 @@
 										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
 									</svg>
 								{/if}
-								<span class="text-[0.7rem] overflow-hidden text-ellipsis whitespace-nowrap min-w-0 {att.error ? 'text-error/70' : 'text-base-content/70'}">{att.error ? 'Upload failed' : att.name}</span>
+								<span class="text-[0.7rem] overflow-hidden text-ellipsis whitespace-nowrap min-w-0 {att.error ? 'text-error/70' : 'text-base-content/70'}" title={att.error ? (att.errorMsg || 'Upload failed') : att.name}>{att.error ? (att.errorMsg || 'Upload failed') : att.name}</span>
 								{#if att.uploading}
 									<span class="text-[0.7rem] text-base-content/50 flex-shrink-0">…</span>
 								{:else}

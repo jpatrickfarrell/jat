@@ -117,11 +117,19 @@ export async function POST({ request }) {
 			timestamp: new Date().toISOString()
 		});
 	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		const status = /** @type {any} */ (error)?.status;
+		if (status === 413 || message.includes('exceeds limit') || message.includes('Payload Too Large')) {
+			return json(
+				{ error: 'File too large', message: 'File exceeds the 50 MB upload limit.' },
+				{ status: 413 }
+			);
+		}
 		console.error('Error in POST /api/work/upload-image:', error);
 		return json(
 			{
 				error: 'Failed to upload file',
-				message: error instanceof Error ? error.message : String(error)
+				message
 			},
 			{ status: 500 }
 		);

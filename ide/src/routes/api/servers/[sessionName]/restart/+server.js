@@ -153,9 +153,11 @@ export async function POST({ params }) {
 				return `${process.env.HOME}/code/jat/tools/ingest`;
 			})();
 		} else {
-			// Standard project: build the restart command with port if available
-			const portArg = port ? ` -- --port ${port}` : '';
-			restartCommand = `npm run dev${portArg}`;
+			// Standard project: build the restart command with port and host flags
+			const extraArgs = [];
+			if (port) extraArgs.push(`--port ${port}`);
+			extraArgs.push('--host');
+			restartCommand = `npm run dev -- ${extraArgs.join(' ')}`;
 
 			// Determine the correct working directory
 			// Use server_path if specified, otherwise check for ide subdirectory

@@ -45,6 +45,10 @@
 		approver?: { name?: string; email?: string } | null;
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
 		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
+		source?: string | null;
+		source_item_id?: string | null;
+		metadata?: string | Record<string, unknown> | null;
+		page_url?: string | null;
 	}
 
 	// Column definition
@@ -68,6 +72,9 @@
 		{ id: 'due_date', label: 'Due', defaultWidth: 100, minWidth: 70, sortable: true, sortField: 'due_date' },
 		{ id: 'labels', label: 'Labels', defaultWidth: 160, minWidth: 80, sortable: false },
 		{ id: 'assignee', label: 'Assignee', defaultWidth: 100, minWidth: 60, sortable: false },
+		{ id: 'requester', label: 'Requester', defaultWidth: 120, minWidth: 80, sortable: false },
+		{ id: 'source', label: 'Source', defaultWidth: 90, minWidth: 60, sortable: true, sortField: 'source' },
+		{ id: 'page', label: 'Page', defaultWidth: 160, minWidth: 80, sortable: true, sortField: 'page' },
 		{ id: 'created', label: 'Created', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'created' },
 		{ id: 'updated', label: 'Updated', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'updated' },
 		{ id: 'actions', label: 'Actions', defaultWidth: 72, minWidth: 50, sortable: false },
@@ -491,6 +498,26 @@
 	let chipDragOverIdx = $state<number | null>(null);
 	let addSortDetailsEl = $state<HTMLDetailsElement | null>(null);
 
+	function getTaskPageUrl(task: Task): string {
+		if (task.page_url) return task.page_url;
+		if (!task.metadata) return '';
+		try {
+			const meta = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata;
+			return (meta as Record<string, unknown>).page_url as string || '';
+		} catch { return ''; }
+	}
+
+	function formatPageUrl(url: string): string {
+		if (!url) return '';
+		try {
+			const u = new URL(url);
+			return u.pathname + (u.search ? u.search : '');
+		} catch {
+			// Not a full URL — already a pathname
+			return url;
+		}
+	}
+
 	function compareByField(a: Task, b: Task, field: string): number {
 		switch (field) {
 			case 'priority': return a.priority - b.priority;
@@ -502,6 +529,8 @@
 			case 'created':  return (a.created_at || '').localeCompare(b.created_at || '');
 			case 'updated':  return (a.updated_at || '').localeCompare(b.updated_at || '');
 			case 'assignee': return (a.assignee || '￿').localeCompare(b.assignee || '￿');
+			case 'source':   return (a.source || '').localeCompare(b.source || '');
+			case 'page':     return getTaskPageUrl(a).localeCompare(getTaskPageUrl(b));
 			default:         return 0;
 		}
 	}
@@ -963,14 +992,14 @@
 		const saved = loadColumnSettingsUtil('jat-open-tasks-columns', ALL_COLUMNS.map(c => c.id));
 		if (!saved) {
 			// First time — hide supplementary columns that aren't core defaults
-			hiddenColumns = new Set(['status', 'milestone', 'created', 'updated']);
+			hiddenColumns = new Set(['status', 'milestone', 'created', 'updated', 'requester', 'source', 'page']);
 			return;
 		}
 		columnOrder = saved.order;
 		columnWidths = saved.widths;
 		const hidden = new Set(saved.hidden);
 		// Newly added columns not present in old saved order default to hidden
-		for (const id of ['status', 'milestone', 'created', 'updated']) {
+		for (const id of ['status', 'milestone', 'created', 'updated', 'requester', 'source', 'page']) {
 			if (!(saved.order as string[]).includes(id)) hidden.add(id);
 		}
 		hiddenColumns = hidden;
@@ -2272,7 +2301,7 @@
 
 	function exportCSV() {
 		const selected = tasks.filter(t => selectedTasks.has(t.id));
-		const headers = ['ID', 'Title', 'Status', 'Priority', 'Type', 'Project', 'Assignee', 'Milestone', 'Due Date', 'Labels'];
+		const headers = ['ID', 'Title', 'Status', 'Priority', 'Type', 'Project', 'Assignee', 'Milestone', 'Due Date', 'Labels', 'Source', 'Page'];
 		const rows = selected.map(t => [
 			t.id,
 			`"${(t.title || '').replace(/"/g, '""')}"`,
@@ -2283,7 +2312,9 @@
 			t.assignee || '',
 			t.milestone_name || '',
 			t.due_date || '',
-			(t.labels || []).join(';')
+			(t.labels || []).join(';'),
+			t.source || '',
+			formatPageUrl(getTaskPageUrl(t)),
 		].join(','));
 		const csv = [headers.join(','), ...rows].join('\n');
 		const blob = new Blob([csv], { type: 'text/csv' });
@@ -3137,6 +3168,37 @@
 											>
 												{task.assignee || '—'}
 											</span>
+										{/if}
+									</td>
+								{:else if col.id === 'requester'}
+									{@const reqLabel = getPersonLabel(task.requester)}
+									{@const reqInitial = getPersonInitial(task.requester)}
+									<td>
+										{#if reqLabel}
+											<div class="person-date-cell">
+												<div class="person-avatar" title={reqLabel}>{reqInitial}</div>
+												<span class="person-date-text" title={reqLabel}>{reqLabel}</span>
+											</div>
+										{:else}
+											<span class="text-muted">—</span>
+										{/if}
+									</td>
+								{:else if col.id === 'source'}
+									<td>
+										{#if task.source}
+											<span class="source-badge source-badge-{task.source}">{task.source}</span>
+										{:else}
+											<span class="text-muted">—</span>
+										{/if}
+									</td>
+								{:else if col.id === 'page'}
+									{@const pageUrl = getTaskPageUrl(task)}
+									{@const pagePath = formatPageUrl(pageUrl)}
+									<td>
+										{#if pagePath}
+											<span class="page-url-cell" title={pageUrl}>{pagePath}</span>
+										{:else}
+											<span class="text-muted">—</span>
 										{/if}
 									</td>
 								{:else if col.id === 'created'}
@@ -4609,6 +4671,52 @@
 		font-size: 0.6875rem;
 		color: oklch(var(--bc) / 0.5);
 		white-space: nowrap;
+	}
+
+	/* Source badge */
+	.source-badge {
+		display: inline-block;
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		background: oklch(0.28 0.03 250);
+		color: oklch(0.70 0.06 250);
+		border: 1px solid oklch(0.35 0.04 250);
+	}
+	.source-badge-feedback {
+		background: oklch(0.25 0.06 290);
+		color: oklch(0.75 0.12 290);
+		border-color: oklch(0.35 0.08 290);
+	}
+	.source-badge-voice {
+		background: oklch(0.25 0.07 30);
+		color: oklch(0.75 0.12 30);
+		border-color: oklch(0.35 0.09 30);
+	}
+	.source-badge-api {
+		background: oklch(0.25 0.06 200);
+		color: oklch(0.72 0.10 200);
+		border-color: oklch(0.35 0.08 200);
+	}
+
+	/* Page URL cell */
+	.page-url-cell {
+		font-size: 0.6875rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(var(--bc) / 0.65);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
+		display: block;
+	}
+
+	.text-muted {
+		color: oklch(var(--bc) / 0.25);
+		font-size: 0.75rem;
 	}
 
 	/* Milestone cell — SearchDropdown assignment */

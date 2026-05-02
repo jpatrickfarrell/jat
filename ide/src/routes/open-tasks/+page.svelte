@@ -285,7 +285,7 @@
 			.map(([id, name]) => ({ id, name }));
 	});
 
-	const hasAssignees = $derived(tasks.some(t => t.assignee));
+	const hasAssignees = $derived(tasks.some(t => t.assignee) || tasks.some(t => !t.assignee));
 	const hasLabels = $derived(tasks.some(t => t.labels?.length));
 	const hasMilestones = $derived(tasks.some(t => t.milestone_id));
 	const hasRequesters = $derived(tasks.some(t => t.requester?.name || t.requester?.email));

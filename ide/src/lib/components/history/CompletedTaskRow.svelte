@@ -117,6 +117,49 @@
 		setTimeout(() => (copiedId = false), 1500);
 	}
 
+	// === Context menu ===
+	let ctxCreated = $state(false);
+	let ctxVisible = $state(false);
+	let ctxX = $state(0);
+	let ctxY = $state(0);
+	let copiedAttach = $state(false);
+
+	function handleContextMenu(e: MouseEvent) {
+		if (swiping) return;
+		e.preventDefault();
+		ctxCreated = true;
+		const menuW = 200;
+		const menuH = 260;
+		ctxX = e.clientX + menuW > window.innerWidth ? e.clientX - menuW : e.clientX;
+		ctxY = e.clientY + menuH > window.innerHeight ? e.clientY - menuH : e.clientY;
+		ctxVisible = true;
+	}
+
+	function closeContextMenu() {
+		ctxVisible = false;
+	}
+
+	function copyAttachString(e: MouseEvent) {
+		e.stopPropagation();
+		if (!task.assignee) return;
+		navigator.clipboard.writeText(`tmux attach-session -t jat-${task.assignee}`);
+		copiedAttach = true;
+		setTimeout(() => (copiedAttach = false), 1500);
+		closeContextMenu();
+	}
+
+	$effect(() => {
+		if (!ctxVisible) return;
+		function onDocClick() { ctxVisible = false; }
+		function onDocKey(e: KeyboardEvent) { if (e.key === 'Escape') ctxVisible = false; }
+		document.addEventListener('click', onDocClick);
+		document.addEventListener('keydown', onDocKey);
+		return () => {
+			document.removeEventListener('click', onDocClick);
+			document.removeEventListener('keydown', onDocKey);
+		};
+	});
+
 	function haptic(ms = 8) {
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
 	}
@@ -284,6 +327,7 @@
 		ontouchmove={onTouchMove}
 		ontouchend={onTouchEnd}
 		ontouchcancel={onTouchEnd}
+		oncontextmenu={handleContextMenu}
 	>
 		<!-- Duration stripe: width proportional to task duration relative to day's longest -->
 		<div class="ctr-duration-stripe" style="width: {stripeWidth}%;"></div>
@@ -478,6 +522,91 @@
 		</div>
 	</div>
 </div>
+
+{#if ctxCreated}
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="ctr-ctx-menu"
+	class:ctr-ctx-menu-hidden={!ctxVisible}
+	style="left: {ctxX}px; top: {ctxY}px;"
+	role="menu"
+	tabindex="-1"
+	onclick={(e) => e.stopPropagation()}
+	onkeydown={(e) => { if (e.key === 'Escape') closeContextMenu(); e.stopPropagation(); }}
+>
+	<!-- Copy ID -->
+	<button class="ctr-ctx-item" onclick={(e) => { e.stopPropagation(); copyTaskId(e); closeContextMenu(); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+			<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+		</svg>
+		<span>{copiedId ? 'Copied!' : 'Copy ID'}</span>
+	</button>
+
+	<!-- Copy attach string (only if assignee) -->
+	{#if task.assignee}
+		<button class="ctr-ctx-item" onclick={copyAttachString}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+			</svg>
+			<span>{copiedAttach ? 'Copied!' : 'Copy attach string'}</span>
+		</button>
+	{/if}
+
+	<!-- View Details -->
+	<button class="ctr-ctx-item" onclick={(e) => { e.stopPropagation(); onTaskClick(task.id); closeContextMenu(); }}>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+			<circle cx="12" cy="12" r="3" />
+		</svg>
+		<span>View Details</span>
+	</button>
+
+	<div class="ctr-ctx-divider"></div>
+
+	<!-- Resume (only if assignee) -->
+	{#if task.assignee && onResumeSession}
+		<button class="ctr-ctx-item" disabled={resuming} onclick={(e) => { e.stopPropagation(); onResumeSession!(e, task); closeContextMenu(); }}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+			</svg>
+			<span>Resume Session</span>
+		</button>
+	{/if}
+
+	<!-- Reopen -->
+	{#if onReopenTask}
+		<button class="ctr-ctx-item" onclick={(e) => { e.stopPropagation(); onReopenTask!(e, task); closeContextMenu(); }}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+			</svg>
+			<span>Reopen Task</span>
+		</button>
+	{/if}
+
+	<!-- Duplicate -->
+	{#if onDuplicateTask}
+		<button class="ctr-ctx-item" onclick={(e) => { e.stopPropagation(); onDuplicateTask!(e, task); closeContextMenu(); }}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+				<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+			</svg>
+			<span>Duplicate</span>
+		</button>
+	{/if}
+
+	<!-- Memory -->
+	{#if memoryFilename && onMemoryClick}
+		<button class="ctr-ctx-item" onclick={(e) => { e.stopPropagation(); onMemoryClick!(e, memoryFilename!, task); closeContextMenu(); }}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+			</svg>
+			<span>View Memory</span>
+		</button>
+	{/if}
+</div>
+{/if}
 
 <style>
 	/* Swipe container */
@@ -1004,5 +1133,70 @@
 		.ctr-summary-skeleton {
 			animation: none !important;
 		}
+	}
+
+	/* === Context menu === */
+	.ctr-ctx-menu {
+		position: fixed;
+		z-index: 100;
+		min-width: 190px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem;
+		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
+		animation: ctrCtxIn 0.1s ease;
+	}
+
+	.ctr-ctx-menu-hidden {
+		display: none;
+	}
+
+	@keyframes ctrCtxIn {
+		from { opacity: 0; transform: scale(0.95); }
+		to   { opacity: 1; transform: scale(1); }
+	}
+
+	.ctr-ctx-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.80 0.02 250);
+		font-size: 0.8125rem;
+		text-align: left;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: background 0.1s ease;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.ctr-ctx-item:hover {
+		background: oklch(0.25 0.02 250);
+	}
+
+	.ctr-ctx-item:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.ctr-ctx-item svg {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.ctr-ctx-item:hover svg {
+		color: oklch(0.75 0.02 250);
+	}
+
+	.ctr-ctx-divider {
+		height: 1px;
+		background: oklch(0.28 0.02 250);
+		margin: 0.375rem 0;
 	}
 </style>

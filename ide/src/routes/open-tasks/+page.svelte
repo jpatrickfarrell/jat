@@ -71,8 +71,8 @@
 		{ id: 'milestone', label: 'Milestone', defaultWidth: 130, minWidth: 80, sortable: false },
 		{ id: 'due_date', label: 'Due', defaultWidth: 100, minWidth: 70, sortable: true, sortField: 'due_date' },
 		{ id: 'labels', label: 'Labels', defaultWidth: 160, minWidth: 80, sortable: false },
-		{ id: 'assignee', label: 'Assignee', defaultWidth: 100, minWidth: 60, sortable: false },
-		{ id: 'requester', label: 'Requester', defaultWidth: 120, minWidth: 80, sortable: false },
+		{ id: 'assignee', label: 'Assignee', defaultWidth: 100, minWidth: 60, sortable: true, sortField: 'assignee' },
+		{ id: 'requester', label: 'Requester', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'requester' },
 		{ id: 'source', label: 'Source', defaultWidth: 90, minWidth: 60, sortable: true, sortField: 'source' },
 		{ id: 'page', label: 'Page', defaultWidth: 160, minWidth: 80, sortable: true, sortField: 'page' },
 		{ id: 'created', label: 'Created', defaultWidth: 120, minWidth: 80, sortable: true, sortField: 'created' },
@@ -472,7 +472,7 @@
 	const SORT_FIELDS: Record<string, string> = {
 		priority: 'Priority', status: 'Status', title: 'Title', project: 'Project',
 		type: 'Type', due_date: 'Due', created: 'Created', updated: 'Updated', assignee: 'Assignee',
-		source: 'Source', page: 'Page',
+		requester: 'Requester', source: 'Source', page: 'Page',
 	};
 	let sortChips = $state<SortChip[]>([{ field: 'priority', dir: 'asc' }]);
 	const availableSortFields = $derived(
@@ -480,12 +480,17 @@
 	);
 
 	// Group-by
-	type GroupBy = 'none' | 'milestone' | 'assignee' | 'status';
+	type GroupBy = 'none' | 'milestone' | 'assignee' | 'status' | 'priority' | 'type' | 'project' | 'source' | 'requester';
 	const GROUP_BY_OPTIONS: Array<{ value: GroupBy; label: string }> = [
 		{ value: 'none', label: 'None' },
+		{ value: 'priority', label: 'Priority' },
+		{ value: 'status', label: 'Status' },
+		{ value: 'type', label: 'Type' },
+		{ value: 'project', label: 'Project' },
 		{ value: 'milestone', label: 'Milestone' },
 		{ value: 'assignee', label: 'Assignee' },
-		{ value: 'status', label: 'Status' },
+		{ value: 'requester', label: 'Requester' },
+		{ value: 'source', label: 'Source' },
 	];
 	let groupBy = $state<GroupBy>('none');
 	let collapsedGroups = $state<Set<string>>(new Set());
@@ -529,7 +534,12 @@
 			case 'due_date': return (a.due_date || '9999').localeCompare(b.due_date || '9999');
 			case 'created':  return (a.created_at || '').localeCompare(b.created_at || '');
 			case 'updated':  return (a.updated_at || '').localeCompare(b.updated_at || '');
-			case 'assignee': return (a.assignee || '￿').localeCompare(b.assignee || '￿');
+			case 'assignee':   return (a.assignee || '￿').localeCompare(b.assignee || '￿');
+			case 'requester': {
+				const ra = a.requester?.name || a.requester?.email || '￿';
+				const rb = b.requester?.name || b.requester?.email || '￿';
+				return ra.localeCompare(rb);
+			}
 			case 'source':   return (a.source || '').localeCompare(b.source || '');
 			case 'page':     return getTaskPageUrl(a).localeCompare(getTaskPageUrl(b));
 			default:         return 0;
@@ -1202,6 +1212,81 @@
 			return [...groups.values()].sort((a, b) => {
 				if (a.key === '__unassigned__') return -1;
 				if (b.key === '__unassigned__') return 1;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		if (groupBy === 'requester') {
+			for (const t of items) {
+				const name = t.requester?.name || t.requester?.email || '';
+				const k = name || '__none__';
+				const label = name || 'No requester';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].sort((a, b) => {
+				if (a.key === '__none__') return 1;
+				if (b.key === '__none__') return -1;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		if (groupBy === 'priority') {
+			const PRIORITY_LABELS: Record<number, string> = { 0: 'P0 — Critical', 1: 'P1 — High', 2: 'P2 — Medium', 3: 'P3 — Low', 4: 'P4 — Lowest' };
+			for (let p = 0; p <= 4; p++) {
+				groups.set(String(p), { key: String(p), label: PRIORITY_LABELS[p] ?? `P${p}`, count: 0, tasks: [] });
+			}
+			for (const t of items) {
+				const k = String(t.priority ?? 3);
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label: `P${k}`, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].filter(g => g.count > 0).sort((a, b) => Number(a.key) - Number(b.key));
+		}
+
+		if (groupBy === 'type') {
+			for (const t of items) {
+				const k = t.issue_type || '__none__';
+				const label = t.issue_type || 'No type';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].sort((a, b) => {
+				if (a.key === '__none__') return 1;
+				if (b.key === '__none__') return -1;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		if (groupBy === 'project') {
+			for (const t of items) {
+				const k = t.project || '__none__';
+				const label = t.project || 'No project';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].sort((a, b) => {
+				if (a.key === '__none__') return 1;
+				if (b.key === '__none__') return -1;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		if (groupBy === 'source') {
+			for (const t of items) {
+				const k = t.source || '__none__';
+				const label = t.source || 'No source';
+				let g = groups.get(k);
+				if (!g) { g = { key: k, label, count: 0, tasks: [] }; groups.set(k, g); }
+				g.tasks.push(t); g.count++;
+			}
+			return [...groups.values()].sort((a, b) => {
+				if (a.key === '__none__') return 1;
+				if (b.key === '__none__') return -1;
 				return a.label.localeCompare(b.label);
 			});
 		}

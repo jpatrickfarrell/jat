@@ -472,6 +472,7 @@
 	const SORT_FIELDS: Record<string, string> = {
 		priority: 'Priority', status: 'Status', title: 'Title', project: 'Project',
 		type: 'Type', due_date: 'Due', created: 'Created', updated: 'Updated', assignee: 'Assignee',
+		source: 'Source', page: 'Page',
 	};
 	let sortChips = $state<SortChip[]>([{ field: 'priority', dir: 'asc' }]);
 	const availableSortFields = $derived(
@@ -715,6 +716,12 @@
 		if (aCol.length !== bCol.length) return false;
 		const aColSet = new Set(aCol);
 		for (const k of bCol) if (!aColSet.has(k)) return false;
+		const aChips = a.sortChips ?? [];
+		const bChips = b.sortChips ?? [];
+		if (aChips.length !== bChips.length) return false;
+		for (let i = 0; i < aChips.length; i++) {
+			if (aChips[i].field !== bChips[i].field || aChips[i].dir !== bChips[i].dir) return false;
+		}
 		return true;
 	}
 
@@ -833,7 +840,7 @@
 			approver: selectedApprover,
 			internal: internalFilter,
 			search: searchQuery,
-			sortChips: [],
+			sortChips: sortChips.map(c => ({ ...c })),
 			groupBy,
 			collapsedGroups: [...collapsedGroups],
 		};
@@ -3171,8 +3178,8 @@
 										{/if}
 									</td>
 								{:else if col.id === 'requester'}
-									{@const reqLabel = getPersonLabel(task.requester)}
-									{@const reqInitial = getPersonInitial(task.requester)}
+									{@const reqLabel = getPersonLabel(task.requester) || getPersonLabel(task.creator)}
+									{@const reqInitial = getPersonInitial(task.requester) || getPersonInitial(task.creator)}
 									<td>
 										{#if reqLabel}
 											<div class="person-date-cell">

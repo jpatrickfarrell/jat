@@ -1,14 +1,20 @@
 .PHONY: help setup build install dev up stop status tools hooks check test test-ide clean fresh sync uninstall
 .PHONY: docker-build docker-up docker-down docker-logs docker-shell docker-status
+.PHONY: enable disable update
 
 # JAT (Jomarchy Agent Tools) - Build & Install
 # https://github.com/joewinke/jat
 
-JAT_DIR := $(shell pwd)
-XDG_DIR := $(HOME)/.local/share/jat
-IDE_DIR := $(JAT_DIR)/ide
-DOCKER_IMAGE := jat-ide
+JAT_DIR       := $(shell pwd)
+XDG_DIR       := $(HOME)/.local/share/jat
+IDE_DIR       := $(JAT_DIR)/ide
+DOCKER_IMAGE  := jat-ide
 DOCKER_CONTAINER := jat-ide
+HOOKS_SRC     := $(JAT_DIR)/.claude/hooks
+CLAUDE_DIR    := $(HOME)/.claude
+HOOKS_DST     := $(CLAUDE_DIR)/hooks
+BIN_DIR       := $(HOME)/.local/bin
+SETTINGS      := $(CLAUDE_DIR)/settings.local.json
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +32,10 @@ help: ## Show this help
 	@echo ""
 	@echo "  \033[36mDocker\033[0m"
 	@grep -E '^docker-[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "  \033[36mClaude Integration\033[0m"
+	@grep -E '^(enable|disable|update):.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  \033[36mMaintenance\033[0m"
@@ -137,6 +147,64 @@ docker-status: ## Show Docker container health and resource usage
 	@echo ""
 	@echo "── Resources ──"
 	@docker stats --no-stream --format "  CPU: {{.CPUPerc}}\tMem: {{.MemUsage}}" $(DOCKER_CONTAINER) 2>/dev/null || echo "  Not running"
+
+# ─── Claude Integration ──────────────────────────────────────────────────────
+
+enable: ## Symlink JAT hooks + statusline into ~/.claude/, configure settings
+	@echo "Enabling JAT..."
+	@mkdir -p $(HOOKS_DST)
+	@ln -sf $(JAT_DIR)/.claude/statusline.sh $(CLAUDE_DIR)/statusline.sh
+	@echo "  linked statusline.sh"
+	@for hook in $(HOOKS_SRC)/*.sh; do \
+		ln -sf "$$hook" "$(HOOKS_DST)/$$(basename $$hook)"; \
+		echo "  linked $$(basename $$hook)"; \
+	done
+	@bash $(JAT_DIR)/tools/scripts/symlink-tools.sh
+	@bash $(JAT_DIR)/tools/scripts/setup-statusline-and-hooks.sh $(JAT_DIR)
+	@echo ""
+	@echo "JAT enabled. Restart Claude Code sessions to pick up the new hooks."
+
+disable: ## Remove JAT hooks + statusline from ~/.claude/, clean settings
+	@echo "Disabling JAT..."
+	@if [ -L "$(CLAUDE_DIR)/statusline.sh" ]; then \
+		rm -f "$(CLAUDE_DIR)/statusline.sh"; \
+		echo "  removed statusline.sh"; \
+	fi
+	@for hook in $(HOOKS_SRC)/*.sh; do \
+		name=$$(basename "$$hook"); \
+		target="$(HOOKS_DST)/$$name"; \
+		if [ -L "$$target" ]; then \
+			rm -f "$$target"; \
+			echo "  removed $$name"; \
+		fi; \
+	done
+	@for link in $(BIN_DIR)/*; do \
+		if [ -L "$$link" ]; then \
+			dest=$$(readlink "$$link"); \
+			case "$$dest" in \
+				$(JAT_DIR)/*) rm -f "$$link"; echo "  removed $$(basename $$link)";; \
+			esac; \
+		fi; \
+	done
+	@if [ -f "$(SETTINGS)" ] && command -v jq >/dev/null 2>&1; then \
+		tmp=$$(mktemp); \
+		jq 'if .hooks then .hooks |= ( \
+			to_entries | \
+			map(.value |= ( \
+				map(.hooks |= map(select((.command // "") | startswith("~/.claude/hooks/") | not))) \
+				| map(select(.hooks | length > 0)) \
+			)) | \
+			map(select(.value | length > 0)) | \
+			from_entries \
+		) else . end' "$(SETTINGS)" > "$$tmp" && mv "$$tmp" "$(SETTINGS)"; \
+		echo "  cleaned settings.local.json"; \
+	fi
+	@echo ""
+	@echo "JAT disabled. Restart Claude Code sessions to clear the hooks."
+
+update: ## Pull latest changes and re-enable
+	@git -C $(JAT_DIR) pull
+	@$(MAKE) enable
 
 # ─── Maintenance ─────────────────────────────────────────────────────────────
 

@@ -54,9 +54,8 @@ STATUSLINE_SOURCE="$JAT_DIR/.claude/statusline.sh"
 STATUSLINE_DEST="$HOME/.claude/statusline.sh"
 
 if [ -f "$STATUSLINE_SOURCE" ]; then
-    cp "$STATUSLINE_SOURCE" "$STATUSLINE_DEST"
-    chmod +x "$STATUSLINE_DEST"
-    echo -e "  ${GREEN}✓ Installed statusline.sh to ~/.claude/${NC}"
+    ln -sf "$STATUSLINE_SOURCE" "$STATUSLINE_DEST"
+    echo -e "  ${GREEN}✓ Linked statusline.sh to ~/.claude/${NC}"
 else
     echo -e "  ${RED}✗ Statusline source not found: $STATUSLINE_SOURCE${NC}"
     exit 1
@@ -159,95 +158,28 @@ EOF
     chmod +x "$HOOK_SOURCE"
 fi
 
-# Copy hook to global directory
-cp "$HOOK_SOURCE" "$GLOBAL_HOOKS_DIR/post-bash-agent-state-refresh.sh"
-chmod +x "$GLOBAL_HOOKS_DIR/post-bash-agent-state-refresh.sh"
+# Symlink all hooks from JAT repo to global hooks directory
+# Symlinking (not copying) means updates to JAT propagate automatically
+ln -sf "$HOOK_SOURCE" "$GLOBAL_HOOKS_DIR/post-bash-agent-state-refresh.sh"
+echo -e "  ${GREEN}✓ Linked post-bash-agent-state-refresh.sh to ~/.claude/hooks/${NC}"
 
-echo -e "  ${GREEN}✓ Installed post-bash-agent-state-refresh.sh to ~/.claude/hooks/${NC}"
-
-# Copy jat-signal hook to global directory
-JAT_SIGNAL_HOOK="$JAT_DIR/.claude/hooks/post-bash-jat-signal.sh"
-if [ -f "$JAT_SIGNAL_HOOK" ]; then
-    cp "$JAT_SIGNAL_HOOK" "$GLOBAL_HOOKS_DIR/post-bash-jat-signal.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/post-bash-jat-signal.sh"
-    echo -e "  ${GREEN}✓ Installed post-bash-jat-signal.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ jat-signal hook not found: $JAT_SIGNAL_HOOK${NC}"
-fi
-
-# Copy session-start hook to global directory
-SESSION_START_HOOK="$JAT_DIR/.claude/hooks/session-start-agent-identity.sh"
-if [ -f "$SESSION_START_HOOK" ]; then
-    cp "$SESSION_START_HOOK" "$GLOBAL_HOOKS_DIR/session-start-agent-identity.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/session-start-agent-identity.sh"
-    echo -e "  ${GREEN}✓ Installed session-start-agent-identity.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ session-start hook not found: $SESSION_START_HOOK${NC}"
-fi
-
-# Copy pre-ask-user-question hook to global directory
-PRE_ASK_HOOK="$JAT_DIR/.claude/hooks/pre-ask-user-question.sh"
-if [ -f "$PRE_ASK_HOOK" ]; then
-    cp "$PRE_ASK_HOOK" "$GLOBAL_HOOKS_DIR/pre-ask-user-question.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/pre-ask-user-question.sh"
-    echo -e "  ${GREEN}✓ Installed pre-ask-user-question.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ pre-ask-user-question hook not found: $PRE_ASK_HOOK${NC}"
-fi
-
-# Copy pre-compact-save-agent hook to global directory
-PRE_COMPACT_HOOK="$JAT_DIR/.claude/hooks/pre-compact-save-agent.sh"
-if [ -f "$PRE_COMPACT_HOOK" ]; then
-    cp "$PRE_COMPACT_HOOK" "$GLOBAL_HOOKS_DIR/pre-compact-save-agent.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/pre-compact-save-agent.sh"
-    echo -e "  ${GREEN}✓ Installed pre-compact-save-agent.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ pre-compact-save-agent hook not found: $PRE_COMPACT_HOOK${NC}"
-fi
-
-# NOTE: session-start-restore-agent.sh is no longer needed separately.
-# Its features (WINDOWID fallback, workflow state injection, jt fallback)
-# are now merged into session-start-agent-identity.sh.
-
-# Copy user-prompt-signal hook to global directory
-USER_PROMPT_HOOK="$JAT_DIR/.claude/hooks/user-prompt-signal.sh"
-if [ -f "$USER_PROMPT_HOOK" ]; then
-    cp "$USER_PROMPT_HOOK" "$GLOBAL_HOOKS_DIR/user-prompt-signal.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/user-prompt-signal.sh"
-    echo -e "  ${GREEN}✓ Installed user-prompt-signal.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ user-prompt-signal hook not found: $USER_PROMPT_HOOK${NC}"
-fi
-
-# Copy monitor-output helper to global directory (used by user-prompt-signal.sh via $SCRIPT_DIR)
-MONITOR_OUTPUT="$JAT_DIR/.claude/hooks/monitor-output.sh"
-if [ -f "$MONITOR_OUTPUT" ]; then
-    cp "$MONITOR_OUTPUT" "$GLOBAL_HOOKS_DIR/monitor-output.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/monitor-output.sh"
-    echo -e "  ${GREEN}✓ Installed monitor-output.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ monitor-output helper not found: $MONITOR_OUTPUT${NC}"
-fi
-
-# Copy log-tool-activity hook to global directory (logs tool usage to activity timeline)
-LOG_TOOL_HOOK="$JAT_DIR/.claude/hooks/log-tool-activity.sh"
-if [ -f "$LOG_TOOL_HOOK" ]; then
-    cp "$LOG_TOOL_HOOK" "$GLOBAL_HOOKS_DIR/log-tool-activity.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/log-tool-activity.sh"
-    echo -e "  ${GREEN}✓ Installed log-tool-activity.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ log-tool-activity hook not found: $LOG_TOOL_HOOK${NC}"
-fi
-
-# Copy session-end-cleanup hook to global directory (kills orphaned MCP processes)
-SESSION_END_HOOK="$JAT_DIR/.claude/hooks/session-end-cleanup.sh"
-if [ -f "$SESSION_END_HOOK" ]; then
-    cp "$SESSION_END_HOOK" "$GLOBAL_HOOKS_DIR/session-end-cleanup.sh"
-    chmod +x "$GLOBAL_HOOKS_DIR/session-end-cleanup.sh"
-    echo -e "  ${GREEN}✓ Installed session-end-cleanup.sh to ~/.claude/hooks/${NC}"
-else
-    echo -e "  ${YELLOW}⚠ session-end-cleanup hook not found: $SESSION_END_HOOK${NC}"
-fi
+for hook_name in \
+    post-bash-jat-signal.sh \
+    session-start-agent-identity.sh \
+    pre-ask-user-question.sh \
+    pre-compact-save-agent.sh \
+    user-prompt-signal.sh \
+    monitor-output.sh \
+    log-tool-activity.sh \
+    session-end-cleanup.sh; do
+    src="$JAT_DIR/.claude/hooks/$hook_name"
+    if [ -f "$src" ]; then
+        ln -sf "$src" "$GLOBAL_HOOKS_DIR/$hook_name"
+        echo -e "  ${GREEN}✓ Linked $hook_name to ~/.claude/hooks/${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Hook not found: $src${NC}"
+    fi
+done
 
 echo ""
 
@@ -477,182 +409,22 @@ fi
 
 echo ""
 
-# ============================================================================
-# STEP 3: Configure settings.json for each project
-# ============================================================================
-
-echo -e "${BLUE}Step 3: Configuring project settings...${NC}"
-echo ""
-
-# Scan ~/code/ for projects
-CODE_DIR="$HOME/code"
-
-if [ ! -d "$CODE_DIR" ]; then
-    echo -e "${YELLOW}⚠ ~/code/ directory not found${NC}"
-    echo "Creating $CODE_DIR..."
-    mkdir -p "$CODE_DIR"
-fi
-
-REPOS_FOUND=0
-SETTINGS_CONFIGURED=0
-SKIPPED=0
-
-for repo_dir in "$CODE_DIR"/*; do
-    # Skip if not a directory
-    if [ ! -d "$repo_dir" ]; then
-        continue
-    fi
-
-    REPO_NAME=$(basename "$repo_dir")
-    echo -e "${BLUE}→ ${REPO_NAME}${NC}"
-
-    # Check if it's a git repository
-    if [ ! -d "$repo_dir/.git" ]; then
-        echo -e "  ${YELLOW}⊘ Not a git repository, skipping${NC}"
-        ((SKIPPED++))
-        echo ""
-        continue
-    fi
-
-    ((REPOS_FOUND++))
-
-    # Create .claude directory if needed
-    mkdir -p "$repo_dir/.claude"
-
-    # ========================================================================
-    # Configure settings.json (use GLOBAL statusline path)
-    # ========================================================================
-
-    SETTINGS_FILE="$repo_dir/.claude/settings.json"
-
-    # Check if settings.json already exists
-    if [ -f "$SETTINGS_FILE" ]; then
-        # Check if it already has statusLine configuration
-        if grep -q '"statusLine"' "$SETTINGS_FILE"; then
-            # Update to use global statusline if still using local
-            if grep -q '"\./\.claude/statusline\.sh' "$SETTINGS_FILE"; then
-                # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
-                if [[ "$(uname)" == "Darwin" ]]; then
-                    sed -i '' 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
-                else
-                    sed -i 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
-                fi
-                echo -e "  ${GREEN}✓ Updated settings.json to use global statusline${NC}"
-                ((SETTINGS_CONFIGURED++))
-            else
-                echo -e "  ${GREEN}✓${NC} settings.json already configured"
-            fi
-        else
-            # Add statusLine and hooks configuration
-            echo "  → Updating settings.json with statusline and hooks..."
-
-            # Use jq to merge configuration
-            TEMP_SETTINGS=$(mktemp)
-            if jq '. + {
-                "statusLine": {
-                    "type": "command",
-                    "command": "~/.claude/statusline.sh",
-                    "padding": 1
-                },
-                "hooks": {
-                    "PostToolUse": [
-                        {
-                            "matcher": "^Bash$",
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "~/.claude/hooks/post-bash-agent-state-refresh.sh",
-                                    "statusMessage": "Checking agent state changes...",
-                                    "streamStdinJson": true
-                                },
-                                {
-                                    "type": "command",
-                                    "command": "~/.claude/hooks/post-bash-jat-signal.sh",
-                                    "statusMessage": "",
-                                    "streamStdinJson": true
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }' "$SETTINGS_FILE" > "$TEMP_SETTINGS" 2>/dev/null; then
-                mv "$TEMP_SETTINGS" "$SETTINGS_FILE"
-                echo -e "  ${GREEN}✓ Updated settings.json${NC}"
-                ((SETTINGS_CONFIGURED++))
-            else
-                echo -e "  ${YELLOW}⚠ Failed to update settings.json (invalid JSON?)${NC}"
-                rm -f "$TEMP_SETTINGS"
-            fi
-        fi
-    else
-        # Create new settings.json with GLOBAL statusline path
-        echo "  → Creating settings.json with statusline and hooks..."
-        cat > "$SETTINGS_FILE" << 'EOF'
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 1
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/post-bash-agent-state-refresh.sh",
-            "statusMessage": "Checking agent state changes...",
-            "streamStdinJson": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/post-bash-jat-signal.sh",
-            "statusMessage": "",
-            "streamStdinJson": true
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
-        echo -e "  ${GREEN}✓ Created settings.json${NC}"
-        ((SETTINGS_CONFIGURED++))
-    fi
-
-    echo ""
-done
-
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}Statusline and Hooks Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
-echo "  Global statusline: ~/.claude/statusline.sh"
-echo "  Global hooks:"
-echo "    - ~/.claude/hooks/session-start-agent-identity.sh (SessionStart - unified)"
-echo "    - ~/.claude/hooks/pre-ask-user-question.sh (PreToolUse)"
-echo "    - ~/.claude/hooks/pre-compact-save-agent.sh (PreCompact)"
-echo "    - ~/.claude/hooks/post-bash-agent-state-refresh.sh (PostToolUse)"
-echo "    - ~/.claude/hooks/post-bash-jat-signal.sh (PostToolUse)"
-echo "    - ~/.claude/hooks/log-tool-activity.sh (PostToolUse - activity timeline)"
-echo "    - ~/.claude/hooks/user-prompt-signal.sh (UserPromptSubmit)"
-echo "    - ~/.claude/hooks/session-end-cleanup.sh (SessionEnd - orphan process cleanup)"
-echo "    - ~/.claude/hooks/monitor-output.sh (helper for user-prompt-signal)"
+echo "  Global statusline: ~/.claude/statusline.sh -> $JAT_DIR/.claude/statusline.sh"
+echo "  Global hooks (symlinked from $JAT_DIR/.claude/hooks/):"
+echo "    - session-start-agent-identity.sh (SessionStart)"
+echo "    - pre-ask-user-question.sh (PreToolUse)"
+echo "    - pre-compact-save-agent.sh (PreCompact)"
+echo "    - post-bash-agent-state-refresh.sh (PostToolUse)"
+echo "    - post-bash-jat-signal.sh (PostToolUse)"
+echo "    - log-tool-activity.sh (PostToolUse)"
+echo "    - user-prompt-signal.sh (UserPromptSubmit)"
+echo "    - session-end-cleanup.sh (SessionEnd)"
+echo "    - monitor-output.sh (helper)"
 echo ""
-echo "  Total repos found: $REPOS_FOUND"
-echo "  Settings.json configured: $SETTINGS_CONFIGURED"
-echo "  Skipped (not git repos): $SKIPPED"
+echo "  To configure a project's settings.json, run inside that repo:"
+echo "    jt init"
 echo ""
-
-if [ $REPOS_FOUND -eq 0 ]; then
-    echo -e "${YELLOW}  ⚠ No repositories found in ~/code/${NC}"
-    echo "  Clone some projects to ~/code/ to get started"
-else
-    echo "  All repositories now have:"
-    echo "    • Global statusline showing agent, task, git, context"
-    echo "    • Real-time updates when running am-* or jt commands"
-    echo ""
-    echo "  Open Claude Code in any project to see the statusline in action!"
-    echo ""
-fi

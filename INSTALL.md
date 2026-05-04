@@ -1,16 +1,18 @@
 # JAT Installation Guide
 
-## Quick Install (Recommended)
-
-**Copy and paste this single line:**
+## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash && source ~/.zshrc
+# Clone and install
+git clone https://github.com/joewinke/jat ~/.local/share/jat
+cd ~/.local/share/jat
+make install
 ```
 
-For bash users (Linux):
+Or install system dependencies first if needed:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash && source ~/.bashrc
+make setup   # installs tmux, sqlite3, jq, node via brew/apt
+make install # full install
 ```
 
 Then start the IDE:
@@ -20,244 +22,231 @@ jat
 
 Open your browser to: http://localhost:3333
 
-## What the Installer Does
+---
 
-1. **Checks dependencies**: tmux, sqlite3, jq, node, npm
-2. **Installs missing dependencies** (with your permission)
-   - macOS: Uses Homebrew
-   - Linux: Guides you through package manager installation
-3. **Chooses installation location**:
-   - Default: `~/.local/share/jat` (XDG-compliant)
-   - Alternative: `~/code/jat`
-   - Custom: You can specify your own path
-4. **Clones the repository**
-5. **Installs IDE dependencies** (npm packages)
-6. **Adds JAT to your PATH**
-7. **Creates the `jat` command**
+## What Gets Installed Where
 
-## Shell Detection
+Understanding exactly what `make install` touches is important. Here is the complete inventory:
 
-The installer automatically detects your shell and updates the correct config file:
+### Shell tools — `~/.local/bin/`
 
-| Shell | Config File | OS |
-|-------|-------------|-----|
-| zsh | `~/.zshrc` | macOS (default), Some Linux |
-| bash | `~/.bashrc` | Most Linux |
-| bash | `~/.bash_profile` | macOS (if using bash) |
+Symlinks only. All 40+ JAT CLI tools (browser automation, database, agent mail, signals, etc.) are symlinked from the repo into `~/.local/bin/`. Nothing is copied — removing the symlinks fully removes the tools.
 
-## Installation Locations
+```
+~/.local/bin/jat          → /path/to/jat/cli/jat
+~/.local/bin/jt           → /path/to/jat/cli/jt
+~/.local/bin/am-register  → /path/to/jat/tools/agents/am-register
+~/.local/bin/browser-nav.js → /path/to/jat/tools/browser/browser-nav.js
+... (40+ tools)
+```
 
-The installer checks for existing installations in this order:
+Your shell config (`~/.zshrc` or `~/.bashrc`) gets one line added if `~/.local/bin` is not already in `PATH`:
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
-1. `$JAT_INSTALL_DIR` (if set as environment variable)
-2. `${XDG_DATA_HOME:-$HOME/.local/share}/jat` (XDG standard)
-3. `$HOME/code/jat` (traditional developer location)
-4. `$HOME/code/jomarchy-agent-tools` (legacy name)
+### Claude Code integration — `~/.claude/`
 
-If none exist, you'll be prompted to choose.
+This is the part that makes JAT work inside Claude Code sessions.
 
-## Manual Installation
+**`~/.claude/statusline.sh`** — a symlink to `jat/.claude/statusline.sh`. This is a script that renders the multi-line status bar (agent name, task, git branch, context remaining). It only activates in projects whose `.claude/settings.json` references it — other projects are completely unaffected.
 
-If you prefer to install manually:
+**`~/.claude/hooks/`** — symlinks to hook scripts in the JAT repo:
+
+| Hook file | Claude event | What it does |
+|-----------|-------------|--------------|
+| `session-start-agent-identity.sh` | SessionStart | Restores agent name and task context |
+| `pre-ask-user-question.sh` | PreToolUse | Intercepts AskUserQuestion calls |
+| `pre-compact-save-agent.sh` | PreCompact | Saves agent state before context compaction |
+| `post-bash-jat-signal.sh` | PostToolUse (Bash) | Emits coordination signals after bash commands |
+| `post-bash-agent-state-refresh.sh` | PostToolUse (Bash) | Refreshes statusline after `am-*`/`jt` commands |
+| `log-tool-activity.sh` | PostToolUse | Records tool usage to activity timeline |
+| `user-prompt-signal.sh` | UserPromptSubmit | Emits signal when user sends a message |
+| `session-end-cleanup.sh` | SessionEnd | Kills orphaned MCP processes |
+| `monitor-output.sh` | (helper) | Used internally by user-prompt-signal |
+
+All are symlinks, not copies. When you `git pull` JAT, the hooks update automatically with no reinstall needed.
+
+**`~/.claude/settings.local.json`** — gets hook entries added (idempotent). This wires the hook files above into Claude Code's event system globally. JAT only adds entries for its own hooks; existing entries are preserved.
+
+**`~/.claude/commands/jat/`** — symlinks to `/jat:*` slash commands (e.g. `/jat:start`, `/jat:complete`).
+
+**`~/.claude/CLAUDE.md`** — gets a single import line appended pointing to JAT's shared tool documentation.
+
+### Runtime data
+
+| Path | Purpose |
+|------|---------|
+| `~/.agent-mail.db` | SQLite database for inter-agent messaging |
+| `~/.config/jat/projects.json` | Project registry (which repos JAT manages) |
+| `~/.tmux.conf` | Gets `set -g mouse on` appended (if tmux is installed) |
+
+### What is NOT touched automatically
+
+- Other projects in your codebase. Per-project `.claude/settings.json` configuration is **opt-in** — run `jt init` inside a repo to add the statusline and hook references to that project.
+- System packages beyond the four required deps (tmux, sqlite3, jq, node).
+
+---
+
+## Makefile Reference
 
 ```bash
-# 1. Install dependencies
-# macOS:
-brew install tmux sqlite jq node
-
-# Ubuntu/Debian:
-sudo apt install tmux sqlite3 jq nodejs npm
-
-# Arch/Manjaro:
-sudo pacman -S tmux sqlite jq nodejs npm
-
-# 2. Clone the repository
-git clone https://github.com/joewinke/jat ~/.local/share/jat
-cd ~/.local/share/jat
-
-# 3. Install IDE dependencies
-cd ide
-npm install
-cd ..
-
-# 4. Run the installer to create symlinks and configure shell
-./install.sh
-
-# 5. Reload shell and test
-source ~/.zshrc   # or ~/.bashrc on Linux
-jat
+make help      # show all targets
+make setup     # install system deps (tmux, sqlite3, jq, node)
+make build     # install npm dependencies (root + IDE)
+make tools     # symlink CLI tools to ~/.local/bin
+make hooks     # install statusline + hooks (symlinks + settings.local.json)
+make install   # everything: setup + build + tools + hooks
+make dev       # start IDE dev server (http://127.0.0.1:3333)
+make enable    # wire up Claude Code integration (hooks, statusline, settings)
+make disable   # remove Claude Code integration cleanly
+make update    # git pull + re-enable
+make status    # show running processes, Docker, tmux sessions, agent registry
+make clean     # remove node_modules and build artifacts
+make uninstall # remove JAT from XDG install location
 ```
+
+---
+
+## Enabling and Disabling
+
+`make enable` and `make disable` let you toggle the Claude Code integration on and off without a full reinstall.
+
+```bash
+make enable   # create symlinks + configure settings.local.json
+make disable  # remove symlinks + clean settings.local.json
+```
+
+**What `make enable` does:**
+1. Symlinks all hooks into `~/.claude/hooks/`
+2. Symlinks `statusline.sh` into `~/.claude/`
+3. Symlinks CLI tools into `~/.local/bin/`
+4. Adds JAT hook entries to `~/.claude/settings.local.json` (idempotent)
+
+**What `make disable` does:**
+1. Removes hook symlinks from `~/.claude/hooks/` (only the ones pointing into this JAT repo)
+2. Removes `~/.claude/statusline.sh` (only if it's a symlink into this JAT repo)
+3. Removes tool symlinks from `~/.local/bin/` (only the ones pointing into this JAT repo)
+4. Surgically removes JAT hook entries from `~/.claude/settings.local.json` using `jq`, leaving any non-JAT hooks untouched
+
+**Note on `~/.claude/statusline.sh`:** This file is a stable indirection layer. Your per-project `.claude/settings.json` files reference `~/.claude/statusline.sh` as the statusline command. The global file then points to wherever JAT is installed. If you run `make disable`, projects that reference this path will show a blank statusline until you re-enable or remove the `statusLine` entry from their settings.
+
+After `make disable`, restart any open Claude Code sessions for the changes to take effect. Hooks are loaded at session start.
+
+---
+
+## Per-Project Setup
+
+After installing JAT, opt individual projects into the statusline and hooks:
+
+```bash
+cd ~/your/project
+jt init
+```
+
+This adds a `.claude/settings.json` to the project pointing at `~/.claude/statusline.sh` and the global hooks. You can check it into git — other developers who have JAT installed will get the statusline automatically; those without JAT will see a missing-command warning they can ignore.
+
+---
+
+## Updating
+
+```bash
+make update
+# equivalent to: git pull && make enable
+```
+
+Because hooks and statusline are symlinks (not copies), most updates take effect immediately without any reinstall. `make update` handles the cases where `settings.local.json` needs new entries added for newly introduced hooks.
+
+---
+
+## Uninstalling
+
+```bash
+# 1. Disable the Claude integration
+make disable
+
+# 2. Remove the npm dependencies and build artifacts
+make clean
+
+# 3. Remove the repo itself
+rm -rf ~/.local/share/jat   # or wherever you cloned it
+
+# 4. Remove runtime data (optional)
+rm -f ~/.agent-mail.db
+rm -rf ~/.config/jat
+
+# 5. Remove PATH entry from ~/.zshrc or ~/.bashrc
+# Delete the line: export PATH="$HOME/.local/bin:$PATH"
+```
+
+---
 
 ## Troubleshooting
 
 ### "command not found: jat"
 
-**Cause**: Shell config not reloaded or PATH not set
-
-**Solution**:
+`~/.local/bin` is not in PATH. Add it:
 ```bash
-# macOS (zsh):
-source ~/.zshrc
-
-# Linux (bash):
-source ~/.bashrc
-
-# Verify PATH includes JAT:
-echo $PATH | grep jat
+export PATH="$HOME/.local/bin:$PATH"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
 
-### "zsh: command not found: #"
+### Statusline shows blank or error after disable
 
-**Cause**: Copying code blocks with comment lines
+Projects whose `.claude/settings.json` references `~/.claude/statusline.sh` will fail if that symlink is removed. Either re-enable JAT (`make enable`) or remove the `statusLine` block from the project's settings.json.
 
-**Solution**: Don't copy the `#` comment lines. Only copy the actual commands:
+### Hooks not firing in Claude Code
 
-**DON'T DO THIS:**
+Verify the hooks are wired in `~/.claude/settings.local.json`:
 ```bash
-# Install and launch IDE
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
+jq '.hooks | keys' ~/.claude/settings.local.json
 ```
 
-**DO THIS:**
+If empty, re-run `make enable`.
+
+Verify the symlinks exist:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
+ls -la ~/.claude/hooks/
 ```
 
-### "source ~/.bashrc && jat" fails on macOS
+### Node.js version warning
 
-**Cause**: macOS uses `zsh` by default, not `bash`
-
-**Solution**: Use `~/.zshrc` instead:
+JAT requires Node.js 20 or 22 (LTS). Versions 23+ break native modules:
 ```bash
-source ~/.zshrc && jat
+nvm install 22 && nvm use 22
+# or
+brew install node@22 && brew link --overwrite node@22
+```
+
+### IDE won't start
+
+```bash
+cd ide
+npm install --legacy-peer-deps
+npm run dev
 ```
 
 ### Homebrew not found on macOS
 
-**Cause**: Homebrew not installed
-
-**Solution**: Install Homebrew first:
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-Then run the JAT installer again.
+---
 
-### Dependencies still missing after installation
+## Platform Notes
 
-**Cause**: Shell hasn't picked up newly installed packages
+| Platform | Shell | Config | Package manager |
+|----------|-------|--------|----------------|
+| macOS (default) | zsh | `~/.zshrc` | Homebrew |
+| Ubuntu/Debian | bash | `~/.bashrc` | apt |
+| Arch/Manjaro | bash | `~/.bashrc` | pacman |
+| Fedora | bash | `~/.bashrc` | dnf |
+| Alpine | sh | `~/.profile` | apk |
 
-**Solution**:
-1. Close and reopen your terminal
-2. Run the installer again: `./install.sh`
-3. Verify installations:
-   ```bash
-   tmux -V
-   sqlite3 --version
-   jq --version
-   node --version
-   npm --version
-   ```
-
-### IDE won't start
-
-**Cause**: Missing npm dependencies
-
-**Solution**:
-```bash
-cd ~/.local/share/jat/ide  # or wherever you installed JAT
-npm install
-npm run dev
-```
-
-### Installation directory doesn't exist
-
-**Cause**: Installer couldn't create directory
-
-**Solution**: Create it manually and re-run:
-```bash
-mkdir -p ~/.local/share/jat
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
-```
-
-### Want to change installation directory?
-
-Set the `JAT_INSTALL_DIR` environment variable:
-
-```bash
-export JAT_INSTALL_DIR=~/my/custom/path
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
-```
-
-## Uninstalling
-
-To completely remove JAT:
-
-```bash
-# 1. Remove installation directory
-rm -rf ~/.local/share/jat  # or your custom install location
-
-# 2. Remove from PATH (edit your shell config)
-# Remove these lines from ~/.zshrc or ~/.bashrc:
-# # JAT - Jomarchy Agent Tools
-# export PATH="$PATH:/path/to/jat/tools"
-
-# 3. Reload shell
-source ~/.zshrc  # or ~/.bashrc
-```
-
-## Updating
-
-To update JAT to the latest version:
-
-```bash
-cd ~/.local/share/jat  # or your install location
-git pull origin master
-cd ide
-npm install  # update IDE dependencies
-```
-
-## Platform-Specific Notes
-
-### macOS
-
-- **Default shell**: zsh (since macOS Catalina)
-- **Config file**: `~/.zshrc`
-- **Package manager**: Homebrew (required)
-- **ARM Macs (M1/M2/M3)**: Homebrew installs to `/opt/homebrew`
-- **Intel Macs**: Homebrew installs to `/usr/local`
-
-### Linux (Ubuntu/Debian)
-
-- **Default shell**: bash
-- **Config file**: `~/.bashrc`
-- **Package manager**: apt
-- **Note**: sqlite3 package name (not sqlite)
-
-### Linux (Arch/Manjaro)
-
-- **Default shell**: bash
-- **Config file**: `~/.bashrc`
-- **Package manager**: pacman
-- **Note**: nodejs and npm are in the main repos
+---
 
 ## Getting Help
 
-- **Documentation**: [README.md](README.md)
 - **Issues**: https://github.com/joewinke/jat/issues
-- **Discussions**: https://github.com/joewinke/jat/discussions
-
-## Next Steps
-
-After installation:
-
-1. **Start the IDE**: `jat`
-2. **Open browser**: http://localhost:3333
-3. **Initialize a project**:
-   ```bash
-   cd ~/code/myproject
-   jt init
-   ```
-4. **Read the docs**: Check out [CLAUDE.md](CLAUDE.md) for full documentation
-
-Happy coding with AI agents!
+- **Docs**: [README.md](README.md), [CLAUDE.md](CLAUDE.md)
